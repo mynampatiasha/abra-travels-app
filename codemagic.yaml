@@ -1,4 +1,3 @@
-
 workflows:
   ios-workflow:
     name: iOS Workflow
@@ -12,6 +11,9 @@ workflows:
       - name: Flutter packages get
         script: |
           flutter packages pub get
+      - name: Install pods
+        script: |
+          cd ios && pod install
       - name: Flutter build iOS
         script: |
           flutter build ios --release --no-codesign
