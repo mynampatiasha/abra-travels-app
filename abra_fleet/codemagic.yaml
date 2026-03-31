@@ -1,4 +1,3 @@
- 
 workflows:
   ios-workflow:
     name: iOS Workflow
@@ -7,6 +6,7 @@ workflows:
       flutter: stable
       xcode: latest
       cocoapods: default
+    working_directory: abra_fleet
     scripts:
       - name: Flutter packages get
         script: |
