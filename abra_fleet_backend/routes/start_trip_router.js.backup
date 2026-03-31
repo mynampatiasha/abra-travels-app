@@ -1,0 +1,2078 @@
+// routes/trip_creation_router.js - COMPLETE VERSION WITH CUSTOMER DETAILS
+const express = require('express');
+const router = express.Router();
+const { ObjectId } = require('mongodb');
+const { verifyToken } = require('../middleware/auth');
+const { createNotification } = require('../models/notification_model');
+const multer = require('multer');
+const { GridFSBucket } = require('mongodb');
+
+// ============================================================================
+// MULTER CONFIGURATION - Memory storage for GridFS
+// ============================================================================
+const storage = multer.memoryStorage();
+const upload = multer({
+  storage: storage,
+  limits: {
+    fileSize: 5 * 1024 * 1024, // 5MB max
+  },
+  fileFilter: (req, file, cb) => {
+    console.log('📸 File upload attempt:', {
+      fieldname: file.fieldname,
+      originalname: file.originalname,
+      mimetype: file.mimetype,
+      size: file.size
+    });
+    
+    const isImage = file.mimetype && file.mimetype.startsWith('image/');
+    const hasImageExtension = /\.(jpg|jpeg|png|gif|webp|bmp)$/i.test(file.originalname);
+    
+    if (isImage || hasImageExtension) {
+      console.log('✅ File accepted:', file.originalname);
+      cb(null, true);
+    } else {
+      console.error('❌ Rejected file:', file.mimetype, file.originalname);
+      cb(new Error('Only image files are allowed! Received: ' + file.mimetype), false);
+    }
+  }
+});
+
+// ============================================================================
+// HELPER FUNCTIONS
+// ============================================================================
+
+function generateTripNumber() {
+  const timestamp = Date.now().toString().slice(-8);
+  const random = Math.floor(Math.random() * 1000).toString().padStart(3, '0');
+  return `TRIP-${timestamp}-${random}`;
+}
+
+function calculateETA(distance) {
+  const averageSpeed = 30;
+  const timeInHours = distance / averageSpeed;
+  const timeInMinutes = Math.ceil(timeInHours * 60);
+  return Math.max(timeInMinutes, 15);
+}
+
+async function calculateETAWithOSRM(startLat, startLng, endLat, endLng) {
+  try {
+    const fetch = (await import('node-fetch')).default;
+    const url = `https://router.project-osrm.org/route/v1/driving/${startLng},${startLat};${endLng},${endLat}?overview=false`;
+    
+    const response = await fetch(url);
+    const data = await response.json();
+    
+    if (data.routes && data.routes.length > 0) {
+      const durationMinutes = Math.round(data.routes[0].duration / 60);
+      return durationMinutes;
+    }
+    
+    const R = 6371;
+    const dLat = (endLat - startLat) * Math.PI / 180;
+    const dLon = (endLng - startLng) * Math.PI / 180;
+    const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+              Math.cos(startLat * Math.PI / 180) * Math.cos(endLat * Math.PI / 180) *
+              Math.sin(dLon/2) * Math.sin(dLon/2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+    const distance = R * c;
+    return Math.round(distance * 3);
+  } catch (error) {
+    console.error('❌ OSRM ETA calculation failed:', error.message);
+    return 30;
+  }
+}
+
+function formatTime(date) {
+  if (!date) return 'N/A';
+  const d = new Date(date);
+  return d.toLocaleString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+    hour12: true
+  });
+}
+
+// ============================================================================
+// @route   GET /api/trips/start-trip-list
+// @desc    Get list of admin-assigned trips (filtered by notes field)
+// @access  Private (Admin/Driver)
+// ============================================================================
+router.get('/start-trip-list', verifyToken, async (req, res) => {
+  try {
+    console.log('\n' + '='.repeat(80));
+    console.log('📋 FETCHING ADMIN-ASSIGNED TRIPS');
+    console.log('='.repeat(80));
+    
+    const { driverId, status, vehicleId, limit = 50 } = req.query;
+    
+    const filter = {
+      notes: "Trip created from admin panel"
+    };
+    
+    if (driverId) {
+      filter.driverId = driverId;
+      console.log(`   🔍 Filtering by driver: ${driverId}`);
+    }
+    
+    if (vehicleId) {
+      filter.vehicleId = new ObjectId(vehicleId);
+      console.log(`   🔍 Filtering by vehicle: ${vehicleId}`);
+    }
+    
+    if (status) {
+      filter.status = status;
+      console.log(`   🔍 Filtering by status: ${status}`);
+    } else {
+      filter.status = "assigned";
+      console.log(`   🔍 Default filter: status = assigned`);
+    }
+    
+    console.log('   🔍 Filter:', JSON.stringify(filter, null, 2));
+    
+    const trips = await req.db.collection('trips')
+      .find(filter)
+      .sort({ scheduledPickupTime: 1 })
+      .limit(parseInt(limit))
+      .toArray();
+    
+    console.log(`✅ Found ${trips.length} admin-assigned trips`);
+    console.log('='.repeat(80) + '\n');
+    
+    res.json({
+      success: true,
+      count: trips.length,
+      tripType: 'admin_start_trip',
+      filter: {
+        notes: "Trip created from admin panel",
+        status: status || "assigned",
+        driverId: driverId || null,
+        vehicleId: vehicleId || null
+      },
+      data: trips
+    });
+    
+  } catch (error) {
+    console.error('❌ Error fetching start trip list:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch start trip list',
+      error: error.message
+    });
+  }
+});
+
+router.get('/debug-auth', verifyToken, async (req, res) => {
+  try {
+    console.log('\n🔍 JWT TOKEN DEBUG:');
+    console.log('Full req.user:', JSON.stringify(req.user, null, 2));
+    
+    const possibleIds = {
+      driverId: req.user.driverId,
+      userId: req.user.userId,
+      uid: req.user.uid,
+      id: req.user.id,
+      _id: req.user._id,
+    };
+    
+    console.log('Possible ID fields:', possibleIds);
+    console.log('Trip expects driverId:', '694a82140c69d7fbd556eaf2');
+    
+    res.json({
+      success: true,
+      user: req.user,
+      possibleIds,
+      tripDriverId: '694a82140c69d7fbd556eaf2'
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ============================================================================
+// @route   GET /api/trips/pending
+// @desc    Get pending individual trips for driver (can accept/decline)
+// @access  Private (Driver)
+// ============================================================================
+router.get('/pending', verifyToken, async (req, res) => {
+  try {
+    console.log('\n' + '='.repeat(80));
+    console.log('📋 FETCHING PENDING TRIPS');
+    console.log('='.repeat(80));
+    
+    const driverId = req.user.driverId || req.user.id || req.user.uid || req.user.userId;
+    const driverEmail = req.user.email;
+    
+    console.log('🔍 Searching with:');
+    console.log('   driverId:', driverId);
+    console.log('   email:', driverEmail);
+    
+    const trips = await req.db.collection('trips').find({
+      $or: [
+        { driverId: driverId },
+        { driverId: driverId?.toString() },
+        { driverEmail: driverEmail }
+      ],
+      status: 'assigned',
+      notes: "Trip created from admin panel"
+    }).sort({ createdAt: -1 }).toArray();
+    
+    console.log(`✅ Found ${trips.length} pending trip(s)`);
+    if (trips.length > 0) {
+      console.log('📄 First trip driverId:', trips[0].driverId);
+      console.log('📄 First trip email:', trips[0].driverEmail);
+    }
+    console.log('='.repeat(80) + '\n');
+    
+    res.json({
+      success: true,
+      message: `Found ${trips.length} pending trip(s)`,
+      count: trips.length,
+      data: trips
+    });
+    
+  } catch (error) {
+    console.error('❌ Error:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+router.get('/accepted', verifyToken, async (req, res) => {
+  try {
+    const driverId = req.user.driverId || req.user.id || req.user.uid || req.user.userId;
+    const driverEmail = req.user.email;
+    
+    console.log('🔍 Searching accepted trips with email:', driverEmail);
+    
+    const trips = await req.db.collection('trips').find({
+      $or: [
+        { driverId: driverId },
+        { driverId: driverId?.toString() },
+        { driverEmail: driverEmail }
+      ],
+      status: { $in: ['accepted', 'started', 'in_progress'] },
+      notes: "Trip created from admin panel"
+    }).sort({ scheduledPickupTime: 1 }).toArray();
+    
+    console.log(`✅ Found ${trips.length} accepted trip(s)`);
+    
+    res.json({
+      success: true,
+      count: trips.length,
+      data: trips
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// ============================================================================
+// @route   GET /api/trips/completed
+// @desc    Get completed individual trips for driver (history)
+// @access  Private (Driver)
+// ============================================================================
+router.get('/completed', verifyToken, async (req, res) => {
+  try {
+    console.log('\n' + '='.repeat(80));
+    console.log('📋 FETCHING COMPLETED TRIPS FOR DRIVER');
+    console.log('='.repeat(80));
+    
+    const driverId = req.user.driverId || req.user.id || req.user.uid;
+    const { limit = 20 } = req.query;
+    
+    if (!driverId) {
+      return res.status(401).json({
+        success: false,
+        message: 'Driver ID not found in token'
+      });
+    }
+    
+    console.log(`👨‍✈️ Driver ID: ${driverId}`);
+    
+    const trips = await req.db.collection('trips').find({
+      driverId: driverId,
+      status: 'completed',
+      notes: "Trip created from admin panel"
+    })
+    .sort({ actualEndTime: -1 })
+    .limit(parseInt(limit))
+    .toArray();
+    
+    console.log(`✅ Found ${trips.length} completed trip(s)`);
+    console.log('='.repeat(80) + '\n');
+    
+    res.json({
+      success: true,
+      message: `Found ${trips.length} completed trip(s)`,
+      count: trips.length,
+      data: trips
+    });
+    
+  } catch (error) {
+    console.error('❌ Error fetching completed trips:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch completed trips',
+      error: error.message
+    });
+  }
+});
+
+// ============================================================================
+// @route   POST /api/trips/create
+// @desc    Create a new trip with driver notification and CUSTOMER DETAILS
+// @access  Private (Admin)
+// ============================================================================
+router.post('/create', verifyToken, async (req, res) => {
+  let session = null;
+  
+  try {
+    console.log('\n' + '='.repeat(80));
+    console.log('🚀 CREATING NEW TRIP WITH CUSTOMER DETAILS');
+    console.log('='.repeat(80));
+    
+    if (!req.mongoClient) {
+      console.error('❌ MongoDB client not available in request');
+      return res.status(500).json({
+        success: false,
+        message: 'Database connection error',
+        error: 'MongoDB client not initialized'
+      });
+    }
+    
+    if (!req.db) {
+      console.error('❌ Database not available in request');
+      return res.status(500).json({
+        success: false,
+        message: 'Database connection error',
+        error: 'Database not initialized'
+      });
+    }
+    
+    session = req.mongoClient.startSession();
+    await session.startTransaction();
+    
+    const {
+      vehicleId,
+      startPoint,
+      endPoint,
+      distance,
+      scheduledPickupTime,
+      scheduledDropTime,
+      customerName,      // NEW
+      customerEmail,     // NEW
+      customerPhone,     // NEW
+      customerId,
+      tripType = 'manual',
+      notes
+    } = req.body;
+    
+    // Validate required fields
+    if (!vehicleId || !startPoint || !endPoint || !distance) {
+      return res.status(400).json({
+        success: false,
+        message: '❌ Missing required trip information',
+        error: 'INVALID_REQUEST'
+      });
+    }
+    
+    // ✅ Validate customer details
+    if (!customerName || !customerPhone) {
+      return res.status(400).json({
+        success: false,
+        message: '❌ Customer name and phone are required',
+        error: 'MISSING_CUSTOMER_DETAILS'
+      });
+    }
+    
+    console.log('📋 Trip Details:');
+    console.log(`   🚗 Vehicle ID: ${vehicleId}`);
+    console.log(`   📍 Start: ${startPoint.latitude}, ${startPoint.longitude}`);
+    console.log(`   📍 End: ${endPoint.latitude}, ${endPoint.longitude}`);
+    console.log(`   📏 Distance: ${distance} km`);
+    console.log(`   👤 Customer Name: ${customerName}`);
+    console.log(`   📧 Customer Email: ${customerEmail || 'N/A'}`);
+    console.log(`   📱 Customer Phone: ${customerPhone}`);
+    
+    // Get vehicle details
+    const vehicle = await req.db.collection('vehicles').findOne(
+      { _id: new ObjectId(vehicleId) },
+      { session }
+    );
+    
+    if (!vehicle) {
+      if (session) await session.abortTransaction();
+      return res.status(404).json({
+        success: false,
+        message: '❌ Vehicle not found',
+        error: 'VEHICLE_NOT_FOUND'
+      });
+    }
+    
+    console.log(`✅ Vehicle: ${vehicle.registrationNumber || vehicle.name || 'Vehicle'}`);
+    
+    // Get driver details
+    let driver = null;
+    let driverIdToSearch = null;
+    
+    if (vehicle.assignedDriver) {
+      if (typeof vehicle.assignedDriver === 'object' && vehicle.assignedDriver.name) {
+        driver = {
+          _id: vehicle.assignedDriver._id || vehicle.assignedDriver.driverId,
+          name: vehicle.assignedDriver.name,
+          email: vehicle.assignedDriver.email || '',
+          phone: vehicle.assignedDriver.phone || vehicle.assignedDriver.phoneNumber || '',
+          firebaseUid: vehicle.assignedDriver.firebaseUid || vehicle.assignedDriver.userId
+        };
+      } else if (typeof vehicle.assignedDriver === 'string') {
+        driverIdToSearch = vehicle.assignedDriver;
+      } else if (typeof vehicle.assignedDriver === 'object') {
+        driverIdToSearch = vehicle.assignedDriver.driverId || vehicle.assignedDriver._id;
+      }
+    }
+    
+    if (!driver && driverIdToSearch) {
+      driver = await req.db.collection('drivers').findOne(
+        { driverId: driverIdToSearch },
+        { session }
+      );
+      
+      if (driver) {
+        const firstName = driver.personalInfo?.firstName || driver.firstName || '';
+        const lastName = driver.personalInfo?.lastName || driver.lastName || '';
+        const fullName = `${firstName} ${lastName}`.trim() || driver.name || 'Unknown Driver';
+        
+        driver = {
+          _id: driver._id,
+          name: fullName,
+          email: driver.personalInfo?.email || driver.email || '',
+          phone: driver.personalInfo?.phone || driver.phone || driver.phoneNumber || '',
+          firebaseUid: driver.firebaseUid || driver.userId
+        };
+      } else if (ObjectId.isValid(driverIdToSearch)) {
+        driver = await req.db.collection('drivers').findOne(
+          { _id: new ObjectId(driverIdToSearch) },
+          { session }
+        );
+        
+        if (driver) {
+          const firstName = driver.personalInfo?.firstName || driver.firstName || '';
+          const lastName = driver.personalInfo?.lastName || driver.lastName || '';
+          const fullName = `${firstName} ${lastName}`.trim() || driver.name || 'Unknown Driver';
+          
+          driver = {
+            _id: driver._id,
+            name: fullName,
+            email: driver.personalInfo?.email || driver.email || '',
+            phone: driver.personalInfo?.phone || driver.phone || driver.phoneNumber || '',
+            firebaseUid: driver.firebaseUid || driver.userId
+          };
+        }
+      }
+      
+      if (!driver) {
+        driver = await req.db.collection('users').findOne(
+          { 
+            role: 'driver',
+            $or: [
+              { _id: ObjectId.isValid(driverIdToSearch) ? new ObjectId(driverIdToSearch) : null },
+              { driverId: driverIdToSearch },
+              { driverCode: driverIdToSearch }
+            ]
+          },
+          { session }
+        );
+        
+        if (driver) {
+          driver = {
+            _id: driver._id,
+            name: driver.name || driver.displayName || 'Unknown Driver',
+            email: driver.email || '',
+            phone: driver.phone || driver.phoneNumber || '',
+            firebaseUid: driver.uid || driver.firebaseUid
+          };
+        }
+      }
+    }
+    
+    if (!driver) {
+      if (session) await session.abortTransaction();
+      return res.status(404).json({
+        success: false,
+        message: '❌ No driver assigned to this vehicle',
+        error: 'DRIVER_NOT_FOUND'
+      });
+    }
+    
+    if (!driver.email) {
+      if (session) await session.abortTransaction();
+      return res.status(404).json({
+        success: false,
+        message: '❌ Driver email not found - required for notifications',
+        error: 'DRIVER_EMAIL_MISSING'
+      });
+    }
+    
+    console.log(`✅ Driver: ${driver.name}`);
+    console.log(`   📧 Email: ${driver.email || 'N/A'}`);
+    console.log(`   📱 Phone: ${driver.phone || 'N/A'}`);
+    
+    // Generate trip details
+    const tripNumber = generateTripNumber();
+    const estimatedDuration = calculateETA(distance);
+    const currentTime = new Date();
+    const pickupTime = scheduledPickupTime ? new Date(scheduledPickupTime) : new Date(currentTime.getTime() + 30 * 60000);
+    const estimatedEndTime = new Date(pickupTime.getTime() + estimatedDuration * 60000);
+    
+    console.log(`🎫 Trip Number: ${tripNumber}`);
+    console.log(`⏰ Pickup Time: ${formatTime(pickupTime)}`);
+    console.log(`🏁 Estimated End: ${formatTime(estimatedEndTime)}`);
+    console.log(`⏱️  Duration: ${estimatedDuration} minutes`);
+    
+    // ✅ Create trip document WITH CUSTOMER DETAILS
+    const tripData = {
+      tripNumber,
+      vehicleId: new ObjectId(vehicleId),
+      vehicleNumber: vehicle.registrationNumber || vehicle.name || 'Vehicle',
+      driverId: driver._id.toString(),
+      driverName: driver.name,
+      driverEmail: driver.email,
+      driverPhone: driver.phone || '',
+      driverFirebaseUid: driver.firebaseUid || '',
+      
+      // ✅ CUSTOMER DETAILS
+      customer: {
+        customerId: customerId || null,
+        name: customerName,
+        email: customerEmail || '',
+        phone: customerPhone
+      },
+      customerName: customerName,    // Also at top level for easy access
+      customerEmail: customerEmail || '',
+      customerPhone: customerPhone,
+      
+      pickupLocation: {
+        address: startPoint.address || `${startPoint.latitude}, ${startPoint.longitude}`,
+        coordinates: {
+          type: 'Point',
+          coordinates: [startPoint.longitude, startPoint.latitude]
+        },
+        latitude: startPoint.latitude,
+        longitude: startPoint.longitude
+      },
+      dropLocation: {
+        address: endPoint.address || `${endPoint.latitude}, ${endPoint.longitude}`,
+        coordinates: {
+          type: 'Point',
+          coordinates: [endPoint.longitude, endPoint.latitude]
+        },
+        latitude: endPoint.latitude,
+        longitude: endPoint.longitude
+      },
+      
+      scheduledPickupTime: pickupTime,
+      pickupTime: pickupTime,  // Also as pickupTime for consistency
+      scheduledDropTime: scheduledDropTime ? new Date(scheduledDropTime) : null,
+      dropTime: scheduledDropTime ? new Date(scheduledDropTime) : estimatedEndTime,
+      estimatedEndTime: estimatedEndTime,
+      estimatedDuration: estimatedDuration,
+      actualStartTime: null,
+      actualEndTime: null,
+      actualDuration: null,
+      
+      distance: parseFloat(distance),
+      actualDistance: null,
+      tripType: tripType,
+      status: 'assigned',
+      
+      currentLocation: null,
+      locationHistory: [],
+      
+      etaAlerts: {
+        sent15min: false,
+        sent5min: false,
+        sentArrival: false
+      },
+      delayAlertSent: false,
+      
+      notes: notes || 'Trip created from admin panel',
+      createdAt: currentTime,
+      updatedAt: currentTime,
+      createdBy: req.user.userId,
+      assignedAt: currentTime,
+      
+      statusHistory: {
+        assigned: currentTime
+      },
+      
+      driverResponse: null,
+      driverResponseTime: null,
+      driverResponseNotes: null,
+      
+      startOdometer: null,
+      endOdometer: null
+    };
+    
+    const tripResult = await req.db.collection('trips').insertOne(tripData, { session });
+    const tripId = tripResult.insertedId.toString();
+    
+    console.log(`✅ Trip created in database: ${tripId}`);
+    
+    await req.db.collection('vehicles').updateOne(
+      { _id: new ObjectId(vehicleId) },
+      {
+        $set: {
+          currentTripId: tripId,
+          currentTripNumber: tripNumber,
+          lastTripAssignment: currentTime,
+          updatedAt: currentTime
+        }
+      },
+      { session }
+    );
+    
+    console.log('✅ Vehicle updated with current trip');
+    
+    // Send notification to driver
+    let driverNotificationSent = false;
+    try {
+      console.log('📤 Creating driver notification...');
+      
+      const driverNotificationData = {
+        userId: driver._id.toString(),
+        userEmail: driver.email,
+        userRole: 'driver',
+        title: '🚗 New Trip Assigned',
+        body: `You have been assigned a new trip.\n\n` +
+              `🎫 Trip: ${tripNumber}\n` +
+              `🚗 Vehicle: ${vehicle.registrationNumber || vehicle.name}\n` +
+              `👤 Customer: ${customerName}\n` +
+              `📱 Customer Phone: ${customerPhone}\n` +
+              `📏 Distance: ${distance} km\n` +
+              `⏰ Pickup Time: ${formatTime(pickupTime)}\n` +
+              `⏱️  Duration: ~${estimatedDuration} minutes\n\n` +
+              `Please confirm if you can accept this trip.`,
+        type: 'trip_assigned',
+        data: {
+          tripId: tripId,
+          tripNumber: tripNumber,
+          vehicleId: vehicleId,
+          vehicleNumber: vehicle.registrationNumber || vehicle.name,
+          pickupTime: pickupTime.toISOString(),
+          estimatedDuration: estimatedDuration,
+          distance: distance,
+          customerName: customerName,
+          customerPhone: customerPhone,
+          customerEmail: customerEmail || '',
+          pickupAddress: startPoint.address || `${startPoint.latitude}, ${startPoint.longitude}`,
+          dropAddress: endPoint.address || `${endPoint.latitude}, ${endPoint.longitude}`,
+          canAccept: true,
+          canDecline: true,
+          requiresResponse: true
+        },
+        priority: 'high',
+        category: 'trip_assignment',
+        channels: ['fcm', 'database']
+      };
+      
+      await createNotification(req.db, driverNotificationData);
+      driverNotificationSent = true;
+      console.log('✅ Driver notification created and sent');
+      
+    } catch (notifError) {
+      console.log(`⚠️  Driver notification failed: ${notifError.message}`);
+      console.error(notifError.stack);
+    }
+    
+    // ✅ Send notification to CUSTOMER
+    let customerNotificationSent = false;
+    if (customerEmail || customerPhone) {
+      try {
+        console.log('📤 Sending notification to customer...');
+        
+        const customerNotificationData = {
+          userId: customerId || customerEmail || customerPhone,
+          userEmail: customerEmail || '',
+          userRole: 'customer',
+          title: '🚗 Trip Confirmed',
+          body: `Your trip has been confirmed and assigned to a driver.\n\n` +
+                `🎫 Trip: ${tripNumber}\n` +
+                `👨‍✈️ Driver: ${driver.name}\n` +
+                `🚗 Vehicle: ${vehicle.registrationNumber || vehicle.name}\n` +
+                `📱 Driver Phone: ${driver.phone || 'N/A'}\n` +
+                `⏰ Pickup Time: ${formatTime(pickupTime)}\n` +
+                `📏 Distance: ${distance} km\n\n` +
+                `Your driver will contact you before arrival.`,
+          type: 'trip_confirmed',
+          data: {
+            tripId: tripId,
+            tripNumber: tripNumber,
+            driverName: driver.name,
+            driverPhone: driver.phone || '',
+            vehicleNumber: vehicle.registrationNumber || vehicle.name,
+            pickupTime: pickupTime.toISOString(),
+            estimatedDuration: estimatedDuration,
+            distance: distance,
+            trackingEnabled: true
+          },
+          priority: 'high',
+          category: 'trip_confirmation',
+          channels: ['database']
+        };
+        
+        await createNotification(req.db, customerNotificationData);
+        customerNotificationSent = true;
+        console.log('✅ Customer notification sent successfully');
+        
+      } catch (notifError) {
+        console.log(`⚠️  Customer notification failed: ${notifError.message}`);
+      }
+    }
+    
+    // Send notification to admin about trip creation
+    try {
+      console.log('📤 Sending notification to admin...');
+      
+      const adminUsers = await req.db.collection('users').find({
+        role: { $in: ['admin', 'super_admin'] },
+        status: 'active'
+      }, { session }).toArray();
+      
+      for (const admin of adminUsers) {
+        const adminNotificationData = {
+          userId: admin._id.toString(),
+          userEmail: admin.email,
+          userRole: admin.role,
+          title: '📋 New Trip Created',
+          body: `A new trip has been created and assigned.\n\n` +
+                `🎫 Trip: ${tripNumber}\n` +
+                `👨‍✈️ Driver: ${driver.name}\n` +
+                `🚗 Vehicle: ${vehicle.registrationNumber || vehicle.name}\n` +
+                `👤 Customer: ${customerName}\n` +
+                `📱 Customer Phone: ${customerPhone}\n` +
+                `📏 Distance: ${distance} km\n` +
+                `⏰ Pickup: ${formatTime(pickupTime)}\n\n` +
+                `Waiting for driver confirmation.`,
+          type: 'trip_created_admin',
+          data: {
+            tripId: tripId,
+            tripNumber: tripNumber,
+            driverName: driver.name,
+            vehicleNumber: vehicle.registrationNumber || vehicle.name,
+            customerName: customerName,
+            customerPhone: customerPhone,
+            distance: distance,
+            pickupTime: pickupTime.toISOString(),
+            status: 'assigned',
+            requiresMonitoring: true
+          },
+          priority: 'normal',
+          category: 'admin_notification',
+          channels: ['database']
+        };
+        
+        await createNotification(req.db, adminNotificationData);
+      }
+      
+      console.log(`✅ Admin notifications sent to ${adminUsers.length} admin(s)`);
+      
+    } catch (notifError) {
+      console.log(`⚠️  Admin notification failed: ${notifError.message}`);
+    }
+    
+    await session.commitTransaction();
+    
+    console.log('\n' + '='.repeat(80));
+    console.log('✅ TRIP CREATION COMPLETED SUCCESSFULLY');
+    console.log('='.repeat(80));
+    console.log(`🎫 Trip Number: ${tripNumber}`);
+    console.log(`🆔 Trip ID: ${tripId}`);
+    console.log(`👨‍✈️ Driver: ${driver.name} (${driver.email})`);
+    console.log(`👤 Customer: ${customerName} (${customerPhone})`);
+    console.log(`🚗 Vehicle: ${vehicle.registrationNumber || vehicle.name}`);
+    console.log(`📏 Distance: ${distance} km`);
+    console.log(`⏰ Pickup: ${formatTime(pickupTime)}`);
+    console.log(`📱 Driver Notification: ${driverNotificationSent ? '✅ Sent' : '❌ Failed'}`);
+    console.log(`📱 Customer Notification: ${customerNotificationSent ? '✅ Sent' : '❌ Failed'}`);
+    console.log('='.repeat(80) + '\n');
+    
+    res.json({
+      success: true,
+      message: '✅ Trip created successfully! Driver and customer notified.',
+      data: {
+        tripId: tripId,
+        tripNumber: tripNumber,
+        status: 'assigned',
+        vehicle: {
+          id: vehicleId,
+          number: vehicle.registrationNumber || vehicle.name,
+          type: vehicle.type || 'Vehicle'
+        },
+        driver: {
+          id: driver._id.toString(),
+          name: driver.name,
+          email: driver.email,
+          phone: driver.phone || '',
+          notificationSent: driverNotificationSent
+        },
+        customer: {
+          name: customerName,
+          email: customerEmail || '',
+          phone: customerPhone,
+          notificationSent: customerNotificationSent
+        },
+        trip: {
+          pickupTime: pickupTime.toISOString(),
+          estimatedEndTime: estimatedEndTime.toISOString(),
+          estimatedDuration: estimatedDuration,
+          distance: distance,
+          pickupLocation: startPoint,
+          dropLocation: endPoint
+        },
+        notifications: {
+          driver: driverNotificationSent,
+          customer: customerNotificationSent,
+          admin: true
+        },
+        nextSteps: [
+          'Driver will receive notification with Accept/Decline buttons',
+          'Customer will be notified when driver accepts',
+          'Admin can monitor trip progress in real-time',
+          'Driver can start trip when ready'
+        ]
+      }
+    });
+    
+  } catch (error) {
+    if (session) await session.abortTransaction();
+    console.error('\n' + '❌'.repeat(40));
+    console.error('TRIP CREATION FAILED');
+    console.error('❌'.repeat(40));
+    console.error('Error:', error);
+    console.error('Stack:', error.stack);
+    console.error('❌'.repeat(40) + '\n');
+    
+    res.status(500).json({
+      success: false,
+      message: '❌ Trip creation failed',
+      error: error.message
+    });
+  } finally {
+    if (session) {
+      await session.endSession();
+    }
+  }
+});
+
+// ============================================================================
+// @route   POST /api/trips/:tripId/driver-response
+// @desc    Handle driver accept/decline response and notify admin
+// @access  Private (Driver)
+// ============================================================================
+router.post('/:tripId/driver-response', verifyToken, async (req, res) => {
+  try {
+    const { tripId } = req.params;
+    const { response, notes } = req.body;
+    
+    console.log(`📱 Driver response for trip ${tripId}: ${response}`);
+    console.log(`📝 Notes: ${notes || 'None'}`);
+    
+    const trip = await req.db.collection('trips').findOne({
+      _id: new ObjectId(tripId)
+    });
+    
+    if (!trip) {
+      return res.status(404).json({
+        success: false,
+        message: 'Trip not found'
+      });
+    }
+    
+    const updateData = {
+      driverResponse: response,
+      driverResponseTime: new Date(),
+      driverResponseNotes: notes || '',
+      updatedAt: new Date()
+    };
+    
+    if (response === 'accept') {
+      updateData.status = 'accepted';
+      updateData['statusHistory.accepted'] = new Date();
+    } else if (response === 'decline') {
+      updateData.status = 'declined';
+      updateData['statusHistory.declined'] = new Date();
+    }
+    
+    await req.db.collection('trips').updateOne(
+      { _id: new ObjectId(tripId) },
+      { $set: updateData }
+    );
+    
+    console.log('📤 Notifying admins from employee_admins collection...');
+    
+    const adminUsers = await req.db.collection('employee_admins').find({
+      role: { $in: ['admin', 'super_admin'] },
+      status: 'active'
+    }).toArray();
+    
+    console.log(`Found ${adminUsers.length} admin user(s) in employee_admins collection`);
+    
+    let notificationsSent = 0;
+    
+    for (const admin of adminUsers) {
+      if (!admin.email) {
+        console.log(`⚠️  Skipping admin ${admin._id} - no email`);
+        continue;
+      }
+      
+      const adminNotificationTitle = response === 'accept' 
+        ? '✅ Driver Accepted Trip' 
+        : '❌ Driver Declined Trip';
+      
+      const adminNotificationBody = response === 'accept'
+        ? `${trip.driverName} has accepted trip ${trip.tripNumber}.\n\n${notes ? `Notes: ${notes}\n\n` : ''}Trip is ready to start.`
+        : `${trip.driverName} has declined trip ${trip.tripNumber}.\n\n${notes ? `Reason: ${notes}\n\n` : 'No reason provided.\n\n'}Please assign a different driver.`;
+      
+      try {
+        await createNotification(req.db, {
+          userId: admin._id.toString(),
+          userEmail: admin.email,
+          userRole: admin.role,
+          title: adminNotificationTitle,
+          body: adminNotificationBody,
+          type: response === 'accept' ? 'trip_accepted_admin' : 'trip_declined_admin',
+          data: {
+            tripId: tripId,
+            tripNumber: trip.tripNumber,
+            driverName: trip.driverName,
+            driverResponse: response,
+            driverNotes: notes || '',
+            requiresAction: response === 'decline'
+          },
+          priority: response === 'decline' ? 'high' : 'normal',
+          category: 'admin_notification',
+          channels: ['fcm', 'database']
+        });
+        
+        notificationsSent++;
+        console.log(`✅ Notified admin: ${admin.email}`);
+        
+      } catch (notifError) {
+        console.log(`⚠️  Failed to notify admin ${admin.email}: ${notifError.message}`);
+      }
+    }
+    
+    console.log(`✅ Sent ${notificationsSent}/${adminUsers.length} admin notifications`);
+    
+    if (response === 'accept' && (trip.customer?.customerId || trip.customer?.email)) {
+      try {
+        await createNotification(req.db, {
+          userId: trip.customer.customerId || trip.customer.email,
+          userEmail: trip.customer.email,
+          userRole: 'customer',
+          title: '✅ Driver Confirmed',
+          body: `Great news! ${trip.driverName} has confirmed your trip.\n\n` +
+                `🎫 Trip: ${trip.tripNumber}\n` +
+                `⏰ Pickup: ${formatTime(trip.scheduledPickupTime)}\n` +
+                `📱 Driver Phone: ${trip.driverPhone || 'N/A'}\n\n` +
+                `Your driver will start the trip soon and contact you before arrival.`,
+          type: 'trip_driver_confirmed',
+          data: {
+            tripId: tripId,
+            tripNumber: trip.tripNumber,
+            driverName: trip.driverName,
+            driverPhone: trip.driverPhone || '',
+            pickupTime: trip.scheduledPickupTime
+          },
+          priority: 'high',
+          category: 'trip_update',
+          channels: ['database']
+        });
+        
+        console.log('✅ Customer notified');
+      } catch (err) {
+        console.log('⚠️ Customer notification failed:', err.message);
+      }
+    }
+    
+    res.json({
+      success: true,
+      message: response === 'accept' 
+        ? '✅ Trip accepted successfully. Admins have been notified.' 
+        : '❌ Trip declined. Admins have been notified.',
+      data: {
+        tripId: tripId,
+        tripNumber: trip.tripNumber,
+        response: response,
+        notes: notes,
+        status: response === 'accept' ? 'accepted' : 'declined',
+        adminsNotified: notificationsSent
+      }
+    });
+    
+  } catch (error) {
+    console.error('❌ Error processing driver response:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to process driver response',
+      error: error.message
+    });
+  }
+});
+
+// ============================================================================
+// @route   POST /api/trips/:tripId/start
+// @desc    Start individual trip with odometer photo
+// @access  Private (Driver)
+// ============================================================================
+router.post('/:tripId/start', verifyToken, upload.single('photo'), async (req, res) => {
+  try {
+    console.log('\n' + '='.repeat(80));
+    console.log('🚀 STARTING INDIVIDUAL TRIP');
+    console.log('='.repeat(80));
+    
+    const { tripId } = req.params;
+    const { reading } = req.body;
+    const photo = req.file;
+    
+    console.log(`📋 Trip ID: ${tripId}`);
+    console.log(`📏 Odometer Reading: ${reading}`);
+    console.log(`📸 Photo: ${photo ? 'Uploaded' : 'Missing'}`);
+    
+    if (!reading || !photo) {
+      return res.status(400).json({
+        success: false,
+        message: 'Odometer reading and photo are required'
+      });
+    }
+    
+    const trip = await req.db.collection('trips').findOne({
+      _id: new ObjectId(tripId)
+    });
+    
+    if (!trip) {
+      return res.status(404).json({
+        success: false,
+        message: 'Trip not found'
+      });
+    }
+    
+    if (trip.status !== 'accepted') {
+      return res.status(400).json({
+        success: false,
+        message: 'Trip must be accepted before starting'
+      });
+    }
+    
+    console.log('📤 Uploading odometer photo to GridFS...');
+    
+    const bucket = new GridFSBucket(req.db, {
+      bucketName: 'odometer_photos'
+    });
+    
+    const uploadStream = bucket.openUploadStream(`start-${tripId}-${Date.now()}.jpg`, {
+      metadata: {
+        tripId: tripId,
+        type: 'start_odometer',
+        reading: parseInt(reading),
+        uploadedBy: req.user.driverId || req.user.id || req.user.uid,
+        uploadedAt: new Date()
+      }
+    });
+    
+    uploadStream.end(photo.buffer);
+    
+    const photoId = await new Promise((resolve, reject) => {
+      uploadStream.on('finish', () => resolve(uploadStream.id));
+      uploadStream.on('error', reject);
+    });
+    
+    console.log(`✅ Photo uploaded to GridFS: ${photoId}`);
+    
+    const updateResult = await req.db.collection('trips').updateOne(
+      { _id: new ObjectId(tripId) },
+      {
+        $set: {
+          status: 'started',
+          actualStartTime: new Date(),
+          startOdometer: {
+            reading: parseInt(reading),
+            photoId: photoId,
+            timestamp: new Date()
+          },
+          'statusHistory.started': new Date(),
+          updatedAt: new Date()
+        }
+      }
+    );
+    
+    console.log(`✅ Trip updated to 'started' status`);
+    
+    console.log('📤 Notifying admin who created the trip...');
+    
+    const admin = await req.db.collection('employee_admins').findOne({
+      _id: new ObjectId(trip.createdBy)
+    });
+    
+    if (admin && admin.email) {
+      try {
+        await createNotification(req.db, {
+          userId: admin._id.toString(),
+          userEmail: admin.email,
+          userRole: admin.role || 'admin',
+          title: '🚗 Trip Started',
+          body: `${trip.driverName} has started trip ${trip.tripNumber}.\n\n` +
+                `🚗 Vehicle: ${trip.vehicleNumber}\n` +
+                `📏 Start Odometer: ${reading} km\n` +
+                `⏰ Started: ${formatTime(new Date())}\n\n` +
+                `You can track the trip in real-time.`,
+          type: 'trip_started_admin',
+          data: {
+            tripId: tripId,
+            tripNumber: trip.tripNumber,
+            driverName: trip.driverName,
+            vehicleNumber: trip.vehicleNumber,
+            startOdometer: parseInt(reading),
+            startTime: new Date().toISOString()
+          },
+          priority: 'high',
+          category: 'trip_update',
+          channels: ['fcm', 'database']
+        });
+        
+        console.log(`✅ Admin notified: ${admin.email}`);
+      } catch (notifError) {
+        console.log(`⚠️  Admin notification failed: ${notifError.message}`);
+      }
+    } else {
+      console.log(`⚠️  Admin not found for trip creator: ${trip.createdBy}`);
+    }
+    
+    console.log('='.repeat(80));
+    console.log('✅ TRIP STARTED SUCCESSFULLY');
+    console.log('='.repeat(80) + '\n');
+    
+    res.json({
+      success: true,
+      message: 'Trip started successfully',
+      data: {
+        tripId: tripId,
+        tripNumber: trip.tripNumber,
+        status: 'started',
+        startOdometer: {
+          reading: parseInt(reading),
+          photoId: photoId.toString()
+        },
+        startTime: new Date().toISOString(),
+        adminNotified: !!(admin && admin.email)
+      }
+    });
+    
+  } catch (error) {
+    console.error('❌ Error starting trip:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to start trip',
+      error: error.message
+    });
+  }
+});
+
+// ============================================================================
+// @route   POST /api/trips/:tripId/location
+// @desc    Update driver GPS location for individual trip
+// @access  Private (Driver)
+// ============================================================================
+router.post('/:tripId/location', verifyToken, async (req, res) => {
+  try {
+    const { tripId } = req.params;
+    const { latitude, longitude, speed, heading } = req.body;
+    
+    if (!latitude || !longitude) {
+      return res.status(400).json({
+        success: false,
+        message: 'Latitude and longitude are required'
+      });
+    }
+    
+    const locationUpdate = {
+      latitude: parseFloat(latitude),
+      longitude: parseFloat(longitude),
+      speed: speed ? parseFloat(speed) : null,
+      heading: heading ? parseFloat(heading) : null,
+      timestamp: new Date()
+    };
+    
+    await req.db.collection('trips').updateOne(
+      { _id: new ObjectId(tripId) },
+      {
+        $set: {
+          currentLocation: locationUpdate,
+          updatedAt: new Date()
+        },
+        $push: {
+          locationHistory: {
+            $each: [locationUpdate],
+            $slice: -100
+          }
+        }
+      }
+    );
+    
+    res.json({
+      success: true,
+      message: 'Location updated',
+      data: {
+        currentLocation: locationUpdate
+      }
+    });
+    
+  } catch (error) {
+    console.error('❌ Error updating location:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to update location',
+      error: error.message
+    });
+  }
+});
+
+// ============================================================================
+// @route   POST /api/trips/:tripId/arrive
+// @desc    Mark arrival at pickup location
+// @access  Private (Driver)
+// ============================================================================
+router.post('/:tripId/arrive', verifyToken, async (req, res) => {
+  try {
+    console.log(`\n📍 DRIVER ARRIVED AT PICKUP: ${req.params.tripId}`);
+    
+    const { tripId } = req.params;
+    const { latitude, longitude } = req.body;
+    
+    const updateResult = await req.db.collection('trips').updateOne(
+      { _id: new ObjectId(tripId) },
+      {
+        $set: {
+          status: 'in_progress',
+          arrivedAt: new Date(),
+          arrivalLocation: latitude && longitude ? {
+            latitude: parseFloat(latitude),
+            longitude: parseFloat(longitude),
+            timestamp: new Date()
+          } : null,
+          'statusHistory.arrived': new Date(),
+          updatedAt: new Date()
+        }
+      }
+    );
+    
+    if (updateResult.matchedCount === 0) {
+      return res.status(404).json({
+        success: false,
+        message: 'Trip not found'
+      });
+    }
+    
+    const trip = await req.db.collection('trips').findOne({
+      _id: new ObjectId(tripId)
+    });
+    
+    console.log('📤 Notifying admin...');
+    
+    const admin = await req.db.collection('employee_admins').findOne({
+      _id: new ObjectId(trip.createdBy)
+    });
+    
+    if (admin && admin.email) {
+      try {
+        await createNotification(req.db, {
+          userId: admin._id.toString(),
+          userEmail: admin.email,
+          userRole: admin.role || 'admin',
+          title: '📍 Driver Arrived',
+          body: `${trip.driverName} has arrived at the pickup location for trip ${trip.tripNumber}.`,
+          type: 'driver_arrived_admin',
+          data: {
+            tripId: tripId,
+            tripNumber: trip.tripNumber,
+            driverName: trip.driverName,
+            arrivalTime: new Date().toISOString()
+          },
+          priority: 'normal',
+          category: 'trip_update',
+          channels: ['fcm', 'database']
+        });
+        
+        console.log(`✅ Admin notified`);
+      } catch (notifError) {
+        console.log(`⚠️  Admin notification failed: ${notifError.message}`);
+      }
+    }
+    
+    res.json({
+      success: true,
+      message: 'Marked as arrived',
+      data: {
+        tripId: tripId,
+        status: 'in_progress',
+        arrivedAt: new Date().toISOString()
+      }
+    });
+    
+  } catch (error) {
+    console.error('❌ Error marking arrival:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to mark arrival',
+      error: error.message
+    });
+  }
+});
+
+// ============================================================================
+// @route   POST /api/trips/:tripId/depart
+// @desc    Mark departure from pickup location
+// @access  Private (Driver)
+// ============================================================================
+router.post('/:tripId/depart', verifyToken, async (req, res) => {
+  try {
+    console.log(`\n🚗 DEPARTING FROM PICKUP: ${req.params.tripId}`);
+    
+    const { tripId } = req.params;
+    const { latitude, longitude } = req.body;
+    
+    const updateResult = await req.db.collection('trips').updateOne(
+      { _id: new ObjectId(tripId) },
+      {
+        $set: {
+          departedAt: new Date(),
+          departureLocation: latitude && longitude ? {
+            latitude: parseFloat(latitude),
+            longitude: parseFloat(longitude),
+            timestamp: new Date()
+          } : null,
+          'statusHistory.departed': new Date(),
+          updatedAt: new Date()
+        }
+      }
+    );
+    
+    if (updateResult.matchedCount === 0) {
+      return res.status(404).json({
+        success: false,
+        message: 'Trip not found'
+      });
+    }
+    
+    res.json({
+      success: true,
+      message: 'Marked as departed',
+      data: {
+        tripId: tripId,
+        departedAt: new Date().toISOString()
+      }
+    });
+    
+  } catch (error) {
+    console.error('❌ Error marking departure:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to mark departure',
+      error: error.message
+    });
+  }
+});
+
+// ============================================================================
+// @route   POST /api/trips/:tripId/end
+// @desc    End individual trip with final odometer photo
+// @access  Private (Driver)
+// ============================================================================
+router.post('/:tripId/end', verifyToken, upload.single('photo'), async (req, res) => {
+  try {
+    console.log('\n' + '='.repeat(80));
+    console.log('🏁 ENDING INDIVIDUAL TRIP');
+    console.log('='.repeat(80));
+    
+    const { tripId } = req.params;
+    const { reading } = req.body;
+    const photo = req.file;
+    
+    console.log(`📋 Trip ID: ${tripId}`);
+    console.log(`📏 End Odometer Reading: ${reading}`);
+    console.log(`📸 Photo: ${photo ? 'Uploaded' : 'Missing'}`);
+    
+    if (!reading || !photo) {
+      return res.status(400).json({
+        success: false,
+        message: 'End odometer reading and photo are required'
+      });
+    }
+    
+    const trip = await req.db.collection('trips').findOne({
+      _id: new ObjectId(tripId)
+    });
+    
+    if (!trip) {
+      return res.status(404).json({
+        success: false,
+        message: 'Trip not found'
+      });
+    }
+    
+    console.log('📤 Uploading end odometer photo to GridFS...');
+    
+    const bucket = new GridFSBucket(req.db, {
+      bucketName: 'odometer_photos'
+    });
+    
+    const uploadStream = bucket.openUploadStream(`end-${tripId}-${Date.now()}.jpg`, {
+      metadata: {
+        tripId: tripId,
+        type: 'end_odometer',
+        reading: parseInt(reading),
+        uploadedBy: req.user.driverId || req.user.id || req.user.uid,
+        uploadedAt: new Date()
+      }
+    });
+    
+    uploadStream.end(photo.buffer);
+    
+    const photoId = await new Promise((resolve, reject) => {
+      uploadStream.on('finish', () => resolve(uploadStream.id));
+      uploadStream.on('error', reject);
+    });
+    
+    console.log(`✅ Photo uploaded to GridFS: ${photoId}`);
+    
+    const startOdometer = trip.startOdometer?.reading || 0;
+    const actualDistance = parseInt(reading) - startOdometer;
+    
+    console.log(`📏 Distance traveled: ${actualDistance} km`);
+    
+    const startTime = trip.actualStartTime ? new Date(trip.actualStartTime) : new Date();
+    const endTime = new Date();
+    const actualDuration = Math.round((endTime - startTime) / 60000);
+    
+    const updateResult = await req.db.collection('trips').updateOne(
+      { _id: new ObjectId(tripId) },
+      {
+        $set: {
+          status: 'completed',
+          actualEndTime: endTime,
+          actualDuration: actualDuration,
+          actualDistance: actualDistance,
+          endOdometer: {
+            reading: parseInt(reading),
+            photoId: photoId,
+            timestamp: endTime
+          },
+          'statusHistory.completed': endTime,
+          updatedAt: endTime
+        }
+      }
+    );
+    
+    console.log(`✅ Trip updated to 'completed' status`);
+    
+    console.log('📤 Notifying admin...');
+    
+    const admin = await req.db.collection('employee_admins').findOne({
+      _id: new ObjectId(trip.createdBy)
+    });
+    
+    if (admin && admin.email) {
+      try {
+        await createNotification(req.db, {
+          userId: admin._id.toString(),
+          userEmail: admin.email,
+          userRole: admin.role || 'admin',
+          title: '✅ Trip Completed',
+          body: `${trip.driverName} has completed trip ${trip.tripNumber}.\n\n` +
+                `📏 Distance: ${actualDistance} km\n` +
+                `⏱️  Duration: ${actualDuration} minutes\n` +
+                `🏁 Completed: ${formatTime(endTime)}`,
+          type: 'trip_completed_admin',
+          data: {
+            tripId: tripId,
+            tripNumber: trip.tripNumber,
+            driverName: trip.driverName,
+            actualDistance: actualDistance,
+            actualDuration: actualDuration,
+            completedTime: endTime.toISOString()
+          },
+          priority: 'normal',
+          category: 'trip_update',
+          channels: ['fcm', 'database']
+        });
+        
+        console.log(`✅ Admin notified`);
+      } catch (notifError) {
+        console.log(`⚠️  Admin notification failed: ${notifError.message}`);
+      }
+    }
+    
+    console.log('='.repeat(80));
+    console.log('✅ TRIP COMPLETED SUCCESSFULLY');
+    console.log('='.repeat(80) + '\n');
+    
+    res.json({
+      success: true,
+      message: 'Trip completed successfully',
+      data: {
+        tripId: tripId,
+        tripNumber: trip.tripNumber,
+        status: 'completed',
+        endOdometer: {
+          reading: parseInt(reading),
+          photoId: photoId.toString()
+        },
+        startOdometer: startOdometer,
+        actualDistance: actualDistance,
+        actualDuration: actualDuration,
+        completedAt: endTime.toISOString(),
+        adminNotified: !!(admin && admin.email)
+      }
+    });
+    
+  } catch (error) {
+    console.error('❌ Error ending trip:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to end trip',
+      error: error.message
+    });
+  }
+});
+
+// ============================================================================
+// @route   POST /api/trips/:tripGroupId/stop/:stopId/arrive
+// @desc    Mark driver arrived at stop (pickup or drop location)
+// @access  Private (Driver)
+// ============================================================================
+router.post('/:tripGroupId/stop/:stopId/arrive', verifyToken, async (req, res) => {
+  try {
+    console.log('\n' + '='.repeat(80));
+    console.log(`📍 DRIVER ARRIVED AT STOP`);
+    console.log('='.repeat(80));
+    
+    const { tripGroupId, stopId } = req.params;
+    const { latitude, longitude } = req.body;
+    
+    console.log(`🆔 Trip Group ID: ${tripGroupId}`);
+    console.log(`📍 Stop ID: ${stopId}`);
+    
+    const trip = await req.db.collection('trips').findOne({
+      tripNumber: tripGroupId
+    });
+    
+    if (!trip) {
+      console.log('❌ Trip not found');
+      return res.status(404).json({
+        success: false,
+        message: 'Trip not found. Please refresh and try again.'
+      });
+    }
+    
+    console.log(`✅ Trip found: ${trip.tripNumber}`);
+    console.log(`   Status: ${trip.status}`);
+    
+    const updateResult = await req.db.collection('trips').updateOne(
+      { tripNumber: tripGroupId },
+      {
+        $set: {
+          status: 'in_progress',
+          arrivedAt: new Date(),
+          arrivalLocation: latitude && longitude ? {
+            latitude: parseFloat(latitude),
+            longitude: parseFloat(longitude),
+            timestamp: new Date()
+          } : null,
+          updatedAt: new Date()
+        }
+      }
+    );
+    
+    if (updateResult.matchedCount === 0) {
+      console.log('❌ Failed to update trip');
+      return res.status(500).json({
+        success: false,
+        message: 'Failed to update trip status'
+      });
+    }
+    
+    console.log(`✅ Trip status updated to 'in_progress'`);
+    
+    if (trip.customer && trip.customer.email) {
+      console.log(`\n📍 SENDING ARRIVAL NOTIFICATION TO CUSTOMER`);
+      console.log('='.repeat(60));
+      
+      try {
+        const customer = await req.db.collection('customers').findOne({
+          email: trip.customer.email
+        });
+        
+        if (customer) {
+          console.log(`✅ Customer found: ${customer.name || customer.email}`);
+          
+          const driver = await req.db.collection('drivers').findOne({
+            driverId: trip.driverId
+          });
+          
+          const driverName = driver?.personalInfo?.name || driver?.name || trip.driverName || 'Your driver';
+          const driverPhone = driver?.personalInfo?.phone || driver?.phone || trip.driverPhone || '';
+          
+          const notification = {
+            userId: customer._id,
+            userEmail: customer.email,
+            userRole: 'customer',
+            type: 'driver_arrived',
+            title: '📍 Driver Has Arrived!',
+            body: `${driverName} is waiting at your pickup location`,
+            message: `Your driver ${driverName} has arrived at your location.\n\nVehicle: ${trip.vehicleNumber}\nPhone: ${driverPhone}\n\nPlease proceed to the vehicle.`,
+            data: {
+              tripId: trip._id.toString(),
+              tripNumber: trip.tripNumber,
+              driverName: driverName,
+              driverPhone: driverPhone,
+              vehicleNumber: trip.vehicleNumber,
+              pickupAddress: trip.pickupLocation?.address || 'Your location',
+            },
+            priority: 'urgent',
+            category: 'trip_updates',
+            isRead: false,
+            createdAt: new Date(),
+            updatedAt: new Date(),
+            expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+            deliveryStatus: {
+              fcm: 'pending',
+              database: 'success'
+            },
+            channels: ['database']
+          };
+          
+          await req.db.collection('notifications').insertOne(notification);
+          console.log(`✅ Arrival notification created`);
+        }
+      } catch (notificationError) {
+        console.log(`⚠️  Notification error: ${notificationError.message}`);
+      }
+      
+      console.log('='.repeat(60));
+    }
+    
+    console.log('='.repeat(80) + '\n');
+    
+    res.json({
+      success: true,
+      message: 'Marked as arrived and customer notified',
+      data: {
+        tripId: trip._id.toString(),
+        tripNumber: trip.tripNumber,
+        status: 'in_progress',
+        arrivedAt: new Date(),
+        customerNotified: true
+      }
+    });
+    
+  } catch (error) {
+    console.error('❌ Error marking arrival:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to mark arrival',
+      error: error.message
+    });
+  }
+});
+
+// ============================================================================
+// @route   POST /api/trips/:tripGroupId/stop/:stopId/depart
+// @desc    Mark departure from stop and request feedback
+// @access  Private (Driver)
+// ============================================================================
+router.post('/:tripGroupId/stop/:stopId/depart', verifyToken, async (req, res) => {
+  try {
+    console.log('\n' + '='.repeat(80));
+    console.log('🚗 DEPARTING FROM STOP');
+    console.log('='.repeat(80));
+    
+    const { tripGroupId, stopId } = req.params;
+    const { latitude, longitude } = req.body;
+    
+    console.log(`🆔 Trip Group ID: ${tripGroupId}`);
+    console.log(`📍 Stop ID: ${stopId}`);
+    
+    const trip = await req.db.collection('trips').findOne({
+      tripNumber: tripGroupId
+    });
+    
+    if (!trip) {
+      return res.status(404).json({
+        success: false,
+        message: 'Trip not found'
+      });
+    }
+    
+    console.log(`✅ Trip found: ${trip.tripNumber}`);
+    
+    const updateResult = await req.db.collection('trips').updateOne(
+      { tripNumber: tripGroupId },
+      {
+        $set: {
+          status: 'in_progress',
+          departedAt: new Date(),
+          departureLocation: latitude && longitude ? {
+            latitude: parseFloat(latitude),
+            longitude: parseFloat(longitude),
+            timestamp: new Date()
+          } : null,
+          updatedAt: new Date()
+        }
+      }
+    );
+    
+    if (updateResult.matchedCount === 0) {
+      return res.status(500).json({
+        success: false,
+        message: 'Failed to update trip'
+      });
+    }
+    
+    console.log(`✅ Trip updated - marked as departed`);
+    
+    if (trip.customer && trip.customer.email) {
+      console.log('\n⭐ REQUESTING CUSTOMER FEEDBACK');
+      console.log('='.repeat(60));
+      
+      try {
+        const customer = await req.db.collection('customers').findOne({
+          email: trip.customer.email
+        });
+        
+        if (customer) {
+          console.log(`✅ Customer found: ${customer.name || customer.email}`);
+          
+          const driver = await req.db.collection('drivers').findOne({
+            driverId: trip.driverId
+          });
+          
+          const driverName = driver?.personalInfo?.name || driver?.name || trip.driverName || 'Your driver';
+          
+          const feedbackRequest = await req.db.collection('feedback_requests').insertOne({
+            tripId: trip._id,
+            tripNumber: trip.tripNumber,
+            customerId: customer._id,
+            customerEmail: customer.email,
+            driverId: trip.driverId,
+            driverName: driverName,
+            requestedAt: new Date(),
+            status: 'pending',
+            feedbackGiven: false,
+            expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
+          });
+          
+          console.log(`✅ Feedback request saved: ${feedbackRequest.insertedId}`);
+          
+          const notification = {
+            userId: customer._id,
+            userEmail: customer.email,
+            userRole: 'customer',
+            type: 'feedback_request',
+            title: '⭐ How was your ride?',
+            body: `Please rate your experience with ${driverName}`,
+            message: `Hi ${customer.name},\n\nYour trip has been completed. We'd love to hear about your experience!\n\nPlease take a moment to rate your ride with ${driverName}.`,
+            data: {
+              tripId: trip._id.toString(),
+              tripNumber: trip.tripNumber,
+              driverName: driverName,
+              driverId: trip.driverId,
+              feedbackRequestId: feedbackRequest.insertedId.toString(),
+              action: 'open_feedback',
+            },
+            priority: 'high',
+            category: 'feedback',
+            isRead: false,
+            createdAt: new Date(),
+            updatedAt: new Date(),
+            expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+            deliveryStatus: {
+              fcm: 'pending',
+              database: 'success'
+            },
+            channels: ['database']
+          };
+          
+          await req.db.collection('notifications').insertOne(notification);
+          console.log(`✅ Feedback request notification created`);
+        }
+      } catch (feedbackError) {
+        console.log(`⚠️ Feedback error: ${feedbackError.message}`);
+      }
+      
+      console.log('='.repeat(60));
+    }
+    
+    console.log('='.repeat(80) + '\n');
+    
+    res.json({
+      success: true,
+      message: 'Marked as departed and feedback requested',
+      data: {
+        tripId: trip._id.toString(),
+        tripNumber: trip.tripNumber,
+        status: 'in_progress',
+        departedAt: new Date(),
+        feedbackRequested: true
+      }
+    });
+    
+  } catch (error) {
+    console.error('❌ Error marking departure:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to mark departure',
+      error: error.message
+    });
+  }
+});
+
+// ============================================================================
+// @route   POST /api/trips/:tripGroupId/end
+// @desc    End trip with odometer photo
+// @access  Private (Driver)
+// ============================================================================
+router.post('/:tripGroupId/end', verifyToken, upload.single('photo'), async (req, res) => {
+  try {
+    console.log('\n' + '='.repeat(80));
+    console.log('🏁 ENDING TRIP');
+    console.log('='.repeat(80));
+    
+    const { tripGroupId } = req.params;
+    const { reading } = req.body;
+    const photo = req.file;
+    
+    console.log(`📋 Trip Number: ${tripGroupId}`);
+    console.log(`📏 End Odometer Reading: ${reading}`);
+    console.log(`📸 Photo: ${photo ? 'Uploaded' : 'Missing'}`);
+    
+    if (!reading || !photo) {
+      return res.status(400).json({
+        success: false,
+        message: 'End odometer reading and photo are required'
+      });
+    }
+    
+    const trip = await req.db.collection('trips').findOne({
+      tripNumber: tripGroupId
+    });
+    
+    if (!trip) {
+      return res.status(404).json({
+        success: false,
+        message: 'Trip not found'
+      });
+    }
+    
+    console.log(`✅ Trip found: ${trip.tripNumber}`);
+    
+    console.log('📤 Uploading end odometer photo to GridFS...');
+    
+    const bucket = new GridFSBucket(req.db, {
+      bucketName: 'odometer_photos'
+    });
+    
+    const uploadStream = bucket.openUploadStream(`end-${tripGroupId}-${Date.now()}.jpg`, {
+      metadata: {
+        tripNumber: tripGroupId,
+        type: 'end_odometer',
+        reading: parseInt(reading),
+        uploadedBy: req.user.driverId || req.user.id,
+        uploadedAt: new Date()
+      }
+    });
+    
+    uploadStream.end(photo.buffer);
+    
+    const photoId = await new Promise((resolve, reject) => {
+      uploadStream.on('finish', () => resolve(uploadStream.id));
+      uploadStream.on('error', reject);
+    });
+    
+    console.log(`✅ Photo uploaded to GridFS: ${photoId}`);
+    
+    const startReading = trip.startOdometer?.reading || 0;
+    const endReading = parseInt(reading);
+    const actualDistance = endReading - startReading;
+    
+    console.log(`📏 Distance: ${startReading} → ${endReading} = ${actualDistance} km`);
+    
+    const updateResult = await req.db.collection('trips').updateOne(
+      { tripNumber: tripGroupId },
+      {
+        $set: {
+          status: 'completed',
+          endOdometer: {
+            reading: endReading,
+            photoId: photoId,
+            timestamp: new Date()
+          },
+          actualDistance: actualDistance,
+          actualEndTime: new Date(),
+          actualDuration: trip.actualStartTime ? 
+            Math.round((new Date() - new Date(trip.actualStartTime)) / 60000) : null,
+          updatedAt: new Date()
+        }
+      }
+    );
+    
+    if (updateResult.matchedCount === 0) {
+      return res.status(500).json({
+        success: false,
+        message: 'Failed to update trip'
+      });
+    }
+    
+    console.log(`✅ Trip marked as completed`);
+    
+    if (trip.customer && trip.customer.email) {
+      try {
+        const customer = await req.db.collection('customers').findOne({
+          email: trip.customer.email
+        });
+        
+        if (customer) {
+          const notification = {
+            userId: customer._id,
+            userEmail: customer.email,
+            userRole: 'customer',
+            type: 'trip_completed',
+            title: '✅ Trip Completed',
+            body: `Your trip has been completed successfully`,
+            message: `Thank you for traveling with us!\n\nTrip: ${trip.tripNumber}\nDistance: ${actualDistance} km\nDuration: ${trip.actualDuration || 'N/A'} minutes`,
+            data: {
+              tripId: trip._id.toString(),
+              tripNumber: trip.tripNumber,
+              distance: actualDistance,
+              duration: trip.actualDuration
+            },
+            priority: 'normal',
+            category: 'trip_updates',
+            isRead: false,
+            createdAt: new Date(),
+            updatedAt: new Date(),
+            expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+            deliveryStatus: {
+              fcm: 'pending',
+              database: 'success'
+            },
+            channels: ['database']
+          };
+          
+          await req.db.collection('notifications').insertOne(notification);
+          console.log(`✅ Completion notification created`);
+        }
+      } catch (notificationError) {
+        console.log(`⚠️ Notification error: ${notificationError.message}`);
+      }
+    }
+    
+    console.log('='.repeat(80) + '\n');
+    
+    res.json({
+      success: true,
+      message: 'Trip completed successfully!',
+      data: {
+        tripId: trip._id.toString(),
+        tripNumber: trip.tripNumber,
+        status: 'completed',
+        endOdometer: {
+          reading: endReading,
+          photoId: photoId.toString()
+        },
+        actualDistance: actualDistance,
+        actualDuration: trip.actualDuration,
+        completedAt: new Date()
+      }
+    });
+    
+  } catch (error) {
+    console.error('❌ Error ending trip:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to end trip',
+      error: error.message
+    });
+  }
+});
+
+// ============================================================================
+// @route   POST /api/trips/:tripGroupId/location
+// @desc    Update driver's real-time GPS location
+// @access  Private (Driver)
+// ============================================================================
+router.post('/:tripGroupId/location', verifyToken, async (req, res) => {
+  try {
+    const { tripGroupId } = req.params;
+    const { latitude, longitude, speed, heading } = req.body;
+    
+    if (!latitude || !longitude) {
+      return res.status(400).json({
+        success: false,
+        message: 'Latitude and longitude are required'
+      });
+    }
+    
+    const location = {
+      latitude: parseFloat(latitude),
+      longitude: parseFloat(longitude),
+      speed: speed ? parseFloat(speed) : null,
+      heading: heading ? parseFloat(heading) : null,
+      timestamp: new Date()
+    };
+    
+    const updateResult = await req.db.collection('trips').updateOne(
+      { tripNumber: tripGroupId },
+      {
+        $set: {
+          currentLocation: location,
+          updatedAt: new Date()
+        },
+        $push: {
+          locationHistory: {
+            $each: [location],
+            $slice: -100
+          }
+        }
+      }
+    );
+    
+    if (updateResult.matchedCount === 0) {
+      return res.status(404).json({
+        success: false,
+        message: 'Trip not found'
+      });
+    }
+    
+    res.json({
+      success: true,
+      message: 'Location updated',
+      data: {
+        location: location
+      }
+    });
+    
+  } catch (error) {
+    console.error('❌ Error updating location:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to update location',
+      error: error.message
+    });
+  }
+});
+
+module.exports = router;

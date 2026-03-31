@@ -1,0 +1,544 @@
+// lib/features/admin/fleet_management/fleet_vehicles_list_screen.dart
+
+import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
+import 'dart:convert';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:abra_fleet/features/admin/vehicle_admin_management/consecutive_trips_admin.dart';
+
+const Color kPrimaryColor = Color(0xFF0D47A1);
+const Color kTextPrimaryColor = Color(0xFF212121);
+const Color kTextSecondaryColor = Color(0xFF757575);
+const Color kSuccessColor = Color(0xFF4CAF50);
+const Color kWarningColor = Color(0xFFFF9800);
+const Color kDangerColor = Color(0xFFF44336);
+const Color kBackgroundColor = Color(0xFFF5F5F5);
+
+class FleetVehiclesListScreen extends StatefulWidget {
+  const FleetVehiclesListScreen({Key? key}) : super(key: key);
+
+  @override
+  State<FleetVehiclesListScreen> createState() => _FleetVehiclesListScreenState();
+}
+
+class _FleetVehiclesListScreenState extends State<FleetVehiclesListScreen> {
+  bool _isLoading = true;
+  String? _errorMessage;
+  List<dynamic> _vehicles = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchVehicles();
+  }
+
+  // ============================================
+  // FETCH VEHICLES FROM BACKEND
+  // ============================================
+  Future<void> _fetchVehicles() async {
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+    });
+
+    try {
+      // Get Firebase auth token
+      final user = FirebaseAuth.instance.currentUser;
+      String? token;
+      if (user != null) {
+        token = await user.getIdToken();
+      }
+
+      final url = 'http://localhost:3001/api/admin/fleet/vehicles/live-status';
+
+      print('📡 Fetching vehicles: $url');
+
+      final response = await http.get(
+        Uri.parse(url),
+        headers: {
+          'Content-Type': 'application/json',
+          if (token != null) 'Authorization': 'Bearer $token',
+        },
+      );
+
+      print('📥 Response status: ${response.statusCode}');
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+
+        if (data['success']) {
+          setState(() {
+            _vehicles = data['data'] ?? [];
+            _isLoading = false;
+          });
+
+          print('✅ Vehicles loaded: ${_vehicles.length}');
+        } else {
+          setState(() {
+            _errorMessage = data['message'] ?? 'Failed to load vehicles';
+            _isLoading = false;
+          });
+        }
+      } else if (response.statusCode == 401) {
+        setState(() {
+          _errorMessage = 'Unauthorized. Please log in again.';
+          _isLoading = false;
+        });
+      } else {
+        setState(() {
+          _errorMessage = 'Server error: ${response.statusCode}';
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      print('❌ Error fetching vehicles: $e');
+      setState(() {
+        _errorMessage = 'Network error: $e';
+        _isLoading = false;
+      });
+    }
+  }
+
+  // ============================================
+  // BUILD UI
+  // ============================================
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: kBackgroundColor,
+      appBar: AppBar(
+        backgroundColor: kPrimaryColor,
+        elevation: 0,
+        title: const Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Fleet Management',
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            Text(
+              'Consecutive Trips',
+              style: TextStyle(
+                fontSize: 12,
+                color: Colors.white70,
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.refresh),
+            onPressed: _fetchVehicles,
+            tooltip: 'Refresh',
+          ),
+        ],
+      ),
+      body: _isLoading
+          ? const Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  CircularProgressIndicator(),
+                  SizedBox(height: 16),
+                  Text('Loading vehicles...'),
+                ],
+              ),
+            )
+          : _errorMessage != null
+              ? Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.error_outline, size: 64, color: kDangerColor),
+                      const SizedBox(height: 16),
+                      Text(
+                        _errorMessage!,
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(color: kTextSecondaryColor),
+                      ),
+                      const SizedBox(height: 16),
+                      ElevatedButton.icon(
+                        onPressed: _fetchVehicles,
+                        icon: const Icon(Icons.refresh),
+                        label: const Text('Retry'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: kPrimaryColor,
+                        ),
+                      ),
+                    ],
+                  ),
+                )
+              : _vehicles.isEmpty
+                  ? Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(
+                            Icons.directions_car_outlined,
+                            size: 64,
+                            color: Colors.grey[400],
+                          ),
+                          const SizedBox(height: 16),
+                          const Text(
+                            'No vehicles found',
+                            style: TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                              color: kTextSecondaryColor,
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          const Text(
+                            'No active vehicles with trips',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              fontSize: 14,
+                              color: kTextSecondaryColor,
+                            ),
+                          ),
+                        ],
+                      ),
+                    )
+                  : RefreshIndicator(
+                      onRefresh: _fetchVehicles,
+                      child: Column(
+                        children: [
+                          // Stats header
+                          Container(
+                            padding: const EdgeInsets.all(16),
+                            color: Colors.white,
+                            child: Row(
+                              children: [
+                                _buildStatCard(
+                                  'Total Vehicles',
+                                  '${_vehicles.length}',
+                                  kPrimaryColor,
+                                  Icons.directions_car,
+                                ),
+                                const SizedBox(width: 12),
+                                _buildStatCard(
+                                  'Active',
+                                  '${_vehicles.where((v) => v['status'] == 'active').length}',
+                                  kSuccessColor,
+                                  Icons.check_circle,
+                                ),
+                                const SizedBox(width: 12),
+                                _buildStatCard(
+                                  'Idle',
+                                  '${_vehicles.where((v) => v['status'] == 'idle').length}',
+                                  kWarningColor,
+                                  Icons.pause_circle,
+                                ),
+                              ],
+                            ),
+                          ),
+                          const Divider(height: 1),
+                          // Vehicle list
+                          Expanded(
+                            child: ListView.builder(
+                              padding: const EdgeInsets.all(16),
+                              itemCount: _vehicles.length,
+                              itemBuilder: (context, index) {
+                                final vehicle = _vehicles[index];
+                                return _buildVehicleCard(vehicle);
+                              },
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+    );
+  }
+
+  // ============================================
+  // STAT CARD
+  // ============================================
+  Widget _buildStatCard(String label, String value, Color color, IconData icon) {
+    return Expanded(
+      child: Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: color.withOpacity(0.1),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: color.withOpacity(0.3)),
+        ),
+        child: Column(
+          children: [
+            Icon(icon, color: color, size: 24),
+            const SizedBox(height: 8),
+            Text(
+              value,
+              style: TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.bold,
+                color: color,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 11,
+                color: color,
+                fontWeight: FontWeight.w500,
+              ),
+              textAlign: TextAlign.center,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ============================================
+  // VEHICLE CARD
+  // ============================================
+  Widget _buildVehicleCard(Map<String, dynamic> vehicle) {
+    final vehicleId = vehicle['_id'].toString();
+    final vehicleNumber = vehicle['registrationNumber'] ?? 'N/A';
+    final driver = vehicle['driver'];
+    final status = vehicle['status'] ?? 'idle';
+    final currentTrip = vehicle['currentTrip'];
+    final tripsToday = _safeNumericExtract(vehicle['tripsToday']);
+
+    Color statusColor;
+    String statusText;
+    IconData statusIcon;
+
+    switch (status.toLowerCase()) {
+      case 'active':
+        statusColor = kSuccessColor;
+        statusText = 'Active';
+        statusIcon = Icons.check_circle;
+        break;
+      case 'idle':
+        statusColor = kWarningColor;
+        statusText = 'Idle';
+        statusIcon = Icons.pause_circle;
+        break;
+      default:
+        statusColor = kDangerColor;
+        statusText = 'Offline';
+        statusIcon = Icons.cancel;
+    }
+
+    return Card(
+      elevation: 2,
+      margin: const EdgeInsets.only(bottom: 12),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: InkWell(
+        onTap: () {
+          // ✅ NAVIGATE WITH REAL DATA FROM BACKEND!
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => ConsecutiveTripsAdminScreen(
+                vehicleId: vehicleId,        // ✅ Real MongoDB _id
+                vehicleNumber: vehicleNumber, // ✅ Real vehicle number
+              ),
+            ),
+          );
+        },
+        borderRadius: BorderRadius.circular(12),
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Header row
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: kPrimaryColor.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: const Icon(
+                      Icons.directions_car,
+                      color: kPrimaryColor,
+                      size: 24,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          vehicleNumber,
+                          style: const TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                            color: kTextPrimaryColor,
+                          ),
+                        ),
+                        if (driver != null) ...[
+                          const SizedBox(height: 2),
+                          Row(
+                            children: [
+                              const Icon(Icons.person, size: 14, color: kTextSecondaryColor),
+                              const SizedBox(width: 4),
+                              Expanded(
+                                child: Text(
+                                  driver['name'] ?? 'No driver',
+                                  style: const TextStyle(
+                                    fontSize: 13,
+                                    color: kTextSecondaryColor,
+                                  ),
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: statusColor.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(color: statusColor),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(statusIcon, size: 14, color: statusColor),
+                        const SizedBox(width: 4),
+                        Text(
+                          statusText,
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
+                            color: statusColor,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              const Divider(height: 1),
+              const SizedBox(height: 16),
+              // Trip info
+              Row(
+                children: [
+                  Expanded(
+                    child: _buildInfoChip(
+                      Icons.route,
+                      'Trips Today',
+                      tripsToday.toString(),
+                      kPrimaryColor,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: _buildInfoChip(
+                      currentTrip != null ? Icons.play_circle : Icons.schedule,
+                      'Status',
+                      currentTrip != null ? 'In Progress' : 'No Active Trip',
+                      currentTrip != null ? kSuccessColor : kTextSecondaryColor,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              // Action button
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  onPressed: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => ConsecutiveTripsAdminScreen(
+                          vehicleId: vehicleId,
+                          vehicleNumber: vehicleNumber,
+                        ),
+                      ),
+                    );
+                  },
+                  icon: const Icon(Icons.visibility, size: 18),
+                  label: const Text('View Consecutive Trips'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: kPrimaryColor,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  // ============================================
+  // INFO CHIP
+  // ============================================
+  Widget _buildInfoChip(IconData icon, String label, String value, Color color) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.05),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: color.withOpacity(0.2)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(icon, size: 16, color: color),
+              const SizedBox(width: 4),
+              Expanded(
+                child: Text(
+                  label,
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: color,
+                    fontWeight: FontWeight.w500,
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          Text(
+            value,
+            style: TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.bold,
+              color: color,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ✅ SAFE NUMERIC EXTRACTION - Handles String/int/double conversion
+  int _safeNumericExtract(dynamic value) {
+    if (value == null) return 0;
+    
+    if (value is int) return value;
+    if (value is double) return value.toInt();
+    if (value is String) {
+      final parsed = int.tryParse(value);
+      return parsed ?? 0;
+    }
+    
+    return 0;
+  }
+}

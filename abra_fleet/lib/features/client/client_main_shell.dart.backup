@@ -1,0 +1,1032 @@
+import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import 'package:firebase_database/firebase_database.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:url_launcher/url_launcher.dart';
+import 'client_dashboard.dart';
+import 'client_employee_management.dart';
+import 'client_roster_management.dart';
+import 'client_sos_alerts.dart';
+import 'client_reports_analytics_enhanced.dart';
+import 'client_profile_screen.dart';
+import 'package:abra_fleet/features/notifications/presentation/screens/client_notifications_screen.dart';
+import 'package:abra_fleet/core/services/client_notification_service.dart';
+import 'package:abra_fleet/features/auth/domain/repositories/auth_repository.dart';
+import 'package:abra_fleet/features/auth/presentation/screens/welcome_screen.dart';
+import '../hrm_feedback/presentation/screens/hrm_client_feedback_screen.dart';
+
+const Color kPrimaryColor = Color(0xFF0D47A1);
+
+class ClientMainShell extends StatefulWidget {
+  const ClientMainShell({Key? key}) : super(key: key);
+
+  @override
+  State<ClientMainShell> createState() => _ClientMainShellState();
+}
+
+class _ClientMainShellState extends State<ClientMainShell> {
+  int _selectedIndex = 0;
+  bool _isDrawerExpanded = true;
+
+  // Real-time notification count
+  int _notificationCount = 0;
+  int _sosAlertCount = 0;
+  int _rosterPendingCount = 0;
+  
+  final _notificationService = ClientNotificationService();
+
+  final List<NavigationItem> _navigationItems = [
+    NavigationItem(
+      icon: Icons.dashboard_rounded,
+      label: 'Dashboard',
+      route: '/dashboard',
+    ),
+    NavigationItem(
+      icon: Icons.people_alt_rounded,
+      label: 'Employee Management',
+      route: '/employees',
+    ),
+    NavigationItem(
+      icon: Icons.calendar_month_rounded,
+      label: 'Roster Management',
+      route: '/roster',
+    ),
+    NavigationItem(
+      icon: Icons.warning_amber_rounded,
+      label: 'SOS Alerts',
+      route: '/sos',
+    ),
+    NavigationItem(
+      icon: Icons.analytics_rounded,
+      label: 'Reports & Analytics',
+      route: '/reports',
+    ),
+    // ============================================================
+    // ADD THIS NEW ITEM
+    // ============================================================
+    NavigationItem(
+      icon: Icons.feedback_rounded,
+      label: 'Feedback Management',
+      route: '/feedback',
+    ),
+    // ============================================================
+    // END OF NEW ITEM
+    // ============================================================
+    NavigationItem(
+      icon: Icons.person_outline_rounded,
+      label: 'Profile',
+      route: '/profile',
+    ),
+  ];
+
+  final List<Widget> _screens = [
+    const ClientDashboard(),              // 0 - Dashboard
+    const ClientEmployeeManagement(),     // 1 - Employee Management
+    const ClientRosterManagementPage(),   // 2 - Roster Management
+    const ClientSOSAlerts(),              // 3 - SOS Alerts
+    const ClientReportsAnalyticsEnhanced(), // 4 - Reports & Analytics
+    // ============================================================
+    // ADD THIS LINE (should be index 5, matching navigation item)
+    // ============================================================
+    const HrmClientFeedbackScreen(),       // 5 - Feedback Management
+    // ============================================================
+    // END OF NEW SCREEN
+    // ============================================================
+    const ClientProfileScreen(),          // 6 - Profile
+  ];
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        // Setup notification listener with sound
+        _notificationService.setupListener(context);
+        // Setup unread count listener
+        _setupUnreadCountListener();
+      }
+    });
+  }
+
+  void _setupUnreadCountListener() {
+    final currentUser = FirebaseAuth.instance.currentUser;
+    if (currentUser == null) {
+      debugPrint('❌ CLIENT SHELL: No current user for unread count');
+      return;
+    }
+
+    debugPrint('🔔 CLIENT SHELL: Setting up unread count listener for ${currentUser.uid}');
+    final notificationsRef = FirebaseDatabase.instance.ref('notifications/${currentUser.uid}');
+    
+    notificationsRef.onValue.listen((event) {
+      debugPrint('📊 CLIENT SHELL: Unread count data received');
+      
+      if (!event.snapshot.exists) {
+        debugPrint('📊 CLIENT SHELL: No notifications - count = 0');
+        setState(() => _notificationCount = 0);
+        return;
+      }
+
+      final data = event.snapshot.value as Map<dynamic, dynamic>?;
+      if (data == null) {
+        debugPrint('📊 CLIENT SHELL: Notification data is null - count = 0');
+        setState(() => _notificationCount = 0);
+        return;
+      }
+
+      int unreadCount = 0;
+      data.forEach((key, value) {
+        if (value['isRead'] != true) {
+          unreadCount++;
+        }
+      });
+
+      debugPrint('📊 CLIENT SHELL: Total notifications: ${data.length}, Unread: $unreadCount');
+      setState(() => _notificationCount = unreadCount);
+    });
+  }
+
+  @override
+  void dispose() {
+    _notificationService.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: Row(
+        children: [
+          // Sidebar Navigation
+          AnimatedContainer(
+            duration: const Duration(milliseconds: 300),
+            width: _isDrawerExpanded ? 260 : 70,
+            child: _buildSidebar(),
+          ),
+          
+          // Main Content Area
+          Expanded(
+            child: Column(
+              children: [
+                _buildTopBar(),
+                Expanded(
+                  child: _screens[_selectedIndex],
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSidebar() {
+    return Container(
+      decoration: BoxDecoration(
+        color: kPrimaryColor,
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.1),
+            blurRadius: 12,
+            offset: const Offset(4, 0),
+          ),
+        ],
+      ),
+      child: Column(
+        children: [
+          // Sidebar Header
+          Container(
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              border: Border(
+                bottom: BorderSide(
+                  color: Colors.white.withOpacity(0.1),
+                  width: 1,
+                ),
+              ),
+            ),
+            child: Row(
+              children: [
+                Container(
+                  width: 36,
+                  height: 36,
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(18),
+                  ),
+                  child: Padding(
+                    padding: const EdgeInsets.all(2),
+                    child: Image.asset(
+                      'assets/logo.png',
+                      fit: BoxFit.contain,
+                      errorBuilder: (context, error, stackTrace) {
+                        return Icon(
+                          Icons.directions_bus,
+                          color: kPrimaryColor,
+                          size: 20,
+                        );
+                      },
+                    ),
+                  ),
+                ),
+                if (_isDrawerExpanded) ...[
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'Abra Travels',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                            letterSpacing: 0.5,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          'Client Portal',
+                          style: TextStyle(
+                            color: Colors.white.withOpacity(0.8),
+                            fontSize: 11,
+                            fontWeight: FontWeight.w400,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+
+          // Navigation Items
+          Expanded(
+            child: ListView.builder(
+              padding: const EdgeInsets.symmetric(vertical: 12),
+              itemCount: _navigationItems.length,
+              itemBuilder: (context, index) {
+                return _buildNavItem(
+                  _navigationItems[index],
+                  index,
+                );
+              },
+            ),
+          ),
+
+          // Logout Button at bottom
+          InkWell(
+            onTap: () => _showLogoutDialog(),
+            child: Container(
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                border: Border(
+                  top: BorderSide(
+                    color: Colors.white.withOpacity(0.1),
+                    width: 1,
+                  ),
+                ),
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const Icon(
+                    Icons.logout,
+                    color: Colors.redAccent,
+                    size: 20,
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildNavItem(NavigationItem item, int index) {
+    final isSelected = _selectedIndex == index;
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: () {
+            setState(() {
+              _selectedIndex = index;
+            });
+          },
+          borderRadius: BorderRadius.circular(8),
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 200),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            decoration: BoxDecoration(
+              color: isSelected
+                  ? Colors.white.withOpacity(0.2)
+                  : Colors.transparent,
+              borderRadius: BorderRadius.circular(8),
+              boxShadow: isSelected
+                  ? [
+                      BoxShadow(
+                        color: Colors.white.withOpacity(0.1),
+                        blurRadius: 12,
+                        offset: const Offset(0, 4),
+                      ),
+                    ]
+                  : null,
+            ),
+            child: Row(
+              children: [
+                Icon(
+                  item.icon,
+                  color: isSelected ? Colors.white : Colors.white70,
+                  size: 20,
+                ),
+                if (_isDrawerExpanded) ...[
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      item.label,
+                      style: TextStyle(
+                        color: isSelected ? Colors.white : Colors.white70,
+                        fontSize: 14,
+                        fontWeight:
+                            isSelected ? FontWeight.w600 : FontWeight.w500,
+                      ),
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTopBar() {
+    return Container(
+      height: 70,
+      decoration: BoxDecoration(
+        color: kPrimaryColor,
+        boxShadow: [
+          BoxShadow(
+            color: kPrimaryColor.withOpacity(0.3),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      padding: const EdgeInsets.symmetric(horizontal: 32),
+      child: Row(
+        children: [
+          // Logo
+          Container(
+            width: 40,
+            height: 40,
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(20),
+            ),
+            child: Padding(
+              padding: const EdgeInsets.all(8),
+              child: Image.asset(
+                'assets/logo.png',
+                fit: BoxFit.contain,
+                errorBuilder: (context, error, stackTrace) {
+                  return Icon(
+                    Icons.directions_bus,
+                    color: kPrimaryColor,
+                    size: 24,
+                  );
+                },
+              ),
+            ),
+          ),
+          
+          const SizedBox(width: 16),
+          
+          // Page Title
+          Text(
+            _navigationItems[_selectedIndex].label,
+            style: const TextStyle(
+              fontSize: 24,
+              fontWeight: FontWeight.bold,
+              color: Colors.white,
+            ),
+          ),
+          
+          const Spacer(),
+          
+          // Support Button
+          IconButton(
+            onPressed: () => _showSupportDialog(),
+            icon: const Icon(Icons.headset_mic_outlined),
+            iconSize: 26,
+            color: Colors.white,
+            tooltip: 'Support',
+          ),
+          
+          const SizedBox(width: 16),
+          
+          // Notification Badge
+          _buildNotificationBadge(),
+          
+          const SizedBox(width: 16),
+          
+          // Logout Button
+          ElevatedButton.icon(
+            onPressed: () => _showLogoutDialog(),
+            icon: const Icon(Icons.logout, size: 18),
+            label: const Text('Logout'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.white.withOpacity(0.2),
+              foregroundColor: Colors.white,
+              elevation: 0,
+              padding: const EdgeInsets.symmetric(
+                horizontal: 20,
+                vertical: 12,
+              ),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+                side: BorderSide(
+                  color: Colors.white.withOpacity(0.3),
+                  width: 1,
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildNotificationBadge() {
+    return Stack(
+      children: [
+        IconButton(
+          icon: const Icon(Icons.notifications_outlined),
+          iconSize: 26,
+          color: Colors.white,
+          tooltip: 'Notifications',
+          onPressed: () {
+            debugPrint('🔔 Notification bell clicked - Opening ClientNotificationsScreen');
+            try {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const ClientNotificationsScreen()),
+              );
+              debugPrint('✅ Navigation successful');
+            } catch (e) {
+              debugPrint('❌ Navigation error: $e');
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(content: Text('Error opening notifications: $e')),
+              );
+            }
+          },
+        ),
+        if (_notificationCount > 0)
+          Positioned(
+            right: 8,
+            top: 8,
+            child: Container(
+              padding: const EdgeInsets.all(4),
+              decoration: BoxDecoration(
+                color: const Color(0xFFef4444),
+                shape: BoxShape.circle,
+                border: Border.all(
+                  color: Colors.white,
+                  width: 2,
+                ),
+              ),
+              constraints: const BoxConstraints(
+                minWidth: 18,
+                minHeight: 18,
+              ),
+              child: Center(
+                child: Text(
+                  _notificationCount > 9 ? '9+' : '$_notificationCount',
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 9,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+
+  void _showLogoutDialog() {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+          title: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFEF4444).withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Icon(
+                  Icons.logout,
+                  color: Color(0xFFEF4444),
+                  size: 24,
+                ),
+              ),
+              const SizedBox(width: 12),
+              const Text(
+                'Confirm Logout',
+                style: TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ],
+          ),
+          content: const Text(
+            'Are you sure you want to logout? You will need to login again to access the dashboard.',
+            style: TextStyle(
+              fontSize: 15,
+              color: Color(0xFF64748b),
+              height: 1.5,
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.of(context).pop();
+              },
+              style: TextButton.styleFrom(
+                foregroundColor: const Color(0xFF64748B),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 24,
+                  vertical: 12,
+                ),
+              ),
+              child: const Text(
+                'Cancel',
+                style: TextStyle(
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                Navigator.of(context).pop();
+                _handleLogout();
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFFEF4444),
+                foregroundColor: Colors.white,
+                elevation: 0,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 24,
+                  vertical: 12,
+                ),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+              ),
+              child: const Text(
+                'Logout',
+                style: TextStyle(
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  void _handleLogout() async {
+    try {
+      // Show loading indicator
+      if (mounted) {
+        showDialog(
+          context: context,
+          barrierDismissible: false,
+          builder: (BuildContext dialogContext) => const Center(
+            child: CircularProgressIndicator(
+              valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+            ),
+          ),
+        );
+      }
+
+      // Sign out from Firebase
+      final authRepository = Provider.of<AuthRepository>(context, listen: false);
+      await authRepository.signOut();
+
+      // Add a small delay to ensure sign out completes
+      await Future.delayed(const Duration(milliseconds: 300));
+
+      // Close loading dialog and navigate to login
+      if (mounted) {
+        // Pop the loading dialog
+        Navigator.of(context).pop();
+        
+        // Navigate to welcome page and remove all previous routes
+        Navigator.of(context).pushAndRemoveUntil(
+          MaterialPageRoute(builder: (context) => const WelcomeScreen()),
+          (Route<dynamic> route) => false,
+        );
+      }
+    } catch (e) {
+      // Close loading dialog if it's showing
+      if (mounted) {
+        Navigator.of(context).pop();
+        
+        // Show error message
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Logout failed: $e'),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      }
+    }
+  }
+
+  // Support Dialog Function
+  void _showSupportDialog() {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        final screenWidth = MediaQuery.of(context).size.width;
+        final isMobile = screenWidth <= 600;
+        
+        return Dialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          child: Container(
+            constraints: BoxConstraints(
+              maxWidth: isMobile ? screenWidth * 0.9 : 500,
+              maxHeight: MediaQuery.of(context).size.height * 0.8,
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // Header
+                Container(
+                  padding: EdgeInsets.all(isMobile ? 20 : 24),
+                  decoration: BoxDecoration(
+                    gradient: const LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                      colors: [
+                        Color(0xFF2563EB),
+                        Color(0xFF1D4ED8),
+                      ],
+                    ),
+                    borderRadius: const BorderRadius.only(
+                      topLeft: Radius.circular(20),
+                      topRight: Radius.circular(20),
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withOpacity(0.25),
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                        child: Icon(
+                          Icons.headset_mic,
+                          color: Colors.white,
+                          size: isMobile ? 28 : 32,
+                        ),
+                      ),
+                      const SizedBox(width: 16),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'We\'re Here to Help!',
+                              style: TextStyle(
+                                fontSize: isMobile ? 18 : 20,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.white,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              'Choose your preferred way to reach us',
+                              style: TextStyle(
+                                fontSize: isMobile ? 12 : 13,
+                                color: Colors.white.withOpacity(0.9),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.close, color: Colors.white),
+                        onPressed: () => Navigator.of(context).pop(),
+                      ),
+                    ],
+                  ),
+                ),
+                // Content
+                Flexible(
+                  child: SingleChildScrollView(
+                    padding: EdgeInsets.all(isMobile ? 16 : 20),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // Support Hours
+                        Container(
+                          padding: EdgeInsets.all(isMobile ? 14 : 16),
+                          decoration: BoxDecoration(
+                            color: Colors.blue.withOpacity(0.1),
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: Colors.blue.withOpacity(0.3)),
+                          ),
+                          child: Row(
+                            children: [
+                              Icon(Icons.access_time_rounded, color: Colors.blue[700], size: 24),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      'Available 24/7',
+                                      style: TextStyle(
+                                        fontSize: isMobile ? 14 : 15,
+                                        fontWeight: FontWeight.bold,
+                                        color: Colors.grey[800],
+                                      ),
+                                    ),
+                                    Text(
+                                      'All Days • Round the Clock',
+                                      style: TextStyle(
+                                        fontSize: isMobile ? 11 : 12,
+                                        color: Colors.grey[600],
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 20),
+                        
+                        // Contact Options
+                        Text(
+                          'Contact Us',
+                          style: TextStyle(
+                            fontSize: isMobile ? 15 : 16,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.grey[800],
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        
+                        // Phone
+                        _buildSupportOptionCard(
+                          context,
+                          icon: Icons.phone,
+                          title: 'Call Us',
+                          subtitle: '+91 886-728-8076',
+                          color: const Color(0xFF4299E1),
+                          onTap: () => _launchPhoneCall(context),
+                          isMobile: isMobile,
+                        ),
+                        const SizedBox(height: 10),
+                        
+                        // WhatsApp
+                        _buildSupportOptionCard(
+                          context,
+                          icon: Icons.chat_bubble,
+                          title: 'WhatsApp',
+                          subtitle: 'Chat with us instantly',
+                          color: const Color(0xFF48BB78),
+                          onTap: () => _launchWhatsApp(context),
+                          isMobile: isMobile,
+                        ),
+                        const SizedBox(height: 10),
+                        
+                        // Email
+                        _buildSupportOptionCard(
+                          context,
+                          icon: Icons.email,
+                          title: 'Email Us',
+                          subtitle: 'hostelmatrix19@gmail.com',
+                          color: const Color(0xFFED8936),
+                          onTap: () => _launchEmail(context),
+                          isMobile: isMobile,
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildSupportOptionCard(
+    BuildContext context, {
+    required IconData icon,
+    required String title,
+    required String subtitle,
+    required Color color,
+    required VoidCallback onTap,
+    required bool isMobile,
+  }) {
+    return Card(
+      elevation: 2,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(12),
+        child: Padding(
+          padding: EdgeInsets.all(isMobile ? 12 : 14),
+          child: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: color.withOpacity(0.15),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Icon(icon, color: color, size: 24),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: TextStyle(
+                        fontSize: isMobile ? 14 : 15,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.grey[800],
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      subtitle,
+                      style: TextStyle(
+                        fontSize: isMobile ? 11 : 12,
+                        color: Colors.grey[600],
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
+                ),
+              ),
+              Icon(Icons.arrow_forward_ios, color: Colors.grey[400], size: 16),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  // Launch Phone Call
+  Future<void> _launchPhoneCall(BuildContext context) async {
+    try {
+      final Uri phoneUri = Uri(scheme: 'tel', path: '+918867288076');
+      if (await canLaunchUrl(phoneUri)) {
+        await launchUrl(phoneUri);
+      } else {
+        _showErrorSnackBar(context, 'Unable to open phone dialer');
+      }
+    } catch (e) {
+      _showErrorSnackBar(context, 'Error: $e');
+    }
+  }
+
+  // Launch WhatsApp
+  Future<void> _launchWhatsApp(BuildContext context) async {
+    try {
+      final Uri whatsappUri = Uri.parse('https://wa.me/918867288076');
+      if (await canLaunchUrl(whatsappUri)) {
+        await launchUrl(whatsappUri, mode: LaunchMode.externalApplication);
+      } else {
+        _showErrorSnackBar(context, 'Unable to open WhatsApp');
+      }
+    } catch (e) {
+      _showErrorSnackBar(context, 'Error: $e');
+    }
+  }
+
+  // Launch Email
+  Future<void> _launchEmail(BuildContext context) async {
+    try {
+      final String email = 'hostelmatrix19@gmail.com';
+      final String subject = 'Support Request';
+      final String body = 'Hello Abra Travels Support Team,\n\n';
+      
+      final Uri emailUri = Uri(
+        scheme: 'mailto',
+        path: email,
+        query: 'subject=${Uri.encodeComponent(subject)}&body=${Uri.encodeComponent(body)}',
+      );
+      
+      if (await canLaunchUrl(emailUri)) {
+        await launchUrl(emailUri, mode: LaunchMode.externalApplication);
+      } else {
+        throw 'Could not launch email';
+      }
+    } catch (e) {
+      _showErrorSnackBar(context, 'Unable to open email client');
+    }
+  }
+
+  void _showErrorSnackBar(BuildContext context, String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Row(
+          children: [
+            const Icon(Icons.error_outline, color: Colors.white, size: 20),
+            const SizedBox(width: 12),
+            Expanded(child: Text(message)),
+          ],
+        ),
+        backgroundColor: Colors.red[700],
+        behavior: SnackBarBehavior.floating,
+        duration: const Duration(seconds: 3),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+      ),
+    );
+  }
+}
+
+class NavigationItem {
+  final IconData icon;
+  final String label;
+  final String route;
+
+  NavigationItem({
+    required this.icon,
+    required this.label,
+    required this.route,
+  });
+}
+
+// Placeholder screen for sections not yet implemented
+class PlaceholderScreen extends StatelessWidget {
+  final String title;
+  
+  const PlaceholderScreen({
+    Key? key,
+    required this.title,
+  }) : super(key: key);
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      color: const Color(0xFFf8fafc),
+      child: Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              Icons.construction,
+              size: 64,
+              color: const Color(0xFF64748b),
+            ),
+            const SizedBox(height: 24),
+            Text(
+              title,
+              style: const TextStyle(
+                fontSize: 24,
+                fontWeight: FontWeight.bold,
+                color: Color(0xFF1e293b),
+              ),
+            ),
+            const SizedBox(height: 8),
+            const Text(
+              'This section is under development',
+              style: TextStyle(
+                fontSize: 16,
+                color: Color(0xFF64748b),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}

@@ -1,0 +1,835 @@
+// lib/features/admin/vehicle_admin_management/trip_operations/trip_operations_list_screen.dart
+
+import 'dart:async';
+import 'dart:convert';
+import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:http/http.dart' as http;
+import 'package:abra_fleet/app/config/api_config.dart';
+
+class TripOperationsListScreen extends StatefulWidget {
+  const TripOperationsListScreen({Key? key}) : super(key: key);
+
+  @override
+  State<TripOperationsListScreen> createState() => _TripOperationsListScreenState();
+}
+
+class _TripOperationsListScreenState extends State<TripOperationsListScreen> {
+  List<Map<String, dynamic>> _trips = [];
+  bool _isLoading = true;
+  String? _error;
+  Timer? _refreshTimer;
+  String _selectedFilter = 'all';
+
+  final List<String> _filterOptions = [
+    'all',
+    'assigned',
+    'accepted',
+    'declined',
+    'started',
+    'in_progress',
+    'completed',
+    'cancelled'
+  ];
+
+  @override
+  void initState() {
+    super.initState();
+    _loadTrips();
+    // Auto-refresh every 10 seconds for real-time updates
+    _refreshTimer = Timer.periodic(const Duration(seconds: 10), (timer) {
+      _loadTrips(showLoading: false);
+    });
+  }
+
+  @override
+  void dispose() {
+    _refreshTimer?.cancel();
+    super.dispose();
+  }
+
+  Future<void> _loadTrips({bool showLoading = true}) async {
+    if (showLoading) {
+      setState(() {
+        _isLoading = true;
+        _error = null;
+      });
+    }
+
+    try {
+      final user = FirebaseAuth.instance.currentUser;
+      if (user == null) {
+        throw Exception('User not authenticated');
+      }
+
+      final token = await user.getIdToken();
+      final uri = Uri.parse('${ApiConfig.baseUrl}/api/admin/trips').replace(
+        queryParameters: _selectedFilter != 'all' ? {'status': _selectedFilter} : null,
+      );
+
+      final response = await http.get(
+        uri,
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Content-Type': 'application/json',
+        },
+      );
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        if (mounted) {
+          setState(() {
+            _trips = List<Map<String, dynamic>>.from(data['data'] ?? []);
+            _isLoading = false;
+            _error = null;
+          });
+        }
+      } else {
+        throw Exception('Failed to load trips: ${response.statusCode}');
+      }
+    } catch (e) {
+      debugPrint('Error loading trips: $e');
+      if (mounted) {
+        setState(() {
+          _error = e.toString();
+          _isLoading = false;
+        });
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Trip Operations'),
+        backgroundColor: const Color(0xFF0D47A1),
+        foregroundColor: Colors.white,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.refresh),
+            onPressed: () => _loadTrips(),
+            tooltip: 'Refresh',
+          ),
+        ],
+      ),
+      body: Column(
+        children: [
+          _buildFilterBar(),
+          _buildStatsBar(),
+          Expanded(
+            child: _buildTripsList(),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildFilterBar() {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.grey[50],
+        border: Border(bottom: BorderSide(color: Colors.grey[300]!)),
+      ),
+      child: Row(
+        children: [
+          const Text(
+            'Filter: ',
+            style: TextStyle(fontWeight: FontWeight.w600),
+          ),
+          Expanded(
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(
+                children: _filterOptions.map((filter) {
+                  final isSelected = _selectedFilter == filter;
+                  return Padding(
+                    padding: const EdgeInsets.only(right: 8),
+                    child: FilterChip(
+                      label: Text(_formatFilterLabel(filter)),
+                      selected: isSelected,
+                      onSelected: (selected) {
+                        if (selected) {
+                          setState(() {
+                            _selectedFilter = filter;
+                          });
+                          _loadTrips();
+                        }
+                      },
+                      selectedColor: const Color(0xFF0D47A1).withOpacity(0.2),
+                      checkmarkColor: const Color(0xFF0D47A1),
+                    ),
+                  );
+                }).toList(),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildStatsBar() {
+    final totalTrips = _trips.length;
+    final acceptedTrips = _trips.where((t) => t['status'] == 'accepted').length;
+    final declinedTrips = _trips.where((t) => t['status'] == 'declined').length;
+    final pendingTrips = _trips.where((t) => t['status'] == 'assigned').length;
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: const Color(0xFF0D47A1).withOpacity(0.1),
+        border: Border(bottom: BorderSide(color: Colors.grey[300]!)),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceAround,
+        children: [
+          _buildStatItem('Total', totalTrips, Colors.blue),
+          _buildStatItem('Pending', pendingTrips, Colors.orange),
+          _buildStatItem('Accepted', acceptedTrips, Colors.green),
+          _buildStatItem('Declined', declinedTrips, Colors.red),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildStatItem(String label, int count, Color color) {
+    return Column(
+      children: [
+        Text(
+          count.toString(),
+          style: TextStyle(
+            fontSize: 24,
+            fontWeight: FontWeight.bold,
+            color: color,
+          ),
+        ),
+        Text(
+          label,
+          style: TextStyle(
+            fontSize: 12,
+            color: Colors.grey[600],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildTripsList() {
+    if (_isLoading) {
+      return const Center(
+        child: CircularProgressIndicator(),
+      );
+    }
+
+    if (_error != null) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.error_outline, size: 64, color: Colors.red[300]),
+            const SizedBox(height: 16),
+            Text(
+              'Error loading trips',
+              style: TextStyle(fontSize: 18, color: Colors.grey[600]),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              _error!,
+              style: TextStyle(fontSize: 14, color: Colors.grey[500]),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 16),
+            ElevatedButton(
+              onPressed: () => _loadTrips(),
+              child: const Text('Retry'),
+            ),
+          ],
+        ),
+      );
+    }
+
+    if (_trips.isEmpty) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.trip_origin, size: 64, color: Colors.grey[400]),
+            const SizedBox(height: 16),
+            Text(
+              'No trips found',
+              style: TextStyle(fontSize: 18, color: Colors.grey[600]),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              _selectedFilter == 'all' 
+                  ? 'No trips have been created yet'
+                  : 'No trips with status "${_formatFilterLabel(_selectedFilter)}"',
+              style: TextStyle(fontSize: 14, color: Colors.grey[500]),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return RefreshIndicator(
+      onRefresh: () => _loadTrips(),
+      child: ListView.builder(
+        padding: const EdgeInsets.all(16),
+        itemCount: _trips.length,
+        itemBuilder: (context, index) {
+          final trip = _trips[index];
+          return _buildTripCard(trip);
+        },
+      ),
+    );
+  }
+
+  Widget _buildTripCard(Map<String, dynamic> trip) {
+    final status = trip['status']?.toString() ?? 'unknown';
+    final driverResponse = trip['driverResponse']?.toString();
+    final tripId = trip['tripId']?.toString() ?? trip['_id']?.toString() ?? '';
+    final customerName = trip['customer']?['name']?['firstName'] ?? 'Unknown Customer';
+    final driverName = trip['driver']?['name']?['firstName'] ?? 'No Driver';
+    final vehicleReg = trip['vehicle']?['registrationNumber'] ?? 'No Vehicle';
+    final startTime = trip['startTime'];
+    final createdAt = trip['createdAt'];
+
+    return Card(
+      margin: const EdgeInsets.only(bottom: 12),
+      elevation: 2,
+      child: InkWell(
+        onTap: () => _showTripDetails(trip),
+        borderRadius: BorderRadius.circular(8),
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Header Row
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      'Trip $tripId',
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                  _buildStatusChip(status, driverResponse),
+                ],
+              ),
+              const SizedBox(height: 12),
+              
+              // Trip Details
+              Row(
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        _buildDetailRow(Icons.person, 'Customer', customerName),
+                        const SizedBox(height: 4),
+                        _buildDetailRow(Icons.drive_eta, 'Driver', driverName),
+                        const SizedBox(height: 4),
+                        _buildDetailRow(Icons.directions_car, 'Vehicle', vehicleReg),
+                      ],
+                    ),
+                  ),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      if (startTime != null) ...[
+                        Text(
+                          'Scheduled',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Colors.grey[600],
+                          ),
+                        ),
+                        Text(
+                          _formatDateTime(startTime),
+                          style: const TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
+                      if (createdAt != null) ...[
+                        const SizedBox(height: 8),
+                        Text(
+                          'Created',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Colors.grey[600],
+                          ),
+                        ),
+                        Text(
+                          _formatDateTime(createdAt),
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Colors.grey[600],
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ],
+              ),
+              
+              // Driver Response Info
+              if (driverResponse != null) ...[
+                const SizedBox(height: 12),
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: _getDriverResponseColor(driverResponse).withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(6),
+                    border: Border.all(
+                      color: _getDriverResponseColor(driverResponse).withOpacity(0.3),
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(
+                        _getDriverResponseIcon(driverResponse),
+                        size: 16,
+                        color: _getDriverResponseColor(driverResponse),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          'Driver ${driverResponse == 'accept' ? 'accepted' : 'declined'} this trip',
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                            color: _getDriverResponseColor(driverResponse),
+                          ),
+                        ),
+                      ),
+                      if (trip['driverResponseTime'] != null)
+                        Text(
+                          _formatDateTime(trip['driverResponseTime']),
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: _getDriverResponseColor(driverResponse),
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+              ],
+              
+              // Decline Reason
+              if (driverResponse == 'decline' && trip['driverResponseReason'] != null) ...[
+                const SizedBox(height: 8),
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: Colors.red.withOpacity(0.05),
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.info_outline, size: 16, color: Colors.red),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          'Reason: ${trip['driverResponseReason']}',
+                          style: const TextStyle(
+                            fontSize: 13,
+                            color: Colors.red,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDetailRow(IconData icon, String label, String value) {
+    return Row(
+      children: [
+        Icon(icon, size: 16, color: Colors.grey[600]),
+        const SizedBox(width: 8),
+        Text(
+          '$label: ',
+          style: TextStyle(
+            fontSize: 13,
+            color: Colors.grey[600],
+          ),
+        ),
+        Expanded(
+          child: Text(
+            value,
+            style: const TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildStatusChip(String status, String? driverResponse) {
+    Color color;
+    String displayText;
+    IconData icon;
+
+    switch (status.toLowerCase()) {
+      case 'assigned':
+        color = Colors.orange;
+        displayText = 'Pending Driver';
+        icon = Icons.schedule;
+        break;
+      case 'accepted':
+        color = Colors.green;
+        displayText = 'Accepted';
+        icon = Icons.check_circle;
+        break;
+      case 'declined':
+        color = Colors.red;
+        displayText = 'Declined';
+        icon = Icons.cancel;
+        break;
+      case 'started':
+        color = Colors.blue;
+        displayText = 'Started';
+        icon = Icons.play_arrow;
+        break;
+      case 'in_progress':
+        color = Colors.purple;
+        displayText = 'In Progress';
+        icon = Icons.directions;
+        break;
+      case 'completed':
+        color = Colors.teal;
+        displayText = 'Completed';
+        icon = Icons.check;
+        break;
+      case 'cancelled':
+        color = Colors.grey;
+        displayText = 'Cancelled';
+        icon = Icons.block;
+        break;
+      default:
+        color = Colors.grey;
+        displayText = status;
+        icon = Icons.help;
+    }
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: color.withOpacity(0.3)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 14, color: color),
+          const SizedBox(width: 4),
+          Text(
+            displayText,
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              color: color,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Color _getDriverResponseColor(String response) {
+    switch (response.toLowerCase()) {
+      case 'accept':
+        return Colors.green;
+      case 'decline':
+        return Colors.red;
+      default:
+        return Colors.grey;
+    }
+  }
+
+  IconData _getDriverResponseIcon(String response) {
+    switch (response.toLowerCase()) {
+      case 'accept':
+        return Icons.check_circle;
+      case 'decline':
+        return Icons.cancel;
+      default:
+        return Icons.help;
+    }
+  }
+
+  String _formatFilterLabel(String filter) {
+    switch (filter) {
+      case 'all':
+        return 'All';
+      case 'assigned':
+        return 'Pending';
+      case 'accepted':
+        return 'Accepted';
+      case 'declined':
+        return 'Declined';
+      case 'started':
+        return 'Started';
+      case 'in_progress':
+        return 'In Progress';
+      case 'completed':
+        return 'Completed';
+      case 'cancelled':
+        return 'Cancelled';
+      default:
+        return filter;
+    }
+  }
+
+  String _formatDateTime(dynamic dateTime) {
+    try {
+      DateTime dt;
+      if (dateTime is String) {
+        dt = DateTime.parse(dateTime);
+      } else if (dateTime is DateTime) {
+        dt = dateTime;
+      } else {
+        return 'N/A';
+      }
+
+      final now = DateTime.now();
+      final difference = now.difference(dt);
+
+      if (difference.inDays > 0) {
+        return '${difference.inDays}d ago';
+      } else if (difference.inHours > 0) {
+        return '${difference.inHours}h ago';
+      } else if (difference.inMinutes > 0) {
+        return '${difference.inMinutes}m ago';
+      } else {
+        return 'Just now';
+      }
+    } catch (e) {
+      return 'N/A';
+    }
+  }
+
+  void _showTripDetails(Map<String, dynamic> trip) {
+    showDialog(
+      context: context,
+      builder: (context) => TripDetailsDialog(trip: trip),
+    );
+  }
+}
+
+class TripDetailsDialog extends StatelessWidget {
+  final Map<String, dynamic> trip;
+
+  const TripDetailsDialog({Key? key, required this.trip}) : super(key: key);
+
+  @override
+  Widget build(BuildContext context) {
+    return Dialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      child: Container(
+        constraints: const BoxConstraints(maxWidth: 500, maxHeight: 600),
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // Header
+            Row(
+              children: [
+                const Icon(Icons.trip_origin, color: Color(0xFF0D47A1)),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    'Trip ${trip['tripId'] ?? trip['_id'] ?? 'Unknown'}',
+                    style: const TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+                IconButton(
+                  onPressed: () => Navigator.pop(context),
+                  icon: const Icon(Icons.close),
+                ),
+              ],
+            ),
+            const Divider(height: 24),
+            
+            // Trip Details
+            Expanded(
+              child: SingleChildScrollView(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _buildSection('Customer Information', [
+                      _buildDetailItem('Name', trip['customer']?['name']?['firstName'] ?? 'N/A'),
+                      _buildDetailItem('Phone', trip['customer']?['contactInfo']?['phone'] ?? 'N/A'),
+                    ]),
+                    
+                    _buildSection('Driver Information', [
+                      _buildDetailItem('Name', trip['driver']?['name']?['firstName'] ?? 'N/A'),
+                      _buildDetailItem('Status', trip['driverResponse'] ?? 'Pending'),
+                      if (trip['driverResponseTime'] != null)
+                        _buildDetailItem('Response Time', _formatDateTime(trip['driverResponseTime'])),
+                      if (trip['driverResponseReason'] != null)
+                        _buildDetailItem('Decline Reason', trip['driverResponseReason']),
+                    ]),
+                    
+                    _buildSection('Vehicle Information', [
+                      _buildDetailItem('Registration', trip['vehicle']?['registrationNumber'] ?? 'N/A'),
+                      _buildDetailItem('Make/Model', '${trip['vehicle']?['make'] ?? ''} ${trip['vehicle']?['model'] ?? ''}'),
+                    ]),
+                    
+                    _buildSection('Trip Details', [
+                      _buildDetailItem('Status', trip['status'] ?? 'Unknown'),
+                      _buildDetailItem('Start Location', trip['startLocation']?['address'] ?? 'N/A'),
+                      _buildDetailItem('End Location', trip['endLocation']?['address'] ?? 'N/A'),
+                      if (trip['startTime'] != null)
+                        _buildDetailItem('Scheduled Time', _formatFullDateTime(trip['startTime'])),
+                      if (trip['distance'] != null)
+                        _buildDetailItem('Distance', '${trip['distance']} km'),
+                      if (trip['duration'] != null)
+                        _buildDetailItem('Duration', '${trip['duration']} min'),
+                    ]),
+                  ],
+                ),
+              ),
+            ),
+            
+            // Actions
+            const SizedBox(height: 16),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('Close'),
+                ),
+                const SizedBox(width: 8),
+                ElevatedButton(
+                  onPressed: () {
+                    Navigator.pop(context);
+                    // TODO: Navigate to trip tracking or edit screen
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF0D47A1),
+                    foregroundColor: Colors.white,
+                  ),
+                  child: const Text('View Details'),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSection(String title, List<Widget> children) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          title,
+          style: const TextStyle(
+            fontSize: 16,
+            fontWeight: FontWeight.bold,
+            color: Color(0xFF0D47A1),
+          ),
+        ),
+        const SizedBox(height: 8),
+        ...children,
+        const SizedBox(height: 16),
+      ],
+    );
+  }
+
+  Widget _buildDetailItem(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 120,
+            child: Text(
+              '$label:',
+              style: TextStyle(
+                fontWeight: FontWeight.w600,
+                color: Colors.grey[700],
+              ),
+            ),
+          ),
+          Expanded(
+            child: Text(
+              value,
+              style: const TextStyle(fontSize: 14),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _formatDateTime(dynamic dateTime) {
+    try {
+      DateTime dt;
+      if (dateTime is String) {
+        dt = DateTime.parse(dateTime);
+      } else if (dateTime is DateTime) {
+        dt = dateTime;
+      } else {
+        return 'N/A';
+      }
+
+      final now = DateTime.now();
+      final difference = now.difference(dt);
+
+      if (difference.inDays > 0) {
+        return '${difference.inDays}d ago';
+      } else if (difference.inHours > 0) {
+        return '${difference.inHours}h ago';
+      } else if (difference.inMinutes > 0) {
+        return '${difference.inMinutes}m ago';
+      } else {
+        return 'Just now';
+      }
+    } catch (e) {
+      return 'N/A';
+    }
+  }
+
+  String _formatFullDateTime(dynamic dateTime) {
+    try {
+      DateTime dt;
+      if (dateTime is String) {
+        dt = DateTime.parse(dateTime);
+      } else if (dateTime is DateTime) {
+        dt = dateTime;
+      } else {
+        return 'N/A';
+      }
+
+      return '${dt.day}/${dt.month}/${dt.year} ${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
+    } catch (e) {
+      return 'N/A';
+    }
+  }
+}

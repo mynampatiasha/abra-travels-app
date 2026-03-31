@@ -1,0 +1,599 @@
+// File: lib/features/auth/presentation/screens/login_screen.dart
+// JWT-based login screen with comprehensive debugging
+// ✅ This version includes detailed logging to diagnose the token issue
+
+import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import 'package:abra_fleet/features/auth/domain/repositories/auth_repository.dart';
+import 'package:abra_fleet/features/auth/domain/entities/user_entity.dart';
+import 'registration_screen.dart';
+import 'forgot_password_screen.dart';
+import 'package:abra_fleet/app/presentation/screens/main_app_shell.dart';
+import 'package:abra_fleet/features/client/client_main_shell.dart';
+
+// Required imports for HTTP testing
+import 'package:http/http.dart' as http;
+import 'dart:convert';
+
+class LoginScreen extends StatefulWidget {
+  const LoginScreen({super.key});
+
+  @override
+  State<LoginScreen> createState() => _LoginScreenState();
+}
+
+class _LoginScreenState extends State<LoginScreen> {
+  final _formKey = GlobalKey<FormState>();
+  final _emailController = TextEditingController();
+  final _passwordController = TextEditingController();
+  bool _obscurePassword = true;
+  bool _isLoading = false;
+
+  @override
+  void dispose() {
+    _emailController.dispose();
+    _passwordController.dispose();
+    super.dispose();
+  }
+
+  // 🧪 DIRECT SERVER TEST - This bypasses all middleware to test the raw server response
+  Future<void> _testServerDirectly() async {
+    // Prevent multiple clicks
+    if (_isLoading) {
+      print('[TEST] Already loading, ignoring click');
+      return;
+    }
+    
+    // Validate form
+    if (!_formKey.currentState!.validate()) {
+      print('[TEST] Form validation failed');
+      return;
+    }
+    
+    setState(() => _isLoading = true);
+    
+    print('\n' + '=' * 100);
+    print('🧪 DIRECT SERVER TEST STARTED');
+    print('=' * 100);
+    print('Time: ${DateTime.now()}');
+    print('Email: ${_emailController.text.trim()}');
+    print('Password Length: ${_passwordController.text.trim().length} characters');
+    print('URL: http://localhost:3001/api/auth/login');
+    print('=' * 100 + '\n');
+    
+    try {
+      final startTime = DateTime.now();
+      
+      print('📤 Sending HTTP POST request...');
+      final response = await http.post(
+        Uri.parse('http://localhost:3001/api/auth/login'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+        },
+        body: jsonEncode({
+          'email': _emailController.text.trim(),
+          'password': _passwordController.text.trim(),
+        }),
+      );
+      
+      final endTime = DateTime.now();
+      final duration = endTime.difference(startTime).inMilliseconds;
+      
+      print('\n' + '=' * 100);
+      print('📥 SERVER RESPONSE RECEIVED');
+      print('=' * 100);
+      print('Response Time: ${duration}ms');
+      print('Status Code: ${response.statusCode}');
+      print('Body Length: ${response.body.length} bytes');
+      print('\n📦 RAW RESPONSE BODY:');
+      print(response.body);
+      print('=' * 100 + '\n');
+      
+      if (response.statusCode == 200) {
+        print('✅ HTTP 200 - Processing JSON...\n');
+        
+        try {
+          final data = jsonDecode(response.body) as Map<String, dynamic>;
+          
+          print('=' * 100);
+          print('📊 JSON STRUCTURE ANALYSIS');
+          print('=' * 100);
+          print('Type: ${data.runtimeType}');
+          print('Keys: ${data.keys.toList()}');
+          print('');
+          
+          // Check top-level fields
+          print('--- TOP LEVEL FIELDS ---');
+          data.forEach((key, value) {
+            print('  $key: ${value.runtimeType} = $value');
+          });
+          print('');
+          
+          // Analyze success field
+          print('--- SUCCESS FIELD ---');
+          print('  Exists: ${data.containsKey('success')}');
+          print('  Value: ${data['success']}');
+          print('  Type: ${data['success'].runtimeType}');
+          print('  Is true: ${data['success'] == true}');
+          print('');
+          
+          // Analyze data field
+          print('--- DATA FIELD ---');
+          print('  Exists: ${data.containsKey('data')}');
+          print('  Is null: ${data['data'] == null}');
+          print('  Type: ${data['data']?.runtimeType}');
+          
+          if (data['data'] != null) {
+            final dataObj = data['data'];
+            print('  Is Map: ${dataObj is Map}');
+            
+            if (dataObj is Map) {
+              final dataMap = dataObj as Map<String, dynamic>;
+              print('  Keys: ${dataMap.keys.toList()}');
+              print('');
+              
+              // Check each field in data
+              print('  --- DATA OBJECT CONTENTS ---');
+              dataMap.forEach((key, value) {
+                if (key == 'token' && value != null) {
+                  final tokenStr = value.toString();
+                  print('    $key: ${value.runtimeType}');
+                  print('      Length: ${tokenStr.length}');
+                  print('      Preview: ${tokenStr.substring(0, tokenStr.length > 50 ? 50 : tokenStr.length)}...');
+                } else if (key == 'user' && value is Map) {
+                  print('    $key: Map with keys ${(value as Map).keys.toList()}');
+                } else {
+                  print('    $key: ${value.runtimeType} = $value');
+                }
+              });
+              print('');
+              
+              // Specific token analysis
+              print('--- TOKEN FIELD DETAILED ANALYSIS ---');
+              print('  Key exists: ${dataMap.containsKey('token')}');
+              print('  Value: ${dataMap['token']}');
+              print('  Is null: ${dataMap['token'] == null}');
+              print('  Is String: ${dataMap['token'] is String}');
+              
+              if (dataMap['token'] != null) {
+                final token = dataMap['token'].toString();
+                print('  String value: "$token"');
+                print('  Length: ${token.length}');
+                print('  Is empty: ${token.isEmpty}');
+                print('  First 10 chars: ${token.substring(0, token.length > 10 ? 10 : token.length)}');
+                
+                // Test accessing it the way the auth repository does
+                print('\n  Testing access patterns:');
+                print('    data["data"]["token"]: ${data['data']['token']}');
+                print('    (data["data"] as Map)["token"]: ${(data['data'] as Map)['token']}');
+              } else {
+                print('  ❌ TOKEN IS NULL!');
+              }
+            } else {
+              print('  ⚠️ WARNING: data is not a Map! Type: ${dataObj.runtimeType}');
+            }
+          } else {
+            print('  ❌ DATA IS NULL!');
+          }
+          
+          print('=' * 100 + '\n');
+          
+          // Show result to user
+          if (mounted) {
+            final hasToken = data['data'] != null && 
+                            (data['data'] as Map).containsKey('token') &&
+                            (data['data'] as Map)['token'] != null;
+            
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(hasToken 
+                  ? '✅ Test successful! Token found. Check console for details.' 
+                  : '⚠️ Test completed but token NOT found. Check console.'),
+                backgroundColor: hasToken ? Colors.green : Colors.orange,
+                duration: const Duration(seconds: 5),
+              ),
+            );
+          }
+          
+        } catch (jsonError, stackTrace) {
+          print('\n' + '=' * 100);
+          print('❌ JSON PARSING ERROR');
+          print('=' * 100);
+          print('Error: $jsonError');
+          print('Type: ${jsonError.runtimeType}');
+          print('Stack:');
+          print(stackTrace);
+          print('=' * 100 + '\n');
+          
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('❌ JSON parsing failed: $jsonError'),
+                backgroundColor: Colors.red,
+                duration: const Duration(seconds: 5),
+              ),
+            );
+          }
+        }
+        
+      } else {
+        // Non-200 status code
+        print('\n' + '=' * 100);
+        print('❌ HTTP ERROR: ${response.statusCode}');
+        print('=' * 100);
+        print('Body: ${response.body}');
+        print('=' * 100 + '\n');
+        
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('❌ Server returned error ${response.statusCode}'),
+              backgroundColor: Colors.red,
+              duration: const Duration(seconds: 5),
+            ),
+          );
+        }
+      }
+      
+    } catch (e, stackTrace) {
+      print('\n' + '=' * 100);
+      print('💥 EXCEPTION OCCURRED');
+      print('=' * 100);
+      print('Error: $e');
+      print('Type: ${e.runtimeType}');
+      print('Stack Trace:');
+      print(stackTrace);
+      print('=' * 100 + '\n');
+      
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('❌ Error: $e'),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 5),
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
+      print('🧪 Test completed\n');
+    }
+  }
+
+  // Navigate based on user role
+  void _navigateBasedOnRole(String role, String userName) {
+    print('[LoginScreen] Navigating with role: $role, userName: $userName');
+    
+    final navigator = Navigator.of(context);
+    
+    if (role == 'client') {
+      print('[LoginScreen] Navigating to ClientMainShell');
+      navigator.pushReplacement(
+        MaterialPageRoute(builder: (_) => ClientMainShell()),
+      );
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Welcome to Client Dashboard, $userName!'),
+          backgroundColor: Colors.green,
+        ),
+      );
+    } else if (role == 'super_admin' || role == 'admin' || role == 'employee' || role == 'org_admin' || 
+               role == 'fleet_manager' || role == 'hr_manager' || 
+               role == 'operations' || role == 'finance' || 
+               role == 'customer' || role == 'driver') {
+      print('[LoginScreen] Navigating to MainAppShell with role: $role');
+      navigator.pushReplacement(
+        MaterialPageRoute(builder: (_) => MainAppShell()),
+      );
+      
+      final String welcomeMessage = role == 'super_admin' || role == 'admin' || role == 'org_admin'
+          ? 'Welcome Admin, $userName!'
+          : 'Login Successful! Welcome $userName.';
+      
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(welcomeMessage),
+          backgroundColor: Colors.green,
+        ),
+      );
+    } else {
+      print('[LoginScreen] Unknown role: $role');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Login successful, but user role is unclear ($role). Please contact support.'),
+          backgroundColor: Colors.orange,
+        ),
+      );
+    }
+  }
+
+
+  // CORRECTED _login() method - Replace your current _login() method with this
+
+Future<void> _login() async {
+  // Prevent multiple clicks
+  if (_isLoading) {
+    print('[LoginScreen] Already loading, ignoring duplicate call');
+    return;
+  }
+  
+  if (!_formKey.currentState!.validate()) {
+    return;
+  }
+
+  setState(() => _isLoading = true);
+
+  final authRepository = Provider.of<AuthRepository>(context, listen: false);
+  
+  // ✅ DIAGNOSTIC CODE - GOES HERE, INSIDE THE METHOD
+  debugPrint('\n' + '🔍🔍🔍🔍🔍🔍🔍🔍🔍🔍🔍🔍🔍🔍🔍🔍🔍🔍🔍🔍🔍🔍🔍🔍🔍🔍🔍🔍🔍🔍');
+  debugPrint('🔍 LOGIN SCREEN - REPOSITORY CHECK');
+  debugPrint('🔍🔍🔍🔍🔍🔍🔍🔍🔍🔍🔍🔍🔍🔍🔍🔍🔍🔍🔍🔍🔍🔍🔍🔍🔍🔍🔍🔍🔍🔍');
+  debugPrint('Repository Type: ${authRepository.runtimeType}');
+  debugPrint('Is JwtAuthRepositoryImpl: ${authRepository is JwtAuthRepositoryImpl}');
+  debugPrint('🔍🔍🔍🔍🔍🔍🔍🔍🔍🔍🔍🔍🔍🔍🔍🔍🔍🔍🔍🔍🔍🔍🔍🔍🔍🔍🔍🔍🔍🔍\n');
+  
+  final scaffoldMessenger = ScaffoldMessenger.of(context);
+
+  try {
+    debugPrint('\n' + '🔐' * 50);
+    debugPrint('🔐 JWT LOGIN ATTEMPT');
+    debugPrint('🔐' * 50);
+    debugPrint('Email: ${_emailController.text.trim()}');
+    debugPrint('Time: ${DateTime.now()}');
+    debugPrint('🔐' * 50 + '\n');
+    
+    // Sign in with JWT
+    final token = await authRepository.signInWithEmailAndPassword(
+      email: _emailController.text.trim(),
+      password: _passwordController.text.trim(),
+    );
+    
+    if (token == null) {
+      throw Exception('Login failed - no token received');
+    }
+    
+    debugPrint('✅ JWT token received, getting user info...');
+    
+    // Get current user with role
+    final user = await authRepository.getCurrentUserWithRole();
+    
+    if (user.isEmpty) {
+      throw Exception('Failed to get user information');
+    }
+    
+    debugPrint('[LoginScreen] JWT login successful');
+    debugPrint('   User ID: ${user.id}');
+    debugPrint('   Email: ${user.email}');
+    debugPrint('   Role: ${user.role}');
+    debugPrint('   Name: ${user.name}');
+    
+    if (mounted) {
+      final userName = (user.name?.isNotEmpty == true) 
+          ? user.name! 
+          : (user.email?.split('@')[0] ?? 'User');
+      _navigateBasedOnRole(user.role ?? 'customer', userName);
+    }
+    
+  } catch (e) {
+    debugPrint('❌ JWT Login error: $e');
+    if (mounted) {
+      String errorMessage = 'Login failed';
+      
+      if (e.toString().contains('Invalid credentials') || 
+          e.toString().contains('Email or password is incorrect')) {
+        errorMessage = 'Invalid email or password';
+      } else if (e.toString().contains('Account inactive')) {
+        errorMessage = 'Your account is currently inactive. Please contact administrator.';
+      } else if (e.toString().contains('User not found')) {
+        errorMessage = 'No account found with this email address';
+      } else {
+        errorMessage = 'Login failed: ${e.toString()}';
+      }
+      
+      scaffoldMessenger.showSnackBar(
+        SnackBar(
+          content: Text(errorMessage),
+          backgroundColor: Colors.red,
+          duration: const Duration(seconds: 4),
+        ),
+      );
+    }
+  } finally {
+    if (mounted) {
+      setState(() => _isLoading = false);
+    }
+  }
+}
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final screenWidth = MediaQuery.of(context).size.width;
+    final isTablet = screenWidth > 600;
+    
+    final maxWidth = isTablet ? 400.0 : screenWidth * 0.85;
+    
+    return Scaffold(
+      body: SafeArea(
+        child: Center(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(24.0),
+            child: ConstrainedBox(
+              constraints: BoxConstraints(
+                maxWidth: maxWidth,
+              ),
+              child: Form(
+                key: _formKey,
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: <Widget>[
+                    Container(
+                      width: 80,
+                      height: 80,
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        shape: BoxShape.circle,
+                        border: Border.all(color: theme.colorScheme.primary.withOpacity(0.2), width: 2),
+                      ),
+                      child: Padding(
+                        padding: const EdgeInsets.all(4),
+                        child: Image.asset(
+                          'assets/logo.png',
+                          fit: BoxFit.contain,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    Text(
+                      'Welcome Back!',
+                      textAlign: TextAlign.center,
+                      style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold),
+                    ),
+                    Text(
+                      'Login to manage your Abra Travels.',
+                      textAlign: TextAlign.center,
+                      style: theme.textTheme.titleMedium?.copyWith(color: Colors.grey.shade600),
+                    ),
+                    const SizedBox(height: 32),
+                    
+                    // Email Field
+                    SizedBox(
+                      width: double.infinity,
+                      child: TextFormField(
+                        controller: _emailController,
+                        decoration: const InputDecoration(
+                          labelText: 'Email Address',
+                          prefixIcon: Icon(Icons.email_outlined),
+                          contentPadding: EdgeInsets.symmetric(vertical: 16, horizontal: 16),
+                        ),
+                        keyboardType: TextInputType.emailAddress,
+                        validator: (value) {
+                          if (value == null || value.isEmpty) return 'Please enter your email';
+                          if (!RegExp(r'^[^@]+@[^@]+\.[^@]+').hasMatch(value)) return 'Enter a valid email';
+                          return null;
+                        },
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    
+                    // Password Field
+                    SizedBox(
+                      width: double.infinity,
+                      child: TextFormField(
+                        controller: _passwordController,
+                        decoration: InputDecoration(
+                          labelText: 'Password',
+                          prefixIcon: const Icon(Icons.lock_outline),
+                          contentPadding: const EdgeInsets.symmetric(vertical: 16, horizontal: 16),
+                          suffixIcon: IconButton(
+                            icon: Icon(_obscurePassword ? Icons.visibility_off_outlined : Icons.visibility_outlined),
+                            onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
+                          ),
+                        ),
+                        obscureText: _obscurePassword,
+                        validator: (value) {
+                          if (value == null || value.isEmpty) return 'Please enter your password';
+                          return null;
+                        },
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    
+                    // Forgot Password
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: TextButton(
+                        onPressed: _isLoading ? null : () {
+                          Navigator.of(context).push(
+                            MaterialPageRoute(builder: (context) => const ForgotPasswordScreen()),
+                          );
+                        },
+                        child: const Text('Forgot Password?'),
+                      ),
+                    ),
+                    const SizedBox(height: 24),
+                    
+                    // 🧪 TEST BUTTON
+                    SizedBox(
+                      width: double.infinity,
+                      height: 50,
+                      child: ElevatedButton(
+                        onPressed: _isLoading ? null : _testServerDirectly,
+                        style: ElevatedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(vertical: 16),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          backgroundColor: Colors.orange,
+                        ),
+                        child: _isLoading
+                            ? const SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                        )
+                            : const Text(
+                          '🧪 Test Server',
+                          style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                        ),
+                      ),
+                    ),
+                    
+                    const SizedBox(height: 12),
+                    
+                    // Regular Login Button
+                    SizedBox(
+                      width: double.infinity,
+                      height: 50,
+                      child: ElevatedButton(
+                        onPressed: _isLoading ? null : _login,
+                        style: ElevatedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(vertical: 16),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                        ),
+                        child: _isLoading
+                            ? const SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                        )
+                            : const Text(
+                          'Login',
+                          style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 24),
+                    
+                    // Registration Link
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const Text("Don't have an account?"),
+                        TextButton(
+                          onPressed: _isLoading ? null : () {
+                            Navigator.of(context).push(
+                              MaterialPageRoute(builder: (context) => const RegistrationScreen()),
+                            );
+                          },
+                          child: const Text('Register Now'),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}

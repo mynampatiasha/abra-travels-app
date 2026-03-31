@@ -1,0 +1,16 @@
+### Create a test roster
+POST http://localhost:3000/api/roster
+Content-Type: application/json
+Authorization: Bearer YOUR_TOKEN_HERE
+
+{
+  "driverId": "DRIVER_ID_HERE",
+  "vehicleId": "VEHICLE_ID_HERE",
+  "startTime": "2025-09-17T09:00:00.000Z",
+  "endTime": "2025-09-17T17:00:00.000Z",
+  "notes": "Test roster entry"
+}
+
+### Get all rosters
+GET http://localhost:3000/api/roster
+Authorization: Bearer YOUR_TOKEN_HERE

@@ -1,0 +1,475 @@
+// File: lib/features/profile/presentation/screens/profile_screen.dart
+// Profile management screen for all user types (Admin, Customer, Driver)
+
+
+
+import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
+import 'package:provider/provider.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_storage/firebase_storage.dart';
+import 'package:image_picker/image_picker.dart';
+import 'dart:typed_data';
+import 'package:abra_fleet/features/auth/domain/repositories/auth_repository.dart';
+import 'package:abra_fleet/features/auth/domain/entities/user_entity.dart';
+
+class ProfileScreen extends StatefulWidget {
+  const ProfileScreen({super.key});
+
+  @override
+  State<ProfileScreen> createState() => _ProfileScreenState();
+}
+
+class _ProfileScreenState extends State<ProfileScreen> {
+  final _formKey = GlobalKey<FormState>();
+  final _nameController = TextEditingController();
+  final _phoneController = TextEditingController();
+  
+  bool _isEditing = false;
+  bool _isLoading = false;
+  bool _isUploadingImage = false;
+  UserEntity? _currentUser;
+  final ImagePicker _imagePicker = ImagePicker();
+
+  @override
+  void initState() {
+    super.initState();
+    _loadUserData();
+  }
+
+  @override
+  void dispose() {
+    _nameController.dispose();
+    _phoneController.dispose();
+    super.dispose();
+  }
+
+  void _loadUserData() async {
+    final authRepository = Provider.of<AuthRepository>(context, listen: false);
+    
+    // Get user with full data from Firestore
+    try {
+      _currentUser = await authRepository.getCurrentUserWithRole();
+    } catch (e) {
+      // Fallback to basic user data
+      _currentUser = authRepository.currentUser;
+    }
+    
+    if (mounted) {
+      setState(() {
+        _nameController.text = _currentUser?.name ?? '';
+        _phoneController.text = _currentUser?.phoneNumber ?? '';
+      });
+    }
+  }
+
+  Future<void> _pickAndUploadImage() async {
+    setState(() => _isUploadingImage = true);
+    
+    final scaffoldMessenger = ScaffoldMessenger.of(context);
+    
+    try {
+      // For web, we'll use a different approach with file picker
+      if (kIsWeb) {
+        final XFile? image = await _imagePicker.pickImage(
+          source: ImageSource.gallery,
+          maxWidth: 512,
+          maxHeight: 512,
+          imageQuality: 70,
+        );
+        
+        if (image == null) {
+          setState(() => _isUploadingImage = false);
+          return;
+        }
+      }
+      
+      // For web, we already have the image from the first picker
+      final XFile? image = kIsWeb ? null : await _imagePicker.pickImage(
+        source: ImageSource.gallery,
+        maxWidth: 512,
+        maxHeight: 512,
+        imageQuality: 70,
+      );
+      
+      if (image == null && !kIsWeb) return;
+      
+      final user = FirebaseAuth.instance.currentUser;
+      if (user == null) throw Exception('User not authenticated');
+      
+      // For web, we need to use a different approach to get the file
+      Uint8List imageBytes;
+      if (kIsWeb) {
+        final pickedFile = await _imagePicker.pickImage(source: ImageSource.gallery);
+        if (pickedFile == null) return;
+        imageBytes = await pickedFile.readAsBytes();
+      } else {
+        imageBytes = await image!.readAsBytes();
+      }
+      
+      // Create storage reference with timestamp to avoid caching issues
+      final timestamp = DateTime.now().millisecondsSinceEpoch;
+      final storageRef = FirebaseStorage.instance
+          .ref()
+          .child('profile_images')
+          .child('${user.uid}_$timestamp.jpg');
+      
+      // Show loading indicator
+      if (mounted) {
+        setState(() => _isUploadingImage = true);
+      }
+      
+      try {
+        // Upload image with metadata
+        final uploadTask = storageRef.putData(
+          imageBytes,
+          SettableMetadata(
+            contentType: 'image/jpeg',
+            customMetadata: {
+              'userId': user.uid,
+              'uploadedAt': DateTime.now().toIso8601String(),
+              'platform': kIsWeb ? 'web' : 'mobile',
+            },
+          ),
+        );
+        
+        final snapshot = await uploadTask;
+        final downloadUrl = await snapshot.ref.getDownloadURL();
+        
+        // Update Firestore with new profile image URL
+        await FirebaseFirestore.instance
+            .collection('users')
+            .doc(user.uid)
+            .update({
+          'profileImageUrl': downloadUrl,
+          'updatedAt': FieldValue.serverTimestamp(),
+        });
+        
+        // Reload user data to reflect changes
+        final authRepository = Provider.of<AuthRepository>(context, listen: false);
+        await authRepository.refreshCurrentUser();
+        _loadUserData(); // Refresh local state
+        
+        if (mounted) {
+          scaffoldMessenger.showSnackBar(
+            const SnackBar(
+              content: Text('Profile picture updated successfully!'),
+              backgroundColor: Colors.green,
+              duration: Duration(seconds: 2),
+            ),
+          );
+        }
+      } catch (e) {
+        if (mounted) {
+          scaffoldMessenger.showSnackBar(
+            SnackBar(
+              content: Text('Failed to upload image: $e'),
+              backgroundColor: Colors.red,
+              duration: const Duration(seconds: 3),
+            ),
+          );
+        }
+        rethrow;
+      }
+      
+    } catch (e) {
+      if (mounted) {
+        scaffoldMessenger.showSnackBar(
+          SnackBar(
+            content: Text('Failed to update profile picture: ${e.toString()}'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isUploadingImage = false);
+      }
+    }
+  }
+
+  Future<void> _updateProfile() async {
+    if (!_formKey.currentState!.validate()) return;
+
+    setState(() => _isLoading = true);
+    
+    final scaffoldMessenger = ScaffoldMessenger.of(context);
+    
+    try {
+      final user = FirebaseAuth.instance.currentUser;
+      if (user == null) throw Exception('User not authenticated');
+
+      // Update Firestore document
+      await FirebaseFirestore.instance
+          .collection('users')
+          .doc(user.uid)
+          .update({
+        'name': _nameController.text.trim(),
+        'phoneNumber': _phoneController.text.trim(),
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+
+      // Update Firebase Auth display name
+      await user.updateDisplayName(_nameController.text.trim());
+
+      // Reload user data to reflect changes
+      final authRepository = Provider.of<AuthRepository>(context, listen: false);
+      await authRepository.refreshCurrentUser();
+
+      if (mounted) {
+        scaffoldMessenger.showSnackBar(
+          const SnackBar(
+            content: Text('Profile updated successfully!'),
+            backgroundColor: Colors.green,
+          ),
+        );
+        setState(() => _isEditing = false);
+      }
+
+    } catch (e) {
+      if (mounted) {
+        scaffoldMessenger.showSnackBar(
+          SnackBar(
+            content: Text('Failed to update profile: ${e.toString()}'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
+    }
+  }
+
+  Widget _buildInfoTile({
+    required String title,
+    required String value,
+    required IconData icon,
+    TextEditingController? controller,
+    TextInputType? keyboardType,
+    String? Function(String?)? validator,
+  }) {
+    return Card(
+      elevation: 1,
+      margin: const EdgeInsets.symmetric(vertical: 4),
+      child: ListTile(
+        leading: Icon(icon, color: Theme.of(context).primaryColor),
+        title: Text(
+          title,
+          style: const TextStyle(fontWeight: FontWeight.w500),
+        ),
+        subtitle: _isEditing && controller != null
+            ? TextFormField(
+                controller: controller,
+                keyboardType: keyboardType,
+                validator: validator,
+                decoration: InputDecoration(
+                  hintText: 'Enter $title',
+                  border: const UnderlineInputBorder(),
+                  isDense: true,
+                ),
+              )
+            : Text(
+                value.isEmpty ? 'Not provided' : value,
+                style: TextStyle(
+                  color: value.isEmpty ? Colors.grey : null,
+                ),
+              ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Profile'),
+        actions: [
+          if (!_isEditing)
+            IconButton(
+              onPressed: () => setState(() => _isEditing = true),
+              icon: const Icon(Icons.edit),
+              tooltip: 'Edit Profile',
+            ),
+          if (_isEditing)
+            IconButton(
+              onPressed: () {
+                setState(() => _isEditing = false);
+                _loadUserData(); // Reset form data
+              },
+              icon: const Icon(Icons.close),
+              tooltip: 'Cancel',
+            ),
+        ],
+      ),
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(16),
+        child: Form(
+          key: _formKey,
+          child: Column(
+            children: [
+              // Profile Avatar with upload functionality
+              Stack(
+                children: [
+                  CircleAvatar(
+                    radius: 50,
+                    backgroundColor: theme.primaryColor.withOpacity(0.1),
+                    backgroundImage: _currentUser?.profileImageUrl != null
+                        ? NetworkImage(_currentUser!.profileImageUrl!)
+                        : null,
+                    child: _currentUser?.profileImageUrl == null
+                        ? Text(
+                            _currentUser?.name?.isNotEmpty == true
+                                ? _currentUser!.name![0].toUpperCase()
+                                : _currentUser?.email?.isNotEmpty == true
+                                    ? _currentUser!.email![0].toUpperCase()
+                                    : 'U',
+                            style: TextStyle(
+                              fontSize: 36,
+                              fontWeight: FontWeight.bold,
+                              color: theme.primaryColor,
+                            ),
+                          )
+                        : null,
+                  ),
+                  Positioned(
+                    bottom: 0,
+                    right: 0,
+                    child: GestureDetector(
+                      onTap: _isUploadingImage ? null : _pickAndUploadImage,
+                      child: Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: theme.primaryColor,
+                          shape: BoxShape.circle,
+                          border: Border.all(color: Colors.white, width: 2),
+                        ),
+                        child: _isUploadingImage
+                            ? const SizedBox(
+                                width: 16,
+                                height: 16,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                                ),
+                              )
+                            : const Icon(
+                                Icons.camera_alt,
+                                color: Colors.white,
+                                size: 16,
+                              ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 24),
+
+              // User Role Badge
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                decoration: BoxDecoration(
+                  color: theme.primaryColor.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: theme.primaryColor.withOpacity(0.3)),
+                ),
+                child: Text(
+                  _currentUser?.role?.toUpperCase() ?? 'USER',
+                  style: TextStyle(
+                    color: theme.primaryColor,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 12,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 24),
+
+              // Profile Information
+              _buildInfoTile(
+                title: 'Full Name',
+                value: _currentUser?.name ?? '',
+                icon: Icons.person,
+                controller: _nameController,
+                validator: (value) {
+                  if (value == null || value.trim().isEmpty) {
+                    return 'Name is required';
+                  }
+                  return null;
+                },
+              ),
+
+              _buildInfoTile(
+                title: 'Email',
+                value: _currentUser?.email ?? '',
+                icon: Icons.email,
+              ),
+
+              _buildInfoTile(
+                title: 'Phone Number',
+                value: _currentUser?.phoneNumber ?? '',
+                icon: Icons.phone,
+                controller: _phoneController,
+                keyboardType: TextInputType.phone,
+                validator: (value) {
+                  if (value != null && value.isNotEmpty && value.length < 10) {
+                    return 'Enter a valid phone number';
+                  }
+                  return null;
+                },
+              ),
+
+
+              const SizedBox(height: 32),
+
+              // Save Button (only shown when editing)
+              if (_isEditing)
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton(
+                    onPressed: _isLoading ? null : _updateProfile,
+                    child: _isLoading
+                        ? const SizedBox(
+                            height: 20,
+                            width: 20,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Text('Save Changes'),
+                  ),
+                ),
+
+              const SizedBox(height: 16),
+
+              // Sign Out Button
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton.icon(
+                  onPressed: () async {
+                    final authRepository = Provider.of<AuthRepository>(context, listen: false);
+                    await authRepository.signOut();
+                    if (mounted) {
+                      Navigator.of(context).pushNamedAndRemoveUntil(
+                        '/login',
+                        (route) => false,
+                      );
+                    }
+                  },
+                  icon: const Icon(Icons.logout, color: Colors.red),
+                  label: const Text(
+                    'Sign Out',
+                    style: TextStyle(color: Colors.red),
+                  ),
+                  style: OutlinedButton.styleFrom(
+                    side: const BorderSide(color: Colors.red),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}

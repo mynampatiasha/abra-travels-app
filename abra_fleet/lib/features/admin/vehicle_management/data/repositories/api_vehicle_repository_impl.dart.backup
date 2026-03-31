@@ -1,0 +1,198 @@
+// File: lib/features/admin/vehicle_management/data/repositories/api_vehicle_repository_impl.dart
+// Implementation of VehicleRepository that communicates with a backend API.
+
+import 'dart:convert'; // For jsonDecode and jsonEncode
+import 'package:http/http.dart' as http; // HTTP package
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:abra_fleet/features/admin/vehicle_management/domain/entities/vehicle_entity.dart';
+import 'package:abra_fleet/features/admin/vehicle_management/domain/repositories/vehicle_repository.dart';
+import 'package:latlong2/latlong.dart'; // For LatLng
+
+class ApiVehicleRepositoryImpl implements VehicleRepository {
+  // Use the backend API URL from environment configuration
+  final String _baseUrl = const String.fromEnvironment(
+    'API_BASE_URL',
+    defaultValue: 'http://localhost:3001',
+  );
+
+  final http.Client _client;
+
+  ApiVehicleRepositoryImpl({http.Client? client}) : _client = client ?? http.Client();
+
+  Future<Map<String, String>> _getHeaders() async {
+    final headers = {
+      'Content-Type': 'application/json; charset=UTF-8',
+      'Accept': 'application/json',
+    };
+    
+    // Add Firebase Auth token
+    final user = FirebaseAuth.instance.currentUser;
+    if (user != null) {
+      final token = await user.getIdToken();
+      if (token != null) {
+        headers['Authorization'] = 'Bearer $token';
+      }
+    }
+    
+    return headers;
+  }
+
+  @override
+  Future<Vehicle> addVehicle(Vehicle vehicle) async {
+    final Map<String, dynamic> vehicleData = {
+      'name': vehicle.name,
+      'model': vehicle.model,
+      'licensePlate': vehicle.licensePlate,
+      'status': vehicle.status,
+      'assignedDriver': vehicle.assignedDriver,
+      // Add other fields your API expects
+    };
+
+    final response = await _client.post(
+      Uri.parse('$_baseUrl/api/vehicles'),
+      headers: await _getHeaders(),
+      body: jsonEncode(vehicleData),
+    );
+
+    if (response.statusCode == 201) { // 201 Created
+      final responseData = jsonDecode(response.body);
+      return Vehicle(
+        id: responseData['id'] ?? vehicle.id,
+        name: responseData['name'],
+        model: responseData['model'],
+        licensePlate: responseData['licensePlate'],
+        status: responseData['status'],
+        assignedDriver: responseData['assignedDriver'],
+      );
+    } else {
+      print('API Error addVehicle: ${response.statusCode} ${response.body}');
+      throw Exception('Failed to add vehicle. Status: ${response.statusCode}');
+    }
+  }
+
+  @override
+  Future<void> deleteVehicle(String id) async {
+    final response = await _client.delete(
+      Uri.parse('$_baseUrl/api/vehicles/$id'),
+      headers: await _getHeaders(),
+    );
+
+    if (response.statusCode != 200 && response.statusCode != 204) { // 204 No Content is also success
+      print('API Error deleteVehicle: ${response.statusCode} ${response.body}');
+      throw Exception('Failed to delete vehicle. Status: ${response.statusCode}');
+    }
+  }
+
+  @override
+  Future<Vehicle?> getVehicleById(String id) async {
+    final response = await _client.get(
+      Uri.parse('$_baseUrl/api/vehicles/$id'),
+      headers: await _getHeaders(),
+    );
+
+    if (response.statusCode == 200) {
+      final data = jsonDecode(response.body);
+      return Vehicle(
+        id: data['id'],
+        name: data['name'],
+        model: data['model'],
+        licensePlate: data['licensePlate'],
+        status: data['status'],
+        assignedDriver: data['assignedDriver'],
+      );
+    } else if (response.statusCode == 404) {
+      return null; // Not found
+    } else {
+      print('API Error getVehicleById: ${response.statusCode} ${response.body}');
+      throw Exception('Failed to load vehicle. Status: ${response.statusCode}');
+    }
+  }
+
+  @override
+  Future<List<Vehicle>> getVehicles() async {
+    final response = await _client.get(
+      Uri.parse('$_baseUrl/api/vehicles'),
+      headers: await _getHeaders(),
+    );
+
+    if (response.statusCode == 200) {
+      final responseData = jsonDecode(response.body);
+      // Handle both direct array and wrapped response formats
+      final List<dynamic> data = responseData is List 
+          ? responseData 
+          : (responseData['data'] ?? responseData['vehicles'] ?? []);
+      
+      return data.map((item) => Vehicle(
+        id: item['id'] ?? item['_id'] ?? '',
+        name: item['name'] ?? '',
+        model: item['model'] ?? '',
+        licensePlate: item['licensePlate'] ?? '',
+        status: item['status'] ?? 'available',
+        assignedDriver: item['assignedDriver'],
+      )).toList();
+    } else {
+      print('API Error getVehicles: ${response.statusCode} ${response.body}');
+      throw Exception('Failed to load vehicles. Status: ${response.statusCode}');
+    }
+  }
+
+  @override
+  Future<void> updateVehicle(Vehicle vehicle) async {
+    final Map<String, dynamic> vehicleData = {
+      'name': vehicle.name,
+      'model': vehicle.model,
+      'licensePlate': vehicle.licensePlate,
+      'status': vehicle.status,
+      'assignedDriver': vehicle.assignedDriver,
+    };
+
+    final response = await _client.put(
+      Uri.parse('$_baseUrl/api/vehicles/${vehicle.id}'),
+      headers: await _getHeaders(),
+      body: jsonEncode(vehicleData),
+    );
+
+    if (response.statusCode != 200) {
+      print('API Error updateVehicle: ${response.statusCode} ${response.body}');
+      throw Exception('Failed to update vehicle. Status: ${response.statusCode}');
+    }
+  }
+
+  // --- Added implementations for new methods from VehicleRepository ---
+  @override
+  Future<Map<String, LatLng>> getVehicleLocations() async {
+    // TODO: Implement actual API call to fetch vehicle locations from your backend.
+    // This endpoint would return a map where keys are vehicle IDs and values are their LatLng.
+    // Example: GET $_baseUrl/vehicle-locations
+    print('API Call: getVehicleLocations - Not Implemented Yet. Returning empty map.');
+    // final response = await _client.get(Uri.parse('$_baseUrl/vehicle-locations'), headers: await _getHeaders());
+    // if (response.statusCode == 200) {
+    //   final Map<String, dynamic> data = jsonDecode(response.body); // Assuming response is like {"v001": {"lat": 12.3, "lng": 77.4}, ...}
+    //   return data.map((key, value) {
+    //      final lat = (value['lat'] ?? value['latitude'])?.toDouble();
+    //      final lng = (value['lng'] ?? value['longitude'])?.toDouble();
+    //      if (lat != null && lng != null) {
+    //        return MapEntry(key, LatLng(lat, lng));
+    //      }
+    //      // Handle case where lat/lng might be missing or not numbers
+    //      return MapEntry(key, const LatLng(0,0)); // Fallback or error
+    //   });
+    // } else {
+    //   throw Exception('Failed to load vehicle locations. Status: ${response.statusCode}');
+    // }
+    return Future.value({}); // Return empty map for now
+  }
+
+  @override
+  Future<Map<String, LatLng>> triggerVehicleLocationUpdate(String vehicleId) async {
+    // In a real API, this might not exist as a direct call.
+    // Locations might be pushed via WebSockets or updated through other means by the vehicles themselves.
+    // Or, this could be an API call to request a specific vehicle to report its location.
+    // For now, we'll simulate by just re-fetching all locations, or throw UnimplementedError.
+    print('API Call: triggerVehicleLocationUpdate for $vehicleId - Not Implemented for API. Returning current known locations.');
+    // return getVehicleLocations(); // This would re-fetch all, which might not be what's intended for a single trigger.
+    // Or, throw an error to indicate it's not a standard API operation.
+    throw UnimplementedError('triggerVehicleLocationUpdate is not typically implemented as a direct client-to-API call for a specific vehicle in this manner.');
+    // return Future.value({}); // Or return empty
+  }
+}

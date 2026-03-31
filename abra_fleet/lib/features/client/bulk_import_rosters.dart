@@ -1,0 +1,2173 @@
+// lib/features/customer/dashboard/presentation/screens/bulk_import_rosters.dart
+
+import 'package:flutter/material.dart';
+import 'package:file_picker/file_picker.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'dart:io';
+import 'dart:convert';
+import 'dart:async';
+import 'package:flutter/foundation.dart' hide debugPrint;
+import 'package:provider/provider.dart';
+import 'package:abra_fleet/features/customer/dashboard/data/repositories/roster_repository.dart';
+import 'package:abra_fleet/core/services/backend_connection_manager.dart';
+
+// ✅ IMPORTS for Employee Management
+import 'package:abra_fleet/features/admin/customer_management/presentation/providers/customer_provider.dart';
+
+class BulkImportRostersScreen extends StatefulWidget {
+  final VoidCallback onCancel;
+  final VoidCallback onImportComplete;
+
+  const BulkImportRostersScreen({
+    super.key,
+    required this.onCancel,
+    required this.onImportComplete,
+  });
+
+  @override
+  State<BulkImportRostersScreen> createState() => _BulkImportRostersScreenState();
+}
+
+class _BulkImportRostersScreenState extends State<BulkImportRostersScreen> {
+  static const Color primaryColor = Color(0xFF0D47A1);
+  
+  late final RosterRepository _rosterRepository;
+  
+  FilePickerResult? _selectedFileResult;
+  String? _selectedFileName;
+  int? _selectedFileSize;
+  
+  bool _isProcessing = false;
+  List<Map<String, dynamic>> _previewData = [];
+  List<String> _validationErrors = [];
+  int _currentStep = 0;
+  int _importedCount = 0;
+  int _failedCount = 0;
+  int _totalCount = 0;
+  int _newEmployeesCreatedCount = 0; // Tracks employees added to Management
+  List<String> _importErrors = [];
+
+  // Employee tracking state variables
+  Map<String, bool> _employeeExistsMap = {};
+  List<Map<String, dynamic>> _newEmployees = [];
+  List<Map<String, dynamic>> _existingEmployees = [];
+  bool _isCheckingEmployees = false;
+
+  final List<String> _requiredFields = [
+    'Roster Type',
+    'Office Location',
+    'Weekdays',
+    'From Date',
+    'To Date',
+    'Start Time',
+    'End Time',
+    'Login Pickup Address',
+    'Logout Drop Address',
+    'Employee Name',
+    'Employee Email',
+    'Employee Phone',
+    'Company Name',
+    'Department',
+    'Status',
+  ];
+
+  @override
+  void initState() {
+    super.initState();
+    _rosterRepository = RosterRepository(
+      apiService: BackendConnectionManager().apiService,
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      color: const Color(0xFFF5F5F5),
+      child: Column(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(16.0),
+            child: Row(
+              children: [
+                _buildStepIndicator(0, 'Upload', _currentStep >= 0),
+                Expanded(child: Container(height: 2, color: _currentStep >= 1 ? primaryColor : Colors.grey.shade300)),
+                _buildStepIndicator(1, 'Validate', _currentStep >= 1),
+                Expanded(child: Container(height: 2, color: _currentStep >= 2 ? primaryColor : Colors.grey.shade300)),
+                _buildStepIndicator(2, 'Import', _currentStep >= 2),
+              ],
+            ),
+          ),
+
+          Expanded(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.all(16.0),
+              child: _buildCurrentStepContent(),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildStepIndicator(int step, String label, bool isActive) {
+    return Column(
+      children: [
+        Container(
+          width: 30,
+          height: 30,
+          decoration: BoxDecoration(
+            color: isActive ? primaryColor : Colors.grey.shade300,
+            shape: BoxShape.circle,
+          ),
+          child: Center(
+            child: Text(
+              '${step + 1}',
+              style: TextStyle(
+                color: isActive ? Colors.white : Colors.grey.shade600,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          label,
+          style: TextStyle(
+            fontSize: 12,
+            color: isActive ? primaryColor : Colors.grey.shade600,
+            fontWeight: isActive ? FontWeight.bold : FontWeight.normal,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildCurrentStepContent() {
+    switch (_currentStep) {
+      case 0:
+        return _buildUploadStep();
+      case 1:
+        return _buildValidationStep();
+      case 2:
+        return _buildImportStep();
+      default:
+        return _buildUploadStep();
+    }
+  }
+
+  Widget _buildUploadStep() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Card(
+          elevation: 2,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          child: Padding(
+            padding: const EdgeInsets.all(20.0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Icon(Icons.info_outline, color: primaryColor),
+                    const SizedBox(width: 12),
+                    const Text(
+                      'Import Instructions',
+                      style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                const Text(
+                  'Prepare your CSV file with the following columns:',
+                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+                ),
+                const SizedBox(height: 8),
+                ..._requiredFields.map((field) => Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 2.0),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.fiber_manual_record, size: 6, color: Colors.grey),
+                      const SizedBox(width: 8),
+                      Text(field, style: const TextStyle(fontSize: 13)),
+                    ],
+                  ),
+                )),
+                const SizedBox(height: 16),
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.blue.shade50,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.blue.shade200),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Icon(Icons.lightbulb_outline, color: Colors.blue.shade700, size: 20),
+                          const SizedBox(width: 8),
+                          Text(
+                            'Important Notes:',
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              color: Colors.blue.shade700,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      _buildInfoPoint('New employees found in CSV will be added to Employee Management automatically.'),
+                      _buildInfoPoint('Duplicate roster entries will be skipped.'),
+                      _buildInfoPoint('Roster Type: login, logout, or both'),
+                      _buildInfoPoint('Weekdays: Comma-separated (e.g., Mon,Tue,Wed)'),
+                      _buildInfoPoint('Dates: Format YYYY-MM-DD (e.g., 2025-12-01)'),
+                      _buildInfoPoint('Times: Format HH:MM (e.g., 09:00, 18:30)'),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Row(
+                  children: [
+                    ElevatedButton.icon(
+                      onPressed: _downloadTemplate,
+                      icon: const Icon(Icons.download, size: 18),
+                      label: const Text('Download Template'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.green.shade600,
+                        foregroundColor: Colors.white,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    ElevatedButton.icon(
+                      onPressed: _showSampleData,
+                      icon: const Icon(Icons.visibility, size: 18),
+                      label: const Text('View Sample'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.blue.shade600,
+                        foregroundColor: Colors.white,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+        
+        const SizedBox(height: 24),
+        
+        Card(
+          elevation: 2,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          child: Padding(
+            padding: const EdgeInsets.all(20.0),
+            child: Column(
+              children: [
+                if (_selectedFileResult == null) ...[
+                  Container(
+                    width: double.infinity,
+                    height: 150,
+                    decoration: BoxDecoration(
+                      border: Border.all(color: Colors.grey.shade300, style: BorderStyle.solid),
+                      borderRadius: BorderRadius.circular(8),
+                      color: Colors.grey.shade50,
+                    ),
+                    child: InkWell(
+                      onTap: _pickFile,
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(Icons.cloud_upload_outlined, size: 48, color: Colors.grey.shade600),
+                          const SizedBox(height: 12),
+                          const Text(
+                            'Click to upload CSV file',
+                            style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            'or drag and drop here',
+                            style: TextStyle(fontSize: 14, color: Colors.grey.shade600),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ] else ...[
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      border: Border.all(color: Colors.green.shade300),
+                      borderRadius: BorderRadius.circular(8),
+                      color: Colors.green.shade50,
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(Icons.insert_drive_file, color: Colors.green.shade700, size: 24),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                _selectedFileName ?? 'Unknown file',
+                                style: const TextStyle(fontWeight: FontWeight.w600),
+                              ),
+                              Text(
+                                _selectedFileSize != null 
+                                    ? '${(_selectedFileSize! / 1024).toStringAsFixed(1)} KB'
+                                    : 'Unknown size',
+                                style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
+                              ),
+                            ],
+                          ),
+                        ),
+                        IconButton(
+                          onPressed: () => setState(() {
+                            _selectedFileResult = null;
+                            _selectedFileName = null;
+                            _selectedFileSize = null;
+                          }),
+                          icon: Icon(Icons.close, color: Colors.red.shade600),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton(
+                      onPressed: _validateFile,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: primaryColor,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                      ),
+                      child: _isProcessing
+                          ? const SizedBox(
+                              height: 20,
+                              width: 20,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                              ),
+                            )
+                          : const Text('Validate File', style: TextStyle(fontSize: 16)),
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  void _proceedToImport() async {
+    setState(() {
+      _currentStep = 2;
+      _isProcessing = true;
+      _importedCount = 0;
+      _failedCount = 0;
+      _newEmployeesCreatedCount = 0;
+      _totalCount = _previewData.length;
+      _importErrors.clear();
+    });
+
+    await _importRostersToDatabase();
+  }
+
+  Widget _buildInfoPoint(String text) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 2),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(Icons.fiber_manual_record, size: 6, color: Colors.blue.shade700),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              text,
+              style: TextStyle(fontSize: 12, color: Colors.blue.shade700),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildValidationStep() {
+  return Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      if (_validationErrors.isNotEmpty) ...[
+        Card(
+          elevation: 2,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          child: Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: Colors.red.shade50,
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Icon(Icons.error_outline, color: Colors.red.shade700),
+                    const SizedBox(width: 8),
+                    Text(
+                      'Validation Errors (${_validationErrors.length})',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.red.shade700,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                ConstrainedBox(
+                  constraints: const BoxConstraints(maxHeight: 200),
+                  child: SingleChildScrollView(
+                    child: Column(
+                      children: _validationErrors.map((error) => Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 2),
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Icon(Icons.fiber_manual_record, size: 6, color: Colors.red.shade700),
+                            const SizedBox(width: 8),
+                            Expanded(child: Text(error, style: TextStyle(color: Colors.red.shade700))),
+                          ],
+                        ),
+                      )).toList(),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                ElevatedButton(
+                  onPressed: () => setState(() => _currentStep = 0),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.orange.shade600,
+                    foregroundColor: Colors.white,
+                  ),
+                  child: const Text('Go Back & Fix File'),
+                ),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(height: 24),
+      ],
+
+      if (_previewData.isNotEmpty && _validationErrors.isEmpty) ...[
+        Card(
+          elevation: 2,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          child: Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: [Colors.blue.shade50, Colors.green.shade50],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Icon(Icons.people_alt, color: primaryColor, size: 28),
+                    const SizedBox(width: 12),
+                    const Text(
+                      'Employee Analysis',
+                      style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                
+                // Summary stats
+                Row(
+                  children: [
+                    Expanded(
+                      child: _buildStatCard(
+                        'Total Employees',
+                        '${_previewData.map((e) => e['Employee Email']).toSet().length}', // Unique count
+                        Icons.groups,
+                        Colors.blue,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: _buildStatCard(
+                        'Existing',
+                        '${_existingEmployees.map((e) => e['Employee Email']).toSet().length}',
+                        Icons.check_circle,
+                        Colors.green,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: _buildStatCard(
+                        'New to Register',
+                        '${_newEmployees.map((e) => e['Employee Email']).toSet().length}',
+                        Icons.person_add,
+                        Colors.orange,
+                      ),
+                    ),
+                  ],
+                ),
+                
+                // New employees list (if any)
+                if (_newEmployees.isNotEmpty) ...[
+                  const SizedBox(height: 16),
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Colors.orange.shade50,
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: Colors.orange.shade200),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Icon(Icons.info_outline, color: Colors.orange.shade700, size: 20),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                'These new employees will be automatically added to your Employee Management system.',
+                                style: TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.orange.shade700,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        ConstrainedBox(
+                          constraints: const BoxConstraints(maxHeight: 150),
+                          child: SingleChildScrollView(
+                            child: Column(
+                              children: _newEmployees.take(10).map((emp) {
+                                return Padding(
+                                  padding: const EdgeInsets.symmetric(vertical: 2),
+                                  child: Row(
+                                    children: [
+                                      Icon(Icons.fiber_manual_record, size: 6, color: Colors.orange.shade700),
+                                      const SizedBox(width: 8),
+                                      Expanded(
+                                        child: Text(
+                                          '${emp['Employee Name']} (${emp['Employee Email']})',
+                                          style: TextStyle(fontSize: 12, color: Colors.orange.shade700),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                );
+                              }).toList(),
+                            ),
+                          ),
+                        ),
+                        if (_newEmployees.length > 10)
+                          Padding(
+                            padding: const EdgeInsets.only(top: 4),
+                            child: Text(
+                              '...and ${_newEmployees.length - 10} more',
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontStyle: FontStyle.italic,
+                                color: Colors.orange.shade600,
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(height: 16),
+
+        Card(
+          elevation: 2,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Colors.green.shade50,
+                  borderRadius: const BorderRadius.only(
+                    topLeft: Radius.circular(12),
+                    topRight: Radius.circular(12),
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    Icon(Icons.check_circle_outline, color: Colors.green.shade700),
+                    const SizedBox(width: 8),
+                    Text(
+                      'File Validated Successfully',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.green.shade700,
+                      ),
+                    ),
+                    const Spacer(),
+                    Text(
+                      '${_previewData.length} unique rosters',
+                      style: TextStyle(
+                        fontSize: 14,
+                        color: Colors.green.shade700,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Preview (First 5 rows):',
+                      style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+                    ),
+                    const SizedBox(height: 12),
+                    SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      child: DataTable(
+                        columns: [
+                          'Roster Type',
+                          'Office Location',
+                          'Weekdays',
+                          'Date Range',
+                          'Time Range',
+                        ].map((field) => DataColumn(
+                          label: SizedBox(
+                            width: 120,
+                            child: Text(
+                              field, 
+                              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        )).toList(),
+                        rows: _previewData.take(5).map((row) => DataRow(
+                          cells: [
+                            DataCell(SizedBox(
+                              width: 120,
+                              child: Text(
+                                row['Roster Type']?.toString() ?? '',
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(fontSize: 12),
+                              ),
+                            )),
+                            DataCell(SizedBox(
+                              width: 120,
+                              child: Text(
+                                row['Office Location']?.toString() ?? '',
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(fontSize: 12),
+                              ),
+                            )),
+                            DataCell(SizedBox(
+                              width: 120,
+                              child: Text(
+                                row['Weekdays']?.toString() ?? '',
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(fontSize: 12),
+                              ),
+                            )),
+                            DataCell(SizedBox(
+                              width: 120,
+                              child: Text(
+                                '${row['From Date']} to ${row['To Date']}',
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(fontSize: 12),
+                              ),
+                            )),
+                            DataCell(SizedBox(
+                              width: 120,
+                              child: Text(
+                                '${row['Start Time']} - ${row['End Time']}',
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(fontSize: 12),
+                              ),
+                            )),
+                          ],
+                        )).toList(),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: ElevatedButton(
+                            onPressed: () => setState(() => _currentStep = 0),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.grey.shade600,
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(vertical: 14),
+                            ),
+                            child: const Text('Back'),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          flex: 2,
+                          child: ElevatedButton(
+                            onPressed: _proceedToImport,
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: primaryColor,
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(vertical: 14),
+                            ),
+                            child: const Text('Confirm & Import', style: TextStyle(fontSize: 16)),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    ],
+  );
+}
+
+Widget _buildStatCard(String label, String value, IconData icon, Color color) {
+  return Container(
+    padding: const EdgeInsets.all(12),
+    decoration: BoxDecoration(
+      color: Colors.white,
+      borderRadius: BorderRadius.circular(8),
+      border: Border.all(color: color.withOpacity(0.3)),
+    ),
+    child: Column(
+      children: [
+        Icon(icon, color: color, size: 24),
+        const SizedBox(height: 8),
+        Text(
+          value,
+          style: TextStyle(
+            fontSize: 20,
+            fontWeight: FontWeight.bold,
+            color: color,
+          ),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          label,
+          style: TextStyle(
+            fontSize: 11,
+            color: Colors.grey.shade600,
+          ),
+          textAlign: TextAlign.center,
+        ),
+      ],
+    ),
+  );
+}
+
+  Widget _buildImportStep() {
+    return Card(
+      elevation: 2,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          children: [
+            if (_isProcessing) ...[
+              const CircularProgressIndicator(),
+              const SizedBox(height: 16),
+              const Text('Importing rosters...', style: TextStyle(fontSize: 16)),
+              
+              if (_newEmployeesCreatedCount > 0)
+                Padding(
+                  padding: const EdgeInsets.only(top: 8.0),
+                  child: Text(
+                    'Registered $_newEmployeesCreatedCount new employees...',
+                    style: TextStyle(color: Colors.orange.shade700, fontStyle: FontStyle.italic),
+                  ),
+                ),
+                
+              const SizedBox(height: 8),
+              Text('Progress: $_importedCount / $_totalCount rosters'),
+              if (_failedCount > 0) Text('Failed: $_failedCount', style: TextStyle(color: Colors.red.shade700)),
+              const SizedBox(height: 16),
+              LinearProgressIndicator(
+                value: _totalCount > 0 ? _importedCount / _totalCount : 0,
+                backgroundColor: Colors.grey.shade300,
+                valueColor: AlwaysStoppedAnimation<Color>(primaryColor),
+              ),
+            ] else ...[
+              Icon(
+                _failedCount == 0 ? Icons.check_circle : Icons.warning,
+                size: 64,
+                color: _failedCount == 0 ? Colors.green.shade600 : Colors.orange.shade600,
+              ),
+              const SizedBox(height: 16),
+              Text(
+                _failedCount == 0 ? 'Import Completed Successfully!' : 'Import Completed with Warnings',
+                style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 8),
+              Text('$_importedCount out of $_totalCount rosters imported successfully.'),
+              
+              if (_newEmployeesCreatedCount > 0)
+                Padding(
+                  padding: const EdgeInsets.all(8.0),
+                  child: Text(
+                    '$_newEmployeesCreatedCount new employees were added to Employee Management.',
+                    style: TextStyle(color: Colors.blue.shade700, fontWeight: FontWeight.w600),
+                  ),
+                ),
+
+              if (_failedCount > 0) ...[
+                const SizedBox(height: 8),
+                Text('$_failedCount rosters failed to import.', style: TextStyle(color: Colors.red.shade700)),
+                const SizedBox(height: 16),
+                if (_importErrors.isNotEmpty) ...[
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Colors.red.shade50,
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: Colors.red.shade200),
+                    ),
+                    constraints: const BoxConstraints(maxHeight: 150),
+                    child: SingleChildScrollView(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: _importErrors.map((error) => Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 2),
+                          child: Text(error, style: TextStyle(fontSize: 12, color: Colors.red.shade700)),
+                        )).toList(),
+                      ),
+                    ),
+                  ),
+                ],
+              ],
+              const SizedBox(height: 24),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  onPressed: () {
+                    debugPrint('📍 Import complete button pressed');
+                    debugPrint('   Current user: ${/* JWT: Use SharedPreferences */ null?.email}');
+                    debugPrint('   Calling onImportComplete callback...');
+                    widget.onImportComplete();
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: primaryColor,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                  ),
+                  child: const Text('Back to Roster Management', style: TextStyle(fontSize: 16)),
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _pickFile() async {
+    FilePickerResult? result = await FilePicker.platform.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: ['csv'],
+      withData: true,
+    );
+
+    if (result != null) {
+      setState(() {
+        _selectedFileResult = result;
+        _selectedFileName = result.files.single.name;
+        _selectedFileSize = kIsWeb 
+            ? result.files.single.bytes?.length 
+            : result.files.single.size;
+        _currentStep = 0;
+        _validationErrors.clear();
+        _previewData.clear();
+      });
+    }
+  }
+
+// ========== ADD THIS METHOD TO YOUR CLASS ==========
+
+/// Check if a roster already exists in the database
+/// Returns true if duplicate exists, false otherwise
+Future<bool> _isDuplicateRoster({
+  required String employeeEmail,
+  required String fromDate,
+  required String startTime,
+  required String rosterType,
+}) async {
+  try {
+    final response = await _rosterRepository.checkRosterExists(
+      employeeEmail: employeeEmail,
+      fromDate: fromDate,
+      startTime: startTime,
+      rosterType: rosterType,
+    );
+    
+    return response['exists'] ?? false;
+  } catch (e) {
+    debugPrint('❌ Error checking duplicate: $e');
+    // On error, assume it might exist (fail-safe approach)
+    return false; // Or true if you want to skip on error
+  }
+}
+
+// ✅ DUPLICATE DETECTION STRATEGY:
+// 1. Check CSV internal duplicates (same file)
+// 2. Check database duplicates (existing rosters)
+// 3. Only unique rosters proceed to import stage
+// 4. NO duplicate checking during import - all rosters are guaranteed unique
+void _validateFile() async {
+  if (_selectedFileResult == null) return;
+
+  setState(() {
+    _isProcessing = true;
+    _isCheckingEmployees = true;
+  });
+
+  try {
+    String fileContent;
+    if (kIsWeb) {
+      Uint8List bytes = _selectedFileResult!.files.single.bytes!;
+      fileContent = utf8.decode(bytes);
+    } else {
+      File file = File(_selectedFileResult!.files.single.path!);
+      fileContent = await file.readAsString();
+    }
+    
+    List<String> lines = fileContent.split('\n');
+    
+    if (lines.isEmpty) {
+      setState(() {
+        _validationErrors = ['File is empty'];
+        _isProcessing = false;
+        _isCheckingEmployees = false;
+        _currentStep = 1;
+      });
+      return;
+    }
+
+    // Parse CSV
+    List<List<String>> csvData = [];
+    for (String line in lines) {
+      if (line.trim().isEmpty) continue;
+      
+      List<String> row = [];
+      StringBuffer currentField = StringBuffer();
+      bool inQuotes = false;
+      
+      for (int i = 0; i < line.length; i++) {
+        String char = line[i];
+        
+        if (char == '"') {
+          inQuotes = !inQuotes;
+        } else if (char == ',' && !inQuotes) {
+          row.add(currentField.toString().trim());
+          currentField.clear();
+        } else {
+          currentField.write(char);
+        }
+      }
+      
+      row.add(currentField.toString().trim());
+      
+      if (row.any((field) => field.isNotEmpty)) {
+        csvData.add(row);
+      }
+    }
+
+    if (csvData.isEmpty) {
+      setState(() {
+        _validationErrors = ['No valid data found in file'];
+        _isProcessing = false;
+        _isCheckingEmployees = false;
+        _currentStep = 1;
+      });
+      return;
+    }
+
+    List<String> headers = csvData[0].map((h) => h.trim()).toList();
+    List<String> errors = [];
+    
+    for (String requiredField in _requiredFields) {
+      if (!headers.contains(requiredField)) {
+        errors.add('Missing required column: $requiredField');
+      }
+    }
+
+    List<Map<String, dynamic>> parsedData = [];
+    
+    // ✅ CRITICAL FIX 1: Track duplicates WITHIN CSV
+    Set<String> csvRowSignatures = {};
+    int csvDuplicatesSkipped = 0;
+
+    if (errors.isEmpty) {
+      for (int i = 1; i < csvData.length; i++) {
+        Map<String, dynamic> row = {};
+        for (int j = 0; j < headers.length && j < csvData[i].length; j++) {
+          row[headers[j]] = csvData[i][j].trim();
+        }
+        
+        if (row.values.any((value) => value.toString().isNotEmpty)) {
+          String email = row['Employee Email']?.toString().trim().toLowerCase() ?? '';
+          String fromDate = row['From Date']?.toString().trim() ?? '';
+          String startTime = row['Start Time']?.toString().trim() ?? '';
+          String rosterType = row['Roster Type']?.toString().toLowerCase().trim() ?? '';
+          
+          String signature = '${email}_${fromDate}_${startTime}_${rosterType}';
+          
+          // Check CSV duplicates
+          if (csvRowSignatures.contains(signature)) {
+            debugPrint('⚠️ SKIPPING CSV duplicate at row ${i + 1}: $signature');
+            csvDuplicatesSkipped++;
+            continue;
+          }
+          
+          csvRowSignatures.add(signature);
+          parsedData.add(row);
+        }
+      }
+      
+      if (csvDuplicatesSkipped > 0) {
+        errors.add('ℹ️ Skipped $csvDuplicatesSkipped duplicate rows within CSV.');
+      }
+
+      // Validate content
+      errors.addAll(_validateDataContent(parsedData));
+    }
+
+    // ✅ CRITICAL: Check DATABASE duplicates DURING VALIDATION (not during import)
+    // This ensures only unique rosters proceed to import stage
+    if (errors.isEmpty && parsedData.isNotEmpty) {
+      debugPrint('🔍 VALIDATION STAGE: Checking ${parsedData.length} rosters against database...');
+      
+      List<Map<String, dynamic>> uniqueRosters = [];
+      int databaseDuplicatesFound = 0;
+      
+      for (var row in parsedData) {
+        String email = row['Employee Email']?.toString().trim().toLowerCase() ?? '';
+        String fromDate = row['From Date']?.toString().trim() ?? '';
+        String startTime = row['Start Time']?.toString().trim() ?? '';
+        String rosterType = row['Roster Type']?.toString().toLowerCase().trim() ?? '';
+        
+        // Check database for existing roster
+        bool existsInDb = await _isDuplicateRoster(
+          employeeEmail: email,
+          fromDate: fromDate,
+          startTime: startTime,
+          rosterType: rosterType,
+        );
+        
+        if (existsInDb) {
+          debugPrint('⚠️ VALIDATION: Duplicate found - $email - $fromDate $startTime');
+          databaseDuplicatesFound++;
+        } else {
+          uniqueRosters.add(row);
+        }
+        
+        await Future.delayed(const Duration(milliseconds: 50));
+      }
+      
+      if (databaseDuplicatesFound > 0) {
+        errors.add('ℹ️ $databaseDuplicatesFound roster(s) already exist in database and will be skipped during import.');
+      }
+      
+      // ✅ CRITICAL: Only unique rosters proceed to import
+      parsedData = uniqueRosters;
+      
+      // ✅ CRITICAL FIX 3: Only check employees for NON-DUPLICATE rosters
+      if (parsedData.isNotEmpty) {
+        await _checkEmployeeExistence(parsedData);
+      } else {
+        // All rosters are duplicates!
+        errors.add('❌ All rosters in this file already exist in the database. Nothing to import.');
+      }
+    }
+
+    // ✅ VALIDATION COMPLETE: All duplicates have been filtered out
+    debugPrint('✅ VALIDATION COMPLETE:');
+    debugPrint('   📊 Total unique rosters ready for import: ${parsedData.length}');
+    debugPrint('   ❌ Validation errors: ${errors.length}');
+    debugPrint('   🔄 Proceeding to validation screen...');
+
+    setState(() {
+      _isProcessing = false;
+      _isCheckingEmployees = false;
+      _validationErrors = errors;
+      _previewData = parsedData;
+      _currentStep = 1;
+    });
+
+  } catch (e) {
+    setState(() {
+      _isProcessing = false;
+      _isCheckingEmployees = false;
+      _validationErrors = ['Error parsing file: $e'];
+      _previewData = [];
+      _currentStep = 1;
+    });
+  }
+}
+
+Future<void> _checkEmployeeExistence(List<Map<String, dynamic>> data) async {
+  try {
+    debugPrint('🔍 Checking employee existence for ${data.length} employees...');
+    
+    Set<String> emails = data
+        .map((row) => row['Employee Email']?.toString().trim() ?? '')
+        .where((email) => email.isNotEmpty)
+        .toSet();
+
+    debugPrint('📧 Unique emails to check: ${emails.length}');
+
+    _employeeExistsMap = await _rosterRepository.checkMultipleEmployees(
+      emails: emails.toList(),
+    );
+
+    _newEmployees.clear();
+    _existingEmployees.clear();
+
+    for (var row in data) {
+      String email = row['Employee Email']?.toString().trim() ?? '';
+      if (email.isEmpty) continue;
+
+      bool exists = _employeeExistsMap[email] ?? false;
+      
+      if (exists) {
+        _existingEmployees.add(row);
+      } else {
+        _newEmployees.add(row);
+      }
+    }
+
+    debugPrint('✅ Employee check complete:');
+    debugPrint('   - Existing: ${_existingEmployees.length}');
+    debugPrint('   - New: ${_newEmployees.length}');
+
+  } catch (e) {
+    debugPrint('❌ Error checking employees: $e');
+    _newEmployees = data;
+    _existingEmployees.clear();
+  }
+}
+
+List<String> _validateDataContent(List<Map<String, dynamic>> data) {
+  List<String> errors = [];
+  final validRosterTypes = ['login', 'logout', 'both'];
+  final validWeekdays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+  final validStatuses = ['Active', 'Inactive', 'Pending'];
+
+  for (int i = 0; i < data.length; i++) {
+    Map<String, dynamic> row = data[i];
+    String rowNumber = 'Row ${i + 2}';
+
+    String rosterType = row['Roster Type']?.toString().toLowerCase().trim() ?? '';
+    if (rosterType.isEmpty) {
+      errors.add('$rowNumber: Roster Type is required');
+    } else if (!validRosterTypes.contains(rosterType)) {
+      errors.add('$rowNumber: Invalid Roster Type. Must be: login, logout, or both');
+    }
+
+    String officeLocation = row['Office Location']?.toString().trim() ?? '';
+    if (officeLocation.isEmpty) {
+      errors.add('$rowNumber: Office Location is required');
+    }
+
+    String weekdaysStr = row['Weekdays']?.toString().trim() ?? '';
+    if (weekdaysStr.isEmpty) {
+      errors.add('$rowNumber: Weekdays are required');
+    } else {
+      List<String> days = weekdaysStr.split(',').map((e) => e.trim()).where((e) => e.isNotEmpty).toList();
+      if (days.isEmpty) {
+        errors.add('$rowNumber: Weekdays are required');
+      } else {
+        for (String day in days) {
+          if (!validWeekdays.contains(day)) {
+            errors.add('$rowNumber: Invalid weekday "$day". Must be one of: ${validWeekdays.join(", ")}');
+            break;
+          }
+        }
+      }
+    }
+
+    String fromDate = row['From Date']?.toString().trim() ?? '';
+    String toDate = row['To Date']?.toString().trim() ?? '';
+    if (fromDate.isEmpty || toDate.isEmpty) {
+      errors.add('$rowNumber: From Date and To Date are required');
+    } else {
+      final dateRegex = RegExp(r'^\d{4}-\d{2}-\d{2}$');
+      if (!dateRegex.hasMatch(fromDate)) {
+        errors.add('$rowNumber: Invalid date format. Use YYYY-MM-DD');
+      } else if (!dateRegex.hasMatch(toDate)) {
+        errors.add('$rowNumber: Invalid date format. Use YYYY-MM-DD');
+      } else {
+        try {
+          DateTime from = DateTime.parse(fromDate);
+          DateTime to = DateTime.parse(toDate);
+          if (to.isBefore(from)) {
+            errors.add('$rowNumber: To Date must be after From Date');
+          }
+        } catch (e) {
+          errors.add('$rowNumber: Invalid date format. Use YYYY-MM-DD');
+        }
+      }
+    }
+
+    String startTime = row['Start Time']?.toString().trim() ?? '';
+    String endTime = row['End Time']?.toString().trim() ?? '';
+    if (startTime.isEmpty || endTime.isEmpty) {
+      errors.add('$rowNumber: Start Time and End Time are required');
+    } else {
+      final timeRegex = RegExp(r'^\d{2}:\d{2}$');
+      if (!timeRegex.hasMatch(startTime)) {
+        errors.add('$rowNumber: Invalid time format. Use HH:MM (e.g., 09:00)');
+      } else if (!timeRegex.hasMatch(endTime)) {
+        errors.add('$rowNumber: Invalid time format. Use HH:MM (e.g., 09:00)');
+      } else {
+        try {
+          List<String> startParts = startTime.split(':');
+          List<String> endParts = endTime.split(':');
+          int startHour = int.parse(startParts[0]);
+          int startMin = int.parse(startParts[1]);
+          int endHour = int.parse(endParts[0]);
+          int endMin = int.parse(endParts[1]);
+          
+          if (startHour < 0 || startHour > 23 || startMin < 0 || startMin > 59) {
+            errors.add('$rowNumber: Invalid Start Time values');
+          }
+          if (endHour < 0 || endHour > 23 || endMin < 0 || endMin > 59) {
+            errors.add('$rowNumber: Invalid End Time values');
+          }
+        } catch (e) {
+          errors.add('$rowNumber: Invalid time format. Use HH:MM (e.g., 09:00)');
+        }
+      }
+    }
+
+    String loginPickupAddress = row['Login Pickup Address']?.toString().trim() ?? '';
+    if (loginPickupAddress.isEmpty) {
+      errors.add('$rowNumber: Login Pickup Address is required');
+    }
+
+    String logoutDropAddress = row['Logout Drop Address']?.toString().trim() ?? '';
+    if (logoutDropAddress.isEmpty) {
+      errors.add('$rowNumber: Logout Drop Address is required');
+    }
+
+    String employeeName = row['Employee Name']?.toString().trim() ?? '';
+    if (employeeName.isEmpty) {
+      errors.add('$rowNumber: Employee Name is required');
+    }
+
+    String employeeEmail = row['Employee Email']?.toString().trim() ?? '';
+    if (employeeEmail.isEmpty) {
+      errors.add('$rowNumber: Employee Email is required');
+    } else {
+      final emailRegex = RegExp(r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$');
+      if (!emailRegex.hasMatch(employeeEmail)) {
+        errors.add('$rowNumber: Invalid Employee Email format');
+      }
+    }
+
+    String employeePhone = row['Employee Phone']?.toString().trim().replaceAll(RegExp(r'[^0-9]'), '') ?? '';
+    if (employeePhone.isEmpty) {
+      errors.add('$rowNumber: Employee Phone is required');
+    } else if (employeePhone.length < 10) {
+      errors.add('$rowNumber: Employee Phone must be at least 10 digits');
+    }
+
+    String companyName = row['Company Name']?.toString().trim() ?? '';
+    if (companyName.isEmpty) {
+      errors.add('$rowNumber: Company Name is required');
+    }
+
+    String department = row['Department']?.toString().trim() ?? '';
+    if (department.isEmpty) {
+      errors.add('$rowNumber: Department is required');
+    }
+
+    String status = row['Status']?.toString().trim() ?? '';
+    if (status.isEmpty) {
+      errors.add('$rowNumber: Status is required');
+    } else if (!validStatuses.contains(status)) {
+      errors.add('$rowNumber: Invalid Status. Must be: Active, Inactive, or Pending');
+    }
+
+    if (errors.length >= 20) {
+      errors.add('... and more errors. Please fix the above issues first.');
+      break;
+    }
+  }
+
+  return errors;
+}
+
+void _downloadTemplate() {
+  final List<String> headers = [
+    'Roster Type','Office Location','Weekdays','From Date','To Date','Start Time','End Time',
+    'Login Pickup Address','Logout Drop Address','Employee Name','Employee Email',
+    'Employee Phone','Alternative Phone','Company Name','Employee ID','Department',
+    'Designation','Status','Emergency Contact Name','Emergency Contact Phone',
+  ];
+
+  String escapeCsvValue(String value) {
+    if (value.contains(',') || value.contains('"') || value.contains('\n')) {
+      return '"${value.replaceAll('"', '""')}"';
+    }
+    return value;
+  }
+
+  List<List<String>> csvData = [
+    headers,
+    [
+      'both', 'Koramangala Office, Bangalore', 'Mon,Tue,Wed,Thu,Fri', '2025-12-01', '2025-12-31', '09:00', '18:00',
+      'HSR Layout, Bangalore', 'Indiranagar, Bangalore', 'John Doe', 'john.doe@company.com', '+91-9876543210',
+      '+91-9876543211', 'Tech Solutions Pvt Ltd', 'EMP001', 'Engineering', 'Senior Software Engineer', 'Active',
+      'Jane Doe', '+91-9876543299',
+    ],
+  ];
+
+  String csvContent = csvData.map((row) => 
+    row.map((cell) => escapeCsvValue(cell)).join(',')
+  ).join('\n');
+  
+  _showDownloadDialog(csvContent);
+}
+
+  void _showDownloadDialog(String csvContent) {
+    showDialog(
+      context: context,
+      builder: (context) => Dialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        child: ConstrainedBox(
+          constraints: BoxConstraints(
+            maxWidth: MediaQuery.of(context).size.width * 0.9,
+            maxHeight: MediaQuery.of(context).size.height * 0.8,
+          ),
+          child: Container(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Icon(Icons.download, color: primaryColor),
+                    const SizedBox(width: 12),
+                    const Text(
+                      'CSV Template',
+                      style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                    ),
+                    const Spacer(),
+                    IconButton(
+                      onPressed: () => Navigator.pop(context),
+                      icon: const Icon(Icons.close),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                const Text(
+                  'Copy the content below and save it as a .csv file:',
+                  style: TextStyle(fontSize: 14, color: Colors.grey),
+                ),
+                const SizedBox(height: 16),
+                Expanded(
+                  child: Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Colors.grey.shade100,
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: Colors.grey.shade300),
+                    ),
+                    child: SingleChildScrollView(
+                      child: SelectableText(
+                        csvContent,
+                        style: const TextStyle(
+                          fontFamily: 'monospace',
+                          fontSize: 12,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton(
+                    onPressed: () => Navigator.pop(context),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: primaryColor,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                    ),
+                    child: const Text('Close'),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _showSampleData() {
+  showDialog(
+    context: context,
+    builder: (context) => Dialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      child: ConstrainedBox(
+        constraints: BoxConstraints(
+          maxWidth: MediaQuery.of(context).size.width * 0.95,
+          maxHeight: MediaQuery.of(context).size.height * 0.9,
+        ),
+        child: Container(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Icon(Icons.table_view, color: primaryColor),
+                  const SizedBox(width: 12),
+                  const Expanded(
+                    child: Text(
+                      'Complete Sample Data Format',
+                      style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                  IconButton(
+                    onPressed: () => Navigator.pop(context),
+                    icon: const Icon(Icons.close),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              const Text(
+                'Your CSV file should contain ALL the following fields:',
+                style: TextStyle(fontSize: 14, color: Colors.grey),
+              ),
+              const SizedBox(height: 16),
+              Expanded(
+                child: SingleChildScrollView(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _buildCategorySection(
+                        'Roster Details',
+                        Icons.schedule,
+                        Colors.blue,
+                        [
+                          ['Field', 'Sample Value'],
+                          ['Roster Type', 'both'],
+                          ['Office Location', 'Koramangala Office, Bangalore'],
+                          ['Weekdays', 'Mon,Tue,Wed,Thu,Fri'],
+                          ['From Date', '2025-12-01'],
+                          ['To Date', '2025-12-31'],
+                          ['Start Time', '09:00'],
+                          ['End Time', '18:00'],
+                        ],
+                      ),
+                      const SizedBox(height: 16),
+                      _buildCategorySection(
+                        'Pickup & Drop Locations',
+                        Icons.location_on,
+                        Colors.green,
+                        [
+                          ['Field', 'Sample Value'],
+                          ['Login Pickup Address', 'HSR Layout, Bangalore'],
+                          ['Logout Drop Address', 'Indiranagar, Bangalore'],
+                        ],
+                      ),
+                      const SizedBox(height: 16),
+                      _buildCategorySection(
+                        'Employee Basic Information',
+                        Icons.person,
+                        Colors.purple,
+                        [
+                          ['Field', 'Sample Value'],
+                          ['Employee Name', 'John Doe'],
+                          ['Employee Email', 'john.doe@company.com'],
+                          ['Employee Phone', '+91-9876543210'],
+                          ['Alternative Phone', '+91-9876543211 (Optional)'],
+                        ],
+                      ),
+                      const SizedBox(height: 16),
+                      _buildCategorySection(
+                        'Organization Details',
+                        Icons.business,
+                        Colors.orange,
+                        [
+                          ['Field', 'Sample Value'],
+                          ['Company Name', 'Tech Solutions Pvt Ltd'],
+                          ['Employee ID', 'EMP001 (Optional)'],
+                          ['Department', 'Engineering'],
+                          ['Designation', 'Senior Software Engineer (Optional)'],
+                          ['Status', 'Active'],
+                        ],
+                      ),
+                      const SizedBox(height: 16),
+                      _buildCategorySection(
+                        'Emergency Contact (Optional)',
+                        Icons.emergency,
+                        Colors.pink,
+                        [
+                          ['Field', 'Sample Value'],
+                          ['Emergency Contact Name', 'Jane Doe (Optional)'],
+                          ['Emergency Contact Phone', '+91-9876543299 (Optional)'],
+                        ],
+                      ),
+                      const SizedBox(height: 24),
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          color: Colors.blue.shade50,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: Colors.blue.shade200),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                Icon(Icons.info_outline, color: Colors.blue.shade700, size: 20),
+                                const SizedBox(width: 8),
+                                Text(
+                                  'Important Notes:',
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.blue.shade700,
+                                    fontSize: 14,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 12),
+                            _buildNote('Roster Type: Must be "login", "logout", or "both"'),
+                            _buildNote('Weekdays: Comma-separated (Mon,Tue,Wed,Thu,Fri,Sat,Sun)'),
+                            _buildNote('Dates: Format YYYY-MM-DD (e.g., 2025-12-01)'),
+                            _buildNote('Times: Format HH:MM in 24-hour (e.g., 09:00, 18:30)'),
+                            _buildNote('Addresses: Full address including city'),
+                            _buildNote('Status: Must be "Active", "Inactive", or "Pending"'),
+                            _buildNote('Email: Must be valid email format'),
+                            _buildNote('Phone: Minimum 10 digits'),
+                            _buildNote('Optional Fields: Alternative Phone, Employee ID, Designation, Emergency Contact'),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          color: Colors.grey.shade50,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: Colors.grey.shade300),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text(
+                              'Complete CSV Row Example:',
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 14,
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            const Text(
+                              '(Scroll horizontally to see all fields)',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: Colors.grey,
+                                fontStyle: FontStyle.italic,
+                              ),
+                            ),
+                            const SizedBox(height: 12),
+                            SingleChildScrollView(
+                              scrollDirection: Axis.horizontal,
+                              child: Text(
+                                'both,Koramangala Office Bangalore,Mon,Tue,Wed,Thu,Fri,2025-12-01,2025-12-31,09:00,18:00,HSR Layout Bangalore,Indiranagar Bangalore,John Doe,john.doe@company.com,+91-9876543210,+91-9876543211,Tech Solutions Pvt Ltd,EMP001,Engineering,Senior Software Engineer,Active,Jane Doe,+91-9876543299',
+                                style: TextStyle(
+                                  fontFamily: 'monospace',
+                                  fontSize: 11,
+                                  color: Colors.grey.shade700,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  onPressed: () => Navigator.pop(context),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: primaryColor,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                  ),
+                  child: const Text('Close'),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    ),
+  );
+}
+
+Widget _buildCategorySection(String title, IconData icon, Color color, List<List<String>> data) {
+  return Container(
+    width: double.infinity,
+    padding: const EdgeInsets.all(16),
+    decoration: BoxDecoration(
+      color: color.withOpacity(0.05),
+      borderRadius: BorderRadius.circular(12),
+      border: Border.all(color: color.withOpacity(0.3)),
+    ),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Icon(icon, color: color, size: 20),
+            const SizedBox(width: 8),
+            Text(
+              title,
+              style: TextStyle(
+                fontWeight: FontWeight.bold,
+                color: color,
+                fontSize: 15,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        Table(
+          border: TableBorder.all(color: Colors.grey.shade300, width: 1),
+          columnWidths: const {
+            0: FlexColumnWidth(2),
+            1: FlexColumnWidth(3),
+          },
+          children: data.map((row) {
+            final isHeader = row == data.first;
+            return TableRow(
+              decoration: BoxDecoration(
+                color: isHeader ? color.withOpacity(0.1) : Colors.white,
+              ),
+              children: row.map((cell) {
+                return Padding(
+                  padding: const EdgeInsets.all(8.0),
+                  child: Text(
+                    cell,
+                    style: TextStyle(
+                      fontWeight: isHeader ? FontWeight.bold : FontWeight.normal,
+                      fontSize: isHeader ? 13 : 12,
+                      color: isHeader ? color : Colors.grey.shade800,
+                    ),
+                  ),
+                );
+              }).toList(),
+            );
+          }).toList(),
+        ),
+      ],
+    ),
+  );
+}
+
+Widget _buildNote(String text) {
+  return Padding(
+    padding: const EdgeInsets.symmetric(vertical: 3),
+    child: Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Icon(Icons.fiber_manual_record, size: 6, color: Colors.blue.shade700),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Text(
+            text,
+            style: TextStyle(
+              fontSize: 12,
+              color: Colors.blue.shade700,
+            ),
+          ),
+        ),
+      ],
+    ),
+  );
+}
+
+// ✅ REGISTER EMPLOYEES: Complete fix with proper data structure
+Future<void> _registerMissingEmployees() async {
+  if (_newEmployees.isEmpty) {
+    debugPrint('📝 No new employees to register');
+    return;
+  }
+
+  Set<String> processedEmails = {};
+  List<Map<String, dynamic>> uniqueNewEmployees = [];
+
+  for (var row in _newEmployees) {
+    String email = row['Employee Email']?.toString().trim() ?? '';
+    if (email.isNotEmpty && !processedEmails.contains(email)) {
+      uniqueNewEmployees.add(row);
+      processedEmails.add(email);
+    }
+  }
+
+  debugPrint('📝 Registering ${uniqueNewEmployees.length} new employees via Provider...');
+  
+  // Get provider instance once
+  final customerProvider = Provider.of<CustomerProvider>(context, listen: false);
+  
+  int successCount = 0;
+  int failCount = 0;
+
+  for (var empData in uniqueNewEmployees) {
+    try {
+      // ✅ FIX: Create properly structured Map with ALL required fields
+      final customerData = {
+        'name': empData['Employee Name']?.toString().trim() ?? '',
+        'email': empData['Employee Email']?.toString().trim() ?? '',
+        'phoneNumber': empData['Employee Phone']?.toString().trim() ?? '',
+        'companyName': empData['Company Name']?.toString().trim(),
+        'department': empData['Department']?.toString().trim(),
+        'employeeId': empData['Employee ID']?.toString().trim(),
+        'status': empData['Status']?.toString().trim() ?? 'Active',
+        'role': 'customer', // ✅ CRITICAL: Must include role
+        'address': empData['Address']?.toString().trim(),
+      };
+      
+      debugPrint('   → Creating employee: ${customerData['email']}');
+      
+      // ✅ FIX: Await the addCustomer call properly
+      final success = await customerProvider.addCustomer(customerData);
+      
+      if (success) {
+        successCount++;
+        if (mounted) {
+          setState(() => _newEmployeesCreatedCount++);
+        }
+        debugPrint('   ✅ Created: ${customerData['email']}');
+      } else {
+        failCount++;
+        debugPrint('   ❌ Failed: ${customerData['email']} (returned false)');
+      }
+      
+      // Small delay to prevent overwhelming Firestore
+      await Future.delayed(const Duration(milliseconds: 100));
+      
+    } catch (e) {
+      failCount++;
+      debugPrint('❌ Exception creating employee ${empData['Employee Email']}: $e');
+      
+      // Continue with next employee even if one fails
+      continue;
+    }
+  }
+  
+  debugPrint('📊 Employee Registration Summary:');
+  debugPrint('   ✅ Success: $successCount');
+  debugPrint('   ❌ Failed: $failCount');
+  debugPrint('   📋 Total: ${uniqueNewEmployees.length}');
+  
+  // ✅ CRITICAL FIX: Force provider to refresh its customer list after adding all employees
+  debugPrint('🔄 Force refreshing customer list from Firestore...');
+  
+  try {
+    await customerProvider.fetchCustomers();
+    debugPrint('✅ Customer list refreshed - ${customerProvider.customers.length} total customers in provider');
+  } catch (e) {
+    debugPrint('❌ Error refreshing customer list: $e');
+  }
+}
+
+// ✅ NEW: Register employees with proper duplicate checking
+Future<void> _registerMissingEmployeesWithDuplicateCheck() async {
+  if (_newEmployees.isEmpty) {
+    debugPrint('📝 No new employees to register');
+    return;
+  }
+
+  Set<String> processedEmails = {};
+  List<Map<String, dynamic>> uniqueNewEmployees = [];
+
+  // ✅ STEP 1: Remove duplicates within the CSV itself
+  for (var row in _newEmployees) {
+    String email = row['Employee Email']?.toString().trim().toLowerCase() ?? '';
+    if (email.isNotEmpty && !processedEmails.contains(email)) {
+      uniqueNewEmployees.add(row);
+      processedEmails.add(email);
+    }
+  }
+
+  debugPrint('📝 Registering ${uniqueNewEmployees.length} unique new employees...');
+  
+  // Get provider instance
+  final customerProvider = Provider.of<CustomerProvider>(context, listen: false);
+  
+  int successCount = 0;
+  int failCount = 0;
+  int skippedCount = 0;
+
+  for (var empData in uniqueNewEmployees) {
+    try {
+      String email = empData['Employee Email']?.toString().trim().toLowerCase() ?? '';
+      
+      // ✅ STEP 2: Check if employee already exists in database
+      debugPrint('   🔍 Checking if employee exists: $email');
+      
+      final existsResponse = await _rosterRepository.checkEmployeeExists(email: email);
+      bool employeeExists = existsResponse['exists'] ?? false;
+      
+      if (employeeExists) {
+        debugPrint('   ⚠️ Employee already exists, skipping: $email');
+        skippedCount++;
+        continue;
+      }
+      
+      // ✅ STEP 3: Create employee data for backend API
+      final customerData = {
+        'name': empData['Employee Name']?.toString().trim() ?? '',
+        'email': email,
+        'phoneNumber': empData['Employee Phone']?.toString().trim() ?? '',
+        'companyName': empData['Company Name']?.toString().trim(),
+        'department': empData['Department']?.toString().trim(),
+        'employeeId': empData['Employee ID']?.toString().trim(),
+        'status': empData['Status']?.toString().trim() ?? 'Active',
+        'role': 'customer', // ✅ Set role as customer
+        'address': empData['Address']?.toString().trim(),
+      };
+      
+      debugPrint('   → Creating new employee: $email');
+      
+      // ✅ STEP 4: Create employee via provider (which handles admin authentication)
+      final success = await customerProvider.addCustomer(customerData);
+      
+      if (success) {
+        successCount++;
+        if (mounted) {
+          setState(() => _newEmployeesCreatedCount++);
+        }
+        debugPrint('   ✅ Created: $email');
+      } else {
+        failCount++;
+        debugPrint('   ❌ Failed: $email (provider returned false)');
+      }
+      
+      // Small delay to prevent overwhelming the server
+      await Future.delayed(const Duration(milliseconds: 200));
+      
+    } catch (e) {
+      failCount++;
+      debugPrint('❌ Exception creating employee ${empData['Employee Email']}: $e');
+      continue;
+    }
+  }
+  
+  debugPrint('📊 Employee Registration Summary:');
+  debugPrint('   ✅ Success: $successCount');
+  debugPrint('   ⚠️ Skipped (already exists): $skippedCount');
+  debugPrint('   ❌ Failed: $failCount');
+  debugPrint('   📋 Total processed: ${uniqueNewEmployees.length}');
+}
+
+
+Future<void> _importRostersToDatabase() async {
+  // ✅ CRITICAL FIX: Save current user session BEFORE registering employees
+  final prefs = await SharedPreferences.getInstance();
+  final userDataString = prefs.getString('user_data');
+  if (userDataString == null) throw Exception('User data not found');
+  final userData = jsonDecode(userDataString);
+  final currentUserEmail = userData['email'];
+  final currentUserUid = userData['id'];
+  
+  debugPrint('🔐 Current user before import: $currentUserEmail ($currentUserUid)');
+  
+  debugPrint('🚀 IMPORT STAGE STARTING:');
+  debugPrint('   📊 Total rosters to import: ${_previewData.length}');
+  debugPrint('   ✅ All rosters are guaranteed unique (duplicates filtered during validation)');
+  debugPrint('   👥 New employees to register: ${_newEmployees.length}');
+  
+  // ✅ STEP 1: Register new employees (with duplicate prevention)
+  // Note: This happens on the backend now, so no auth state changes occur
+  await _registerMissingEmployeesWithDuplicateCheck();
+  
+  // ✅ Verify client session is still active
+  final verifyPrefs = await SharedPreferences.getInstance();
+  final verifyDataString = verifyPrefs.getString('user_data');
+  final verifyData = verifyDataString != null ? jsonDecode(verifyDataString) : null;
+  if (verifyData == null || verifyData['id'] != currentUserUid) {
+    debugPrint('❌ CRITICAL: User session changed during import!');
+    debugPrint('   Expected: $currentUserEmail ($currentUserUid)');
+    debugPrint('   Current: ${verifyData?['email']} (${verifyData?['id']})');
+    
+    if (mounted) {
+      setState(() {
+        _isProcessing = false;
+        _failedCount = _totalCount;
+      });
+      
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Session error during import. Please try again.'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+    return;
+  }
+  
+  debugPrint('✅ Client session maintained: $currentUserEmail');
+
+  // ✅ No need to track duplicates - already filtered during validation
+  int processedSuccessfully = 0;
+
+  // ✅ STEP 2: Import Rosters (all are guaranteed unique from validation stage)
+  for (int i = 0; i < _previewData.length; i++) {
+    try {
+      Map<String, dynamic> rosterData = _previewData[i];
+      
+      String employeeEmail = rosterData['Employee Email']?.toString().trim() ?? '';
+      String employeeName = rosterData['Employee Name']?.toString().trim() ?? '';
+      String fromDate = rosterData['From Date']?.toString().trim() ?? '';
+      String startTime = rosterData['Start Time']?.toString().trim() ?? '';
+      String rosterType = rosterData['Roster Type']?.toString().toLowerCase().trim() ?? '';
+      
+      debugPrint('📝 Creating roster for: $employeeName ($employeeEmail)');
+      
+      // ✅ DEBUG: Check user authentication status before roster creation
+      debugPrint('🔍 User before roster creation: $currentUserEmail ($currentUserUid)');
+      
+      final token = prefs.getString('jwt_token');
+      if (token == null || token.isEmpty) {
+        debugPrint('❌ CRITICAL: No user signed in during roster creation!');
+        
+        if (mounted) {
+          setState(() {
+            _failedCount++;
+            _importErrors.add('Row ${i + 2}: Authentication lost - no user signed in');
+          });
+        }
+        continue;
+      }
+      
+      // ✅ DEBUG: Test getting Firebase token manually
+      try {
+        // Token already retrieved above
+        if (token != null) {
+          debugPrint('🔑 Firebase token available: ${token.substring(0, 20)}...');
+          debugPrint('🔑 Token length: ${token.length}');
+        } else {
+          debugPrint('❌ Firebase token is null');
+        }
+      } catch (e) {
+        debugPrint('❌ CRITICAL: Cannot get Firebase token: $e');
+        
+        if (mounted) {
+          setState(() {
+            _failedCount++;
+            _importErrors.add('Row ${i + 2}: Cannot get authentication token - $e');
+          });
+        }
+        continue;
+      }
+      
+      // ✅ NO DUPLICATE CHECK NEEDED: Already filtered during validation stage
+      // All rosters in _previewData are guaranteed to be unique and non-duplicate
+      
+      // Parse dates and times
+      DateTime fromDateParsed = DateTime.parse(fromDate);
+      DateTime toDate = DateTime.parse(rosterData['To Date']?.toString() ?? '');
+      
+      List<String> startTimeParts = startTime.split(':');
+      List<String> endTimeParts = (rosterData['End Time']?.toString() ?? '09:00').split(':');
+      
+      TimeOfDay fromTime = TimeOfDay(
+        hour: int.parse(startTimeParts[0]),
+        minute: int.parse(startTimeParts[1]),
+      );
+      TimeOfDay toTime = TimeOfDay(
+        hour: int.parse(endTimeParts[0]),
+        minute: int.parse(endTimeParts[1]),
+      );
+      
+      List<String> weekdays = (rosterData['Weekdays']?.toString() ?? '')
+          .split(',')
+          .map((e) => e.trim())
+          .toList();
+      
+      String loginPickupAddress = rosterData['Login Pickup Address']?.toString() ?? '';
+      String logoutDropAddress = rosterData['Logout Drop Address']?.toString() ?? '';
+      String officeLocationAddress = rosterData['Office Location']?.toString() ?? '';
+      
+      // ✅ FIX: Build complete employee data structure
+      Map<String, dynamic> employeeData = {
+        'name': employeeName,
+        'email': employeeEmail, // ✅ CRITICAL: This ensures roster is tied to employee
+        'phone': rosterData['Employee Phone']?.toString() ?? '',
+        'alternativePhone': rosterData['Alternative Phone']?.toString(),
+        'companyName': rosterData['Company Name']?.toString() ?? '',
+        'employeeId': rosterData['Employee ID']?.toString(),
+        'department': rosterData['Department']?.toString() ?? '',
+        'designation': rosterData['Designation']?.toString(),
+        'status': rosterData['Status']?.toString() ?? 'Active',
+        'emergencyContactName': rosterData['Emergency Contact Name']?.toString(),
+        'emergencyContactPhone': rosterData['Emergency Contact Phone']?.toString(),
+      };
+      
+      debugPrint('📧 Employee data for roster: $employeeName - $employeeEmail');
+      
+      // ✅ FIX: Validate required fields before creating roster
+      if (officeLocationAddress.isEmpty) {
+        throw Exception('Office location is required');
+      }
+      
+      if ((rosterType == 'login' || rosterType == 'both') && loginPickupAddress.isEmpty) {
+        throw Exception('Login pickup address is required for $rosterType roster');
+      }
+      
+      if ((rosterType == 'logout' || rosterType == 'both') && logoutDropAddress.isEmpty) {
+        throw Exception('Logout drop address is required for $rosterType roster');
+      }
+      
+      // ✅ FIX: Ensure employee email is not empty
+      if (employeeEmail.isEmpty) {
+        throw Exception('Employee email is required');
+      }
+
+      debugPrint('📤 Creating roster with addresses:');
+      debugPrint('   Office: $officeLocationAddress');
+      debugPrint('   Pickup: $loginPickupAddress');
+      debugPrint('   Drop: $logoutDropAddress');
+      
+      // Create the roster
+      final result = await _rosterRepository.createRoster(
+        rosterType: rosterType,
+        officeLocation: officeLocationAddress,
+        officeLocationCoordinates: null, // Backend will geocode
+        weekdays: weekdays,
+        fromDate: fromDateParsed,
+        toDate: toDate,
+        fromTime: fromTime,
+        toTime: toTime,
+        loginPickupLocation: null, // Backend will geocode
+        loginPickupAddress: loginPickupAddress,
+        logoutDropLocation: null, // Backend will geocode
+        logoutDropAddress: logoutDropAddress,
+        employeeData: employeeData, // ✅ CRITICAL: Pass employee data
+      );
+
+      if (result['success'] == true) {
+        processedSuccessfully++;
+        debugPrint('✅ Roster created for: $employeeName');
+        
+        if (mounted) {
+          setState(() {
+            _importedCount++;
+          });
+        }
+      } else {
+        // ✅ FIX: Better error message handling
+        String errorMsg = result['message'] ?? 'Unknown error';
+        
+        // Check for specific error types
+        if (errorMsg.contains('geocode') || errorMsg.contains('location')) {
+          errorMsg = 'Could not find location address. Please verify the address is correct.';
+        } else if (errorMsg.contains('duplicate')) {
+          errorMsg = 'Duplicate roster entry';
+        } else if (errorMsg.contains('employee')) {
+          errorMsg = 'Employee data issue: $errorMsg';
+        }
+        
+        debugPrint('❌ Failed to create roster for $employeeName: $errorMsg');
+        
+        if (mounted) {
+          setState(() {
+            _failedCount++;
+            _importErrors.add('Row ${i + 2}: $errorMsg');
+          });
+        }
+      }
+      
+      // Small delay between creates
+      await Future.delayed(const Duration(milliseconds: 100));
+      
+    } catch (e) {
+      debugPrint('❌ Exception creating roster: $e');
+      
+      if (mounted) {
+        setState(() {
+          _failedCount++;
+          _importErrors.add('Row ${i + 2}: Error - ${e.toString()}');
+        });
+      }
+    }
+  }
+  
+  // Show summary
+  debugPrint('📊 Import Summary:');
+  debugPrint('   ✅ Imported: $processedSuccessfully');
+  debugPrint('   ❌ Failed: $_failedCount');
+  debugPrint('   📝 Note: Duplicates were already filtered during validation stage');
+  
+  // ✅ Verify final session state
+  final finalPrefs = await SharedPreferences.getInstance();
+  final finalDataString = finalPrefs.getString('user_data');
+  final finalData = finalDataString != null ? jsonDecode(finalDataString) : null;
+  debugPrint('✅ Import complete - Final session check:');
+  debugPrint('   User: ${finalData?['email']}');
+  debugPrint('   UID: ${finalData?['id']}');
+  debugPrint('   Expected: $currentUserEmail ($currentUserUid)');
+  
+  if (finalData?['id'] != currentUserUid) {
+    debugPrint('⚠️ WARNING: User session changed during import!');
+    debugPrint('   This should not happen. Backend user creation should not affect client session.');
+  } else {
+    debugPrint('✅ Client session maintained successfully throughout import process');
+  }
+  
+  if (mounted) {
+    setState(() => _isProcessing = false);
+  }
+}
+
+}

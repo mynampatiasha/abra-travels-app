@@ -1,0 +1,47 @@
+{
+  "project_info": {
+    "project_number": "847585068690",
+    "firebase_url": "https://abrafleet-cec94-default-rtdb.firebaseio.com",
+    "project_id": "abrafleet-cec94",
+    "storage_bucket": "abrafleet-cec94.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:847585068690:android:c3e572ad3a9a6cf3d4884b",
+        "android_client_info": {
+          "package_name": "com.abrafleet.management"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "847585068690-2deb7fu7c0r3f8girmnati4ublmtjcnd.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCOLT6uzNQ6KQIpbONoYmCY8ATAsyabkUQ"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "847585068690-2deb7fu7c0r3f8girmnati4ublmtjcnd.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "847585068690-grde09iv76rnuvpqqqr1naaherdjd02r.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.example.abraFleet"
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

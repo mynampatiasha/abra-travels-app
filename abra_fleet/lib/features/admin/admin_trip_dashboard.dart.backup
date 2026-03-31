@@ -1,0 +1,1462 @@
+// lib/screens/admin/admin_trip_dashboard.dart
+// ============================================================================
+// ADMIN TRIP DASHBOARD - FIXED VERSION
+// ============================================================================
+// ✅ FIXED: Collapsible filter section with button
+// ✅ FIXED: Country/State/City dropdowns working correctly
+// ✅ FIXED: Generate Report button appears after trip list
+// ============================================================================
+
+import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
+import 'dart:convert';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:intl/intl.dart';
+import 'package:abra_fleet/app/config/api_config.dart';
+import 'package:abra_fleet/features/admin/admin_trip_details.dart';
+import 'package:abra_fleet/features/admin/admin_report_generator.dart';
+
+class AdminTripDashboard extends StatefulWidget {
+  const AdminTripDashboard({super.key});
+  static const String routeName = '/admin/trip-dashboard';
+
+  @override
+  State<AdminTripDashboard> createState() => _AdminTripDashboardState();
+}
+
+class _AdminTripDashboardState extends State<AdminTripDashboard> {
+  // ─── State ──────────────────────────────────────────────────────────────────
+  Map<String, dynamic> _summary = {};
+  List<Map<String, dynamic>> _trips = [];
+
+  String _selectedStatus = 'all';
+
+  final TextEditingController _searchController = TextEditingController();
+  final TextEditingController _manualLocationController = TextEditingController();
+  final TextEditingController _domainController = TextEditingController();
+
+  DateTime? _fromDate;
+  DateTime? _toDate;
+
+  // Location cascade state
+  String? _selectedCountry;
+  String? _selectedState;
+  String? _selectedCity;
+
+  // Dropdown option lists (dynamic from backend)
+  List<String> _countryOptions = [];
+  List<String> _stateOptions = [];
+  List<String> _cityOptions = [];
+
+  bool _isLoadingSummary = true;
+  bool _isLoadingTrips = true;
+  bool _isLoadingLocations = false;
+  bool _isGeneratingReport = false;
+  String? _errorMessage;
+
+  int _currentPage = 1;
+  final int _itemsPerPage = 20;
+  int _totalPages = 1;
+
+  // ✅ NEW: Filter expansion state
+  bool _isFiltersExpanded = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadDashboardSummary();
+    _loadTripList();
+    _loadCountryOptions();
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    _manualLocationController.dispose();
+    _domainController.dispose();  // ✅ ADD THIS
+    super.dispose();
+  }
+
+  // ─── Token ───────────────────────────────────────────────────────────────
+  Future<String?> _getToken() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      return prefs.getString('jwt_token');
+    } catch (e) {
+      return null;
+    }
+  }
+
+  // ─── Location Cascade ────────────────────────────────────────────────────
+
+Future<void> _loadCountryOptions() async {
+  try {
+    setState(() => _isLoadingLocations = true);
+    final token = await _getToken();
+    if (token == null) {
+      debugPrint('❌ No token for loading countries');
+      return;
+    }
+
+    final url = '${ApiConfig.baseUrl}/api/admin/trips/locations/countries';
+    debugPrint('🌍 Fetching countries from: $url');
+
+    final response = await http.get(
+      Uri.parse(url),
+      headers: {'Authorization': 'Bearer $token'},
+    );
+
+    debugPrint('📡 Countries response status: ${response.statusCode}');
+    debugPrint('📡 Countries response body: ${response.body}');
+
+    if (response.statusCode == 200) {
+      final data = json.decode(response.body);
+      if (data['success'] == true) {
+        final countries = List<String>.from(data['data'] ?? []);
+        setState(() {
+          _countryOptions = countries;
+        });
+        debugPrint('✅ Loaded ${_countryOptions.length} countries: $_countryOptions');
+      } else {
+        debugPrint('❌ API returned success=false: ${data['message']}');
+      }
+    } else {
+      debugPrint('❌ Failed to load countries: ${response.statusCode}');
+    }
+  } catch (e, stackTrace) {
+    debugPrint('❌ Error loading countries: $e');
+    debugPrint('Stack trace: $stackTrace');
+  } finally {
+    setState(() => _isLoadingLocations = false);
+  }
+}
+
+  Future<void> _loadStateOptions(String country) async {
+    try {
+      setState(() {
+        _isLoadingLocations = true;
+        _stateOptions = [];
+        _cityOptions = [];
+        _selectedState = null;
+        _selectedCity = null;
+      });
+      final token = await _getToken();
+      if (token == null) return;
+
+      final response = await http.get(
+        Uri.parse(
+            '${ApiConfig.baseUrl}/api/admin/trips/locations/states?country=${Uri.encodeComponent(country)}'),
+        headers: {'Authorization': 'Bearer $token'},
+      );
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        if (data['success'] == true) {
+          setState(() {
+            _stateOptions = List<String>.from(data['data'] ?? []);
+          });
+          debugPrint('✅ Loaded ${_stateOptions.length} states for $country');
+        }
+      }
+    } catch (e) {
+      debugPrint('Error loading states: $e');
+    } finally {
+      setState(() => _isLoadingLocations = false);
+    }
+  }
+
+  Future<void> _loadCityOptions(String country, String state) async {
+    try {
+      setState(() {
+        _isLoadingLocations = true;
+        _cityOptions = [];
+        _selectedCity = null;
+      });
+      final token = await _getToken();
+      if (token == null) return;
+
+      final response = await http.get(
+        Uri.parse(
+            '${ApiConfig.baseUrl}/api/admin/trips/locations/cities?country=${Uri.encodeComponent(country)}&state=${Uri.encodeComponent(state)}'),
+        headers: {'Authorization': 'Bearer $token'},
+      );
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        if (data['success'] == true) {
+          setState(() {
+            _cityOptions = List<String>.from(data['data'] ?? []);
+          });
+          debugPrint('✅ Loaded ${_cityOptions.length} cities for $state, $country');
+        }
+      }
+    } catch (e) {
+      debugPrint('Error loading cities: $e');
+    } finally {
+      setState(() => _isLoadingLocations = false);
+    }
+  }
+
+  // ─── API ──────────────────────────────────────────────────────────────────
+
+  Future<void> _loadDashboardSummary() async {
+    try {
+      setState(() {
+        _isLoadingSummary = true;
+        _errorMessage = null;
+      });
+      final token = await _getToken();
+      if (token == null) throw Exception('No auth token');
+
+      final params = <String, String>{};
+      if (_fromDate != null) params['fromDate'] = DateFormat('yyyy-MM-dd').format(_fromDate!);
+      if (_toDate != null) params['toDate'] = DateFormat('yyyy-MM-dd').format(_toDate!);
+
+      final uri = Uri.parse('${ApiConfig.baseUrl}/api/admin/trips/dashboard')
+          .replace(queryParameters: params.isNotEmpty ? params : null);
+
+      final response = await http.get(
+        uri,
+        headers: {'Authorization': 'Bearer $token', 'Content-Type': 'application/json'},
+      );
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        if (data['success'] == true) {
+          setState(() {
+            _summary = data['data'] as Map<String, dynamic>;
+            _isLoadingSummary = false;
+          });
+        } else {
+          throw Exception(data['message']);
+        }
+      } else {
+        throw Exception('HTTP ${response.statusCode}');
+      }
+    } catch (e) {
+      setState(() {
+        _errorMessage = 'Failed to load dashboard: $e';
+        _isLoadingSummary = false;
+      });
+    }
+  }
+
+ Future<void> _loadTripList() async {
+  try {
+    setState(() => _isLoadingTrips = true);
+    final token = await _getToken();
+    if (token == null) throw Exception('No auth token');
+
+    final params = <String, String>{
+      'status': _selectedStatus,
+      'page': _currentPage.toString(),
+      'limit': _itemsPerPage.toString(),
+    };
+
+    if (_fromDate != null) params['fromDate'] = DateFormat('yyyy-MM-dd').format(_fromDate!);
+    if (_toDate != null) params['toDate'] = DateFormat('yyyy-MM-dd').format(_toDate!);
+    if (_searchController.text.trim().isNotEmpty) params['search'] = _searchController.text.trim();
+
+    // Location filters
+    if (_selectedCountry != null && _selectedCountry!.isNotEmpty) params['country'] = _selectedCountry!;
+    if (_selectedState != null && _selectedState!.isNotEmpty) params['state'] = _selectedState!;
+    if (_selectedCity != null && _selectedCity!.isNotEmpty) params['city'] = _selectedCity!;
+
+    // Manual location text input
+    if (_manualLocationController.text.trim().isNotEmpty) {
+      params['locationSearch'] = _manualLocationController.text.trim();
+    }
+
+    // ✅ NEW: Domain filter
+    if (_domainController.text.trim().isNotEmpty) {
+      String domain = _domainController.text.trim();
+      // Remove @ if user added it
+      if (domain.startsWith('@')) {
+        domain = domain.substring(1);
+      }
+      params['domain'] = domain;
+    }
+
+    final uri = Uri.parse('${ApiConfig.baseUrl}/api/admin/trips/list')
+        .replace(queryParameters: params);
+
+    debugPrint('🔍 Loading trips with params: $params');
+
+    final response = await http.get(
+      uri,
+      headers: {'Authorization': 'Bearer $token', 'Content-Type': 'application/json'},
+    );
+
+    if (response.statusCode == 200) {
+      final data = json.decode(response.body);
+      if (data['success'] == true) {
+        final trips = data['data']['trips'] as List<dynamic>;
+        final pagination = data['data']['pagination'] as Map<String, dynamic>;
+        setState(() {
+          _trips = trips.cast<Map<String, dynamic>>();
+          _totalPages = pagination['totalPages'] ?? 1;
+          _isLoadingTrips = false;
+        });
+        debugPrint('✅ Loaded ${_trips.length} trips');
+      } else {
+        throw Exception(data['message']);
+      }
+    } else {
+      throw Exception('HTTP ${response.statusCode}');
+    }
+  } catch (e) {
+    debugPrint('Error loading trips: $e');
+    setState(() => _isLoadingTrips = false);
+  }
+}
+
+  Future<void> _refreshDashboard() async {
+    await Future.wait([_loadDashboardSummary(), _loadTripList()]);
+  }
+
+  // ─── Report Generation ────────────────────────────────────────────────────
+
+  Future<void> _generateReport() async {
+    if (_trips.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No trips to generate report for'), backgroundColor: Colors.orange),
+      );
+      return;
+    }
+
+    setState(() => _isGeneratingReport = true);
+
+    try {
+      final token = await _getToken();
+      if (token == null) throw Exception('No auth token');
+
+      // Build filter params for report
+      final params = <String, String>{'status': _selectedStatus};
+      if (_fromDate != null) params['fromDate'] = DateFormat('yyyy-MM-dd').format(_fromDate!);
+      if (_toDate != null) params['toDate'] = DateFormat('yyyy-MM-dd').format(_toDate!);
+      if (_selectedCountry != null && _selectedCountry!.isNotEmpty) params['country'] = _selectedCountry!;
+      if (_selectedState != null && _selectedState!.isNotEmpty) params['state'] = _selectedState!;
+      if (_selectedCity != null && _selectedCity!.isNotEmpty) params['city'] = _selectedCity!;
+      if (_searchController.text.trim().isNotEmpty) params['search'] = _searchController.text.trim();
+      if (_manualLocationController.text.trim().isNotEmpty) params['locationSearch'] = _manualLocationController.text.trim();
+
+      final uri = Uri.parse('${ApiConfig.baseUrl}/api/admin/trips/bulk-report')
+          .replace(queryParameters: params);
+
+      debugPrint('📊 Generating report with params: $params');
+
+      final response = await http.get(
+        uri,
+        headers: {'Authorization': 'Bearer $token', 'Content-Type': 'application/json'},
+      );
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        if (data['success'] == true) {
+          // Navigate to report generator which handles PDF
+          if (mounted) {
+            await Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => AdminReportGenerator(
+                  reportData: data['data'] as Map<String, dynamic>,
+                  filterSummary: _buildFilterSummary(),
+                ),
+              ),
+            );
+          }
+        } else {
+          throw Exception(data['message']);
+        }
+      } else {
+        throw Exception('HTTP ${response.statusCode}');
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Report failed: $e'), backgroundColor: Colors.red),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isGeneratingReport = false);
+    }
+  }
+
+  String _buildFilterSummary() {
+    final parts = <String>[];
+    if (_fromDate != null && _toDate != null) {
+      parts.add('${DateFormat('MMM dd').format(_fromDate!)} - ${DateFormat('MMM dd yyyy').format(_toDate!)}');
+    } else if (_fromDate != null) {
+      parts.add('From ${DateFormat('MMM dd yyyy').format(_fromDate!)}');
+    } else if (_toDate != null) {
+      parts.add('Up to ${DateFormat('MMM dd yyyy').format(_toDate!)}');
+    }
+    if (_selectedCountry != null) parts.add(_selectedCountry!);
+    if (_selectedState != null) parts.add(_selectedState!);
+    if (_selectedCity != null) parts.add(_selectedCity!);
+    if (_searchController.text.isNotEmpty) parts.add('"${_searchController.text}"');
+    return parts.isEmpty ? 'All Trips' : parts.join(', ');
+  }
+
+  String _extractTripId(dynamic id) {
+    if (id == null) return '';
+    if (id is Map) return (id['\$oid'] ?? id['oid'] ?? '').toString();
+    return id.toString();
+  }
+
+  bool get _hasActiveFilters =>
+      _fromDate != null ||
+      _toDate != null ||
+      (_selectedCountry != null && _selectedCountry!.isNotEmpty) ||
+      (_selectedState != null && _selectedState!.isNotEmpty) ||
+      (_selectedCity != null && _selectedCity!.isNotEmpty) ||
+      _manualLocationController.text.trim().isNotEmpty ||
+      _searchController.text.trim().isNotEmpty ||
+      _domainController.text.trim().isNotEmpty; 
+
+  void _clearAllFilters() {
+  setState(() {
+    _fromDate = null;
+    _toDate = null;
+    _selectedCountry = null;
+    _selectedState = null;
+    _selectedCity = null;
+    _stateOptions = [];
+    _cityOptions = [];
+    _searchController.clear();
+    _manualLocationController.clear();
+    _domainController.clear();  // ✅ ADD THIS
+    _currentPage = 1;
+  });
+  _refreshDashboard();
+}
+
+  // ─── Build ───────────────────────────────────────────────────────────────
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: const Color(0xFFF0F2F5),
+      appBar: _buildAppBar(),
+      body: RefreshIndicator(
+        onRefresh: _refreshDashboard,
+        child: _buildBody(),
+      ),
+    );
+  }
+
+  PreferredSizeWidget _buildAppBar() {
+    return AppBar(
+      backgroundColor: const Color(0xFF0D47A1),
+      foregroundColor: Colors.white,
+      elevation: 0,
+      title: const Text('Trip Management', style: TextStyle(fontWeight: FontWeight.bold)),
+      actions: [
+        IconButton(
+          icon: const Icon(Icons.refresh),
+          onPressed: _refreshDashboard,
+          tooltip: 'Refresh',
+        ),
+      ],
+    );
+  }
+
+  Widget _buildBody() {
+    if (_isLoadingSummary) {
+      return const Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            CircularProgressIndicator(),
+            SizedBox(height: 16),
+            Text('Loading dashboard...'),
+          ],
+        ),
+      );
+    }
+
+    if (_errorMessage != null) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Icon(Icons.error_outline, size: 64, color: Colors.red),
+            const SizedBox(height: 16),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 32),
+              child: Text(_errorMessage!, textAlign: TextAlign.center),
+            ),
+            const SizedBox(height: 16),
+            ElevatedButton(onPressed: _refreshDashboard, child: const Text('Retry')),
+          ],
+        ),
+      );
+    }
+
+    return SingleChildScrollView(
+      physics: const AlwaysScrollableScrollPhysics(),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _buildStatusCards(),
+          _buildSummaryStats(),
+          const SizedBox(height: 8),
+          
+          // ✅ NEW: Collapsible filter button
+          _buildFilterToggleButton(),
+          
+          // ✅ NEW: Collapsible filter panel
+          if (_isFiltersExpanded) _buildIntegratedFilterBar(),
+          
+          if (_hasActiveFilters) _buildActiveFiltersBanner(),
+          _buildTripList(),
+        ],
+      ),
+    );
+  }
+
+  // ✅ NEW: Filter toggle button
+  Widget _buildFilterToggleButton() {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+      child: ElevatedButton.icon(
+        onPressed: () {
+          setState(() {
+            _isFiltersExpanded = !_isFiltersExpanded;
+          });
+        },
+        icon: Icon(
+          _isFiltersExpanded ? Icons.filter_list_off : Icons.filter_list,
+          size: 20,
+        ),
+        label: Text(_isFiltersExpanded ? 'Hide Filters' : 'Show Filters'),
+        style: ElevatedButton.styleFrom(
+          backgroundColor: _isFiltersExpanded ? const Color(0xFF0D47A1) : Colors.grey.shade100,
+          foregroundColor: _isFiltersExpanded ? Colors.white : Colors.grey.shade700,
+          minimumSize: const Size(double.infinity, 48),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          elevation: _isFiltersExpanded ? 2 : 0,
+        ),
+      ),
+    );
+  }
+
+  // ─── Status Cards ────────────────────────────────────────────────────────
+
+  Widget _buildStatusCards() {
+    return Padding(
+      padding: const EdgeInsets.all(16),
+      child: LayoutBuilder(builder: (context, constraints) {
+        final crossAxisCount = constraints.maxWidth > 600 ? 4 : 2;
+        return GridView.count(
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          crossAxisCount: crossAxisCount,
+          mainAxisSpacing: 12,
+          crossAxisSpacing: 12,
+          childAspectRatio: 1.3,
+          children: [
+            _buildStatusCard('Ongoing', _summary['ongoing'] ?? 0, Icons.directions_car, Colors.green, 'ongoing'),
+            _buildStatusCard('Scheduled', _summary['scheduled'] ?? 0, Icons.schedule, Colors.blue, 'scheduled'),
+            _buildStatusCard('Completed', _summary['completed'] ?? 0, Icons.check_circle, Colors.grey, 'completed'),
+            _buildStatusCard('Cancelled', _summary['cancelled'] ?? 0, Icons.cancel, Colors.red, 'cancelled'),
+          ],
+        );
+      }),
+    );
+  }
+
+  Widget _buildStatusCard(String title, int count, IconData icon, Color color, String status) {
+    final isSelected = _selectedStatus == status;
+    return InkWell(
+      onTap: () {
+        setState(() {
+          _selectedStatus = status;
+          _currentPage = 1;
+        });
+        _loadTripList();
+      },
+      borderRadius: BorderRadius.circular(12),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: isSelected ? color : Colors.grey.shade300, width: isSelected ? 2 : 1),
+          boxShadow: [
+            BoxShadow(
+              color: isSelected ? color.withOpacity(0.25) : Colors.black.withOpacity(0.05),
+              blurRadius: isSelected ? 8 : 4,
+              offset: const Offset(0, 3),
+            ),
+          ],
+        ),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(icon, size: 32, color: isSelected ? color : color.withOpacity(0.6)),
+            const SizedBox(height: 6),
+            Text('$count',
+                style: TextStyle(fontSize: 26, fontWeight: FontWeight.bold,
+                    color: isSelected ? color : color.withOpacity(0.7))),
+            Text(title,
+                style: TextStyle(fontSize: 12,
+                    fontWeight: isSelected ? FontWeight.w700 : FontWeight.normal,
+                    color: isSelected ? color : Colors.grey.shade600)),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSummaryStats() {
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 16),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 4, offset: const Offset(0, 2))],
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceAround,
+        children: [
+          _buildStatItem(Icons.directions_car, 'Vehicles', (_summary['totalVehicles'] ?? 0).toString(), Colors.blue),
+          Container(width: 1, height: 40, color: Colors.grey.shade300),
+          _buildStatItem(Icons.person, 'Drivers', (_summary['totalDrivers'] ?? 0).toString(), Colors.orange),
+          Container(width: 1, height: 40, color: Colors.grey.shade300),
+          _buildStatItem(Icons.people, 'Customers', (_summary['totalCustomers'] ?? 0).toString(), Colors.purple),
+          if ((_summary['delayed'] ?? 0) > 0) ...[
+            Container(width: 1, height: 40, color: Colors.grey.shade300),
+            _buildStatItem(Icons.warning, 'Delayed', (_summary['delayed'] ?? 0).toString(), Colors.red),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildStatItem(IconData icon, String label, String value, Color color) {
+    return Column(children: [
+      Icon(icon, size: 18, color: color),
+      const SizedBox(height: 4),
+      Text(value, style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: color)),
+      Text(label, style: TextStyle(fontSize: 11, color: Colors.grey.shade600)),
+    ]);
+  }
+
+  // ─── Integrated Filter Bar ────────────────────────────────────────────────
+
+  Widget _buildIntegratedFilterBar() {
+  return AnimatedContainer(
+    duration: const Duration(milliseconds: 300),
+    margin: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+    padding: const EdgeInsets.all(16),
+    decoration: BoxDecoration(
+      color: Colors.white,
+      borderRadius: BorderRadius.circular(14),
+      boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.06), blurRadius: 8, offset: const Offset(0, 3))],
+    ),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // ── Row 1: Search bar ──────────────────────────────────────────
+        TextField(
+          controller: _searchController,
+          decoration: InputDecoration(
+            hintText: 'Search trips (vehicle, driver, trip number)...',
+            hintStyle: TextStyle(color: Colors.grey.shade400, fontSize: 13),
+            prefixIcon: const Icon(Icons.search, size: 20),
+            suffixIcon: _searchController.text.isNotEmpty
+                ? IconButton(
+                    icon: const Icon(Icons.clear, size: 18),
+                    onPressed: () {
+                      _searchController.clear();
+                      setState(() => _currentPage = 1);
+                      _loadTripList();
+                    })
+                : null,
+            filled: true,
+            fillColor: Colors.grey.shade50,
+            contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(10),
+                borderSide: BorderSide(color: Colors.grey.shade300)),
+            enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(10),
+                borderSide: BorderSide(color: Colors.grey.shade300)),
+            focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(10),
+                borderSide: const BorderSide(color: Color(0xFF0D47A1), width: 1.5)),
+          ),
+          onSubmitted: (_) {
+            setState(() => _currentPage = 1);
+            _loadTripList();
+          },
+        ),
+
+        const SizedBox(height: 12),
+
+        // ── Row 2: Date Range ──────────────────────────────────────────
+        Row(children: [
+          Expanded(child: _buildDateButton('From Date', _fromDate, () => _pickDate(isFrom: true))),
+          const Padding(
+            padding: EdgeInsets.symmetric(horizontal: 8),
+            child: Text('→', style: TextStyle(color: Colors.grey, fontWeight: FontWeight.bold)),
+          ),
+          Expanded(child: _buildDateButton('To Date', _toDate, () => _pickDate(isFrom: false))),
+        ]),
+
+        const SizedBox(height: 12),
+        
+        // ✅ NEW: Company/Domain Filter
+        TextField(
+          controller: _domainController,
+          decoration: InputDecoration(
+            labelText: 'Filter by Company Domain',
+            hintText: 'e.g., infosys.com or @infosys.com',
+            hintStyle: TextStyle(color: Colors.grey.shade400, fontSize: 13),
+            prefixIcon: const Icon(Icons.business, size: 20),
+            suffixIcon: _domainController.text.isNotEmpty
+                ? IconButton(
+                    icon: const Icon(Icons.clear, size: 18),
+                    onPressed: () {
+                      _domainController.clear();
+                      setState(() => _currentPage = 1);
+                      _loadTripList();
+                    })
+                : null,
+            filled: true,
+            fillColor: Colors.purple.shade50,
+            contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(10),
+                borderSide: BorderSide(color: Colors.purple.shade300)),
+            enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(10),
+                borderSide: BorderSide(color: Colors.purple.shade300)),
+            focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(10),
+                borderSide: const BorderSide(color: Colors.purple, width: 1.5)),
+          ),
+          onSubmitted: (_) {
+            setState(() => _currentPage = 1);
+            _loadTripList();
+          },
+        ),
+
+        const SizedBox(height: 12),
+        _buildSectionDivider('Location Filter'),
+        const SizedBox(height: 10),
+
+        // ── Row 3: Country → State → City cascade ─────────────────────
+        Column(children: [
+          // Country dropdown
+          _buildLocationDropdown(
+            label: 'Select Country',
+            icon: Icons.public,
+            value: _selectedCountry,
+            items: _countryOptions,
+            isLoading: _isLoadingLocations && _countryOptions.isEmpty,
+            enabled: true,  // ✅ ALWAYS enabled
+            onChanged: (val) async {
+              debugPrint('🌍 Country selected: $val');
+              setState(() {
+                _selectedCountry = val;
+                _selectedState = null;
+                _selectedCity = null;
+                _stateOptions = [];
+                _cityOptions = [];
+                _currentPage = 1;
+              });
+              if (val != null && val.isNotEmpty) {
+                await _loadStateOptions(val);
+              }
+              _loadTripList();
+            },
+            onClear: () {
+              setState(() {
+                _selectedCountry = null;
+                _selectedState = null;
+                _selectedCity = null;
+                _stateOptions = [];
+                _cityOptions = [];
+                _currentPage = 1;
+              });
+              _loadTripList();
+            },
+          ),
+
+          const SizedBox(height: 8),
+
+          // State dropdown
+          _buildLocationDropdown(
+            label: 'Select State',
+            icon: Icons.location_city,
+            value: _selectedState,
+            items: _stateOptions,
+            isLoading: _isLoadingLocations && _selectedCountry != null && _stateOptions.isEmpty,
+            enabled: _selectedCountry != null && _selectedCountry!.isNotEmpty,
+            onChanged: (val) async {
+              debugPrint('📍 State selected: $val');
+              setState(() {
+                _selectedState = val;
+                _selectedCity = null;
+                _cityOptions = [];
+                _currentPage = 1;
+              });
+              if (val != null && val.isNotEmpty && _selectedCountry != null) {
+                await _loadCityOptions(_selectedCountry!, val);
+              }
+              _loadTripList();
+            },
+            onClear: () {
+              setState(() {
+                _selectedState = null;
+                _selectedCity = null;
+                _cityOptions = [];
+                _currentPage = 1;
+              });
+              _loadTripList();
+            },
+          ),
+
+          const SizedBox(height: 8),
+
+          // City dropdown
+          _buildLocationDropdown(
+            label: 'Select City',
+            icon: Icons.location_on,
+            value: _selectedCity,
+            items: _cityOptions,
+            isLoading: _isLoadingLocations && _selectedState != null && _cityOptions.isEmpty,
+            enabled: _selectedState != null && _selectedState!.isNotEmpty,
+            onChanged: (val) {
+              debugPrint('🏙️ City selected: $val');
+              setState(() {
+                _selectedCity = val;
+                _currentPage = 1;
+              });
+              _loadTripList();
+            },
+            onClear: () {
+              setState(() {
+                _selectedCity = null;
+                _currentPage = 1;
+              });
+              _loadTripList();
+            },
+          ),
+
+          const SizedBox(height: 10),
+          _buildSectionDivider('OR type location manually'),
+          const SizedBox(height: 10),
+
+          // Manual location text input
+          TextField(
+            controller: _manualLocationController,
+            decoration: InputDecoration(
+              labelText: 'Enter location (city / area / address)',
+              hintText: 'e.g., Bengaluru, MG Road, Koramangala',
+              prefixIcon: const Icon(Icons.edit_location_alt_outlined, size: 20),
+              filled: true,
+              fillColor: Colors.green.shade50,
+              contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(10),
+                  borderSide: BorderSide(color: Colors.green.shade300)),
+              enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(10),
+                  borderSide: BorderSide(color: Colors.green.shade300)),
+              focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(10),
+                  borderSide: const BorderSide(color: Colors.green, width: 1.5)),
+              suffixIcon: _manualLocationController.text.isNotEmpty
+                  ? IconButton(
+                      icon: const Icon(Icons.clear, size: 18),
+                      onPressed: () {
+                        _manualLocationController.clear();
+                        setState(() => _currentPage = 1);
+                        _loadTripList();
+                      })
+                  : null,
+            ),
+            onSubmitted: (_) {
+              setState(() => _currentPage = 1);
+              _loadTripList();
+            },
+          ),
+        ]),
+
+        const SizedBox(height: 14),
+
+        // ── Action buttons ─────────────────────────────────────────────
+        Row(children: [
+          Expanded(
+            child: ElevatedButton.icon(
+              onPressed: () {
+                setState(() => _currentPage = 1);
+                _loadTripList();
+              },
+              icon: const Icon(Icons.search, size: 18),
+              label: const Text('Apply Filters'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF0D47A1),
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(vertical: 12),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              ),
+            ),
+          ),
+          if (_hasActiveFilters) ...[
+            const SizedBox(width: 10),
+            OutlinedButton.icon(
+              onPressed: _clearAllFilters,
+              icon: const Icon(Icons.clear_all, size: 18),
+              label: const Text('Clear'),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: Colors.red,
+                side: const BorderSide(color: Colors.red),
+                padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 14),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              ),
+            ),
+          ],
+        ]),
+
+        const SizedBox(height: 12),
+
+        // Download Report Button
+        ElevatedButton.icon(
+          onPressed: _isGeneratingReport ? null : _generateReport,
+          icon: _isGeneratingReport
+              ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+              : const Icon(Icons.picture_as_pdf, size: 20),
+          label: Text(
+            _isGeneratingReport ? 'Generating...' : 'Download Report',
+            style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
+          ),
+          style: ElevatedButton.styleFrom(
+            backgroundColor: Colors.green.shade700,
+            foregroundColor: Colors.white,
+            disabledBackgroundColor: Colors.grey.shade300,
+            minimumSize: const Size(double.infinity, 48),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            elevation: 2,
+          ),
+        ),
+      ],
+    ),
+  );
+}
+
+  Widget _buildDateButton(String label, DateTime? date, VoidCallback onTap) {
+    final hasDate = date != null;
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        decoration: BoxDecoration(
+          color: hasDate ? const Color(0xFFE8EFF9) : Colors.grey.shade50,
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(
+              color: hasDate ? const Color(0xFF0D47A1) : Colors.grey.shade300,
+              width: hasDate ? 1.5 : 1),
+        ),
+        child: Row(children: [
+          Icon(Icons.calendar_today, size: 16,
+              color: hasDate ? const Color(0xFF0D47A1) : Colors.grey),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              hasDate ? DateFormat('MMM dd, yyyy').format(date) : label,
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: hasDate ? FontWeight.w600 : FontWeight.normal,
+                color: hasDate ? const Color(0xFF0D47A1) : Colors.grey.shade500,
+              ),
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+          if (hasDate)
+            GestureDetector(
+              onTap: () {
+                setState(() {
+                  if (label.contains('From')) {
+                    _fromDate = null;
+                  } else {
+                    _toDate = null;
+                  }
+                  _currentPage = 1;
+                });
+                _loadTripList();
+              },
+              child: const Icon(Icons.close, size: 14, color: Color(0xFF0D47A1)),
+            ),
+        ]),
+      ),
+    );
+  }
+
+Widget _buildLocationDropdown({
+  required String label,
+  required IconData icon,
+  required String? value,
+  required List<String> items,
+  required ValueChanged<String?> onChanged,
+  required VoidCallback onClear,
+  bool isLoading = false,
+  bool enabled = true,
+}) {
+  return Container(
+    decoration: BoxDecoration(
+      borderRadius: BorderRadius.circular(10),
+      border: Border.all(
+        color: value != null
+            ? const Color(0xFF0D47A1)
+            : enabled
+                ? Colors.grey.shade400  // ✅ DARKER when enabled
+                : Colors.grey.shade200,
+        width: value != null ? 1.5 : 1,
+      ),
+      // ✅ FIX: Very clear color difference
+      color: !enabled 
+          ? Colors.grey.shade200  // Clearly disabled (light gray)
+          : Colors.white,  // Clearly enabled (white)
+    ),
+    child: Row(
+      children: [
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 10),
+          child: isLoading
+              ? const SizedBox(
+                  width: 18,
+                  height: 18,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : Icon(
+                  icon,
+                  size: 18,
+                  color: enabled 
+                      ? (value != null ? const Color(0xFF0D47A1) : Colors.grey.shade700)  // ✅ DARKER
+                      : Colors.grey.shade400,
+                ),
+        ),
+        Expanded(
+          child: DropdownButtonHideUnderline(
+            child: DropdownButton<String>(
+              value: value,
+              hint: Text(
+                label,
+                style: TextStyle(
+                  color: enabled ? Colors.grey.shade700 : Colors.grey.shade400,  // ✅ DARKER
+                  fontSize: 13,
+                ),
+              ),
+              isExpanded: true,
+              icon: Icon(
+                Icons.arrow_drop_down,
+                size: 22,
+                color: enabled ? Colors.grey.shade800 : Colors.grey.shade400,  // ✅ DARKER
+              ),
+              style: TextStyle(
+                color: enabled ? Colors.black87 : Colors.grey.shade500,  // ✅ DARKER
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+              ),
+              items: items
+                  .map((item) => DropdownMenuItem(
+                        value: item,
+                        child: Text(item),
+                      ))
+                  .toList(),
+              onChanged: enabled ? onChanged : null,
+              disabledHint: Text(
+                value ?? label,
+                style: TextStyle(color: Colors.grey.shade400, fontSize: 13),
+              ),
+            ),
+          ),
+        ),
+        if (value != null && enabled)
+          GestureDetector(
+            onTap: onClear,
+            child: const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 8),
+              child: Icon(Icons.close, size: 16, color: Color(0xFF0D47A1)),
+            ),
+          ),
+      ],
+    ),
+  );
+}
+
+  Widget _buildSectionDivider(String text) {
+    return Row(children: [
+      Expanded(child: Divider(color: Colors.grey.shade300)),
+      Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 10),
+        child: Text(text, style: TextStyle(fontSize: 11, color: Colors.grey.shade500, fontWeight: FontWeight.w500)),
+      ),
+      Expanded(child: Divider(color: Colors.grey.shade300)),
+    ]);
+  }
+
+  Future<void> _pickDate({required bool isFrom}) async {
+    final date = await showDatePicker(
+      context: context,
+      initialDate: (isFrom ? _fromDate : _toDate) ?? DateTime.now(),
+      firstDate: DateTime(2020),
+      lastDate: DateTime(2030),
+      helpText: isFrom ? 'Select From Date' : 'Select To Date',
+      builder: (context, child) => Theme(
+        data: Theme.of(context).copyWith(
+            colorScheme: const ColorScheme.light(primary: Color(0xFF0D47A1))),
+        child: child!,
+      ),
+    );
+    if (date != null) {
+      setState(() {
+        if (isFrom) {
+          _fromDate = date;
+          if (_toDate != null && _toDate!.isBefore(date)) _toDate = null;
+        } else {
+          _toDate = date;
+          if (_fromDate != null && _fromDate!.isAfter(date)) _fromDate = null;
+        }
+        _currentPage = 1;
+      });
+      _refreshDashboard();
+    }
+  }
+
+  // ─── Active Filters Banner ────────────────────────────────────────────────
+
+  Widget _buildActiveFiltersBanner() {
+    return Container(
+      margin: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      decoration: BoxDecoration(
+        color: Colors.blue.shade50,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: Colors.blue.shade200),
+      ),
+      child: Wrap(
+        spacing: 6,
+        runSpacing: 6,
+        crossAxisAlignment: WrapCrossAlignment.center,
+        children: [
+          Icon(Icons.filter_alt, size: 16, color: Colors.blue.shade700),
+          Text('Active:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.blue.shade700)),
+          if (_fromDate != null || _toDate != null)
+            _filterChip(
+              '📅 ${_fromDate != null ? DateFormat('MMM dd').format(_fromDate!) : 'Start'} → ${_toDate != null ? DateFormat('MMM dd').format(_toDate!) : 'End'}',
+              () {
+                setState(() {
+                  _fromDate = null;
+                  _toDate = null;
+                  _currentPage = 1;
+                });
+                _refreshDashboard();
+              },
+            ),
+          if (_selectedCountry != null) _filterChip('🌍 $_selectedCountry', () {
+            setState(() {
+              _selectedCountry = null;
+              _selectedState = null;
+              _selectedCity = null;
+              _stateOptions = [];
+              _cityOptions = [];
+              _currentPage = 1;
+            });
+            _loadTripList();
+          }),
+          if (_selectedState != null) _filterChip('📍 $_selectedState', () {
+            setState(() {
+              _selectedState = null;
+              _selectedCity = null;
+              _cityOptions = [];
+              _currentPage = 1;
+            });
+            _loadTripList();
+          }),
+          if (_selectedCity != null) _filterChip('🏙️ $_selectedCity', () {
+            setState(() {
+              _selectedCity = null;
+              _currentPage = 1;
+            });
+            _loadTripList();
+          }),
+          if (_manualLocationController.text.isNotEmpty)
+            _filterChip('📝 "${_manualLocationController.text}"', () {
+              _manualLocationController.clear();
+              setState(() => _currentPage = 1);
+              _loadTripList();
+            }),
+          // ✅ ADD THIS:
+if (_domainController.text.isNotEmpty)
+  _filterChip('🏢 @${_domainController.text.replaceAll('@', '')}', () {
+    _domainController.clear();
+    setState(() => _currentPage = 1);
+    _loadTripList();
+  }),
+          if (_searchController.text.isNotEmpty)
+            _filterChip('🔍 "${_searchController.text}"', () {
+              _searchController.clear();
+              setState(() => _currentPage = 1);
+              _loadTripList();
+            }),
+        ],
+      ),
+    );
+  }
+
+  Widget _filterChip(String label, VoidCallback onRemove) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: Colors.blue.shade200),
+      ),
+      child: Row(mainAxisSize: MainAxisSize.min, children: [
+        Text(label, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w500)),
+        const SizedBox(width: 4),
+        GestureDetector(
+          onTap: onRemove,
+          child: Icon(Icons.close, size: 13, color: Colors.red.shade400),
+        ),
+      ]),
+    );
+  }
+
+  // ─── Trip List ────────────────────────────────────────────────────────────
+
+  Widget _buildTripList() {
+    return Column(children: [
+      if (_isLoadingTrips)
+        const Padding(padding: EdgeInsets.all(32), child: CircularProgressIndicator())
+      else if (_trips.isEmpty)
+        _buildEmptyState()
+      else ...[
+        _buildTripListHeader(),
+        ListView.builder(
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          itemCount: _trips.length,
+          itemBuilder: (context, i) => _buildTripCard(_trips[i]),
+        ),
+        if (_totalPages > 1) _buildPagination(),
+      ],
+      const SizedBox(height: 80),
+    ]);
+  }
+
+  Widget _buildTripListHeader() {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+      child: Row(children: [
+        Text(
+          '${_trips.length} trip(s)',
+          style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: Colors.grey.shade700),
+        ),
+        if (_totalPages > 1) ...[
+          const Spacer(),
+          Text('Page $_currentPage / $_totalPages',
+              style: TextStyle(fontSize: 11, color: Colors.grey.shade500)),
+        ],
+      ]),
+    );
+  }
+
+  Widget _buildEmptyState() {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(40),
+        child: Column(children: [
+          Icon(Icons.inbox, size: 64, color: Colors.grey.shade300),
+          const SizedBox(height: 12),
+          Text('No trips found', style: TextStyle(fontSize: 16, color: Colors.grey.shade600, fontWeight: FontWeight.w600)),
+          const SizedBox(height: 6),
+          Text('Try adjusting your filters', style: TextStyle(fontSize: 13, color: Colors.grey.shade400)),
+          const SizedBox(height: 20),
+          if (_hasActiveFilters)
+            TextButton.icon(
+              onPressed: _clearAllFilters,
+              icon: const Icon(Icons.clear_all),
+              label: const Text('Clear All Filters'),
+            ),
+        ]),
+      ),
+    );
+  }
+
+  Widget _buildTripCard(Map<String, dynamic> trip) {
+    final status = trip['status']?.toString() ?? 'assigned';
+    final progress = (trip['progress'] ?? 0).toDouble();
+    final isDelayed = trip['isDelayed'] == true;
+    final scheduledDate = trip['scheduledDate'] ?? '';
+    Color statusColor = _getStatusColor(status);
+    if (isDelayed) statusColor = Colors.red;
+
+    return Container(
+      margin: const EdgeInsets.fromLTRB(16, 0, 16, 10),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: isDelayed ? Colors.red.shade300 : Colors.grey.shade200),
+        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 6, offset: const Offset(0, 3))],
+      ),
+      child: InkWell(
+        onTap: () {
+          final tripId = _extractTripId(trip['_id']);
+          if (tripId.isEmpty) return;
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => AdminTripDetails(tripId: tripId)),
+          );
+        },
+        borderRadius: BorderRadius.circular(14),
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Row(children: [
+              Container(width: 10, height: 10, decoration: BoxDecoration(color: statusColor, shape: BoxShape.circle)),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(trip['vehicleNumber'] ?? 'Unknown',
+                    style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+              ),
+              _buildStatusBadge(status, isDelayed, statusColor),
+            ]),
+            const SizedBox(height: 10),
+            Row(children: [
+              Icon(Icons.person_outline, size: 15, color: Colors.grey.shade500),
+              const SizedBox(width: 6),
+              Expanded(child: Text(trip['driverName'] ?? 'Unknown Driver',
+                  style: TextStyle(fontSize: 13, color: Colors.grey.shade700))),
+            ]),
+            if (scheduledDate.isNotEmpty) ...[
+              const SizedBox(height: 4),
+              Row(children: [
+                Icon(Icons.event, size: 15, color: Colors.grey.shade500),
+                const SizedBox(width: 6),
+                Text(DateFormat('EEE, MMM dd yyyy').format(DateTime.parse(scheduledDate)),
+                    style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Color(0xFF0D47A1))),
+              ]),
+            ],
+            const SizedBox(height: 4),
+            Row(children: [
+              Icon(Icons.access_time_outlined, size: 15, color: Colors.grey.shade500),
+              const SizedBox(width: 6),
+              Text('${trip['startTime'] ?? '00:00'} → ${trip['endTime'] ?? '00:00'}',
+                  style: TextStyle(fontSize: 12, color: Colors.grey.shade600)),
+              const SizedBox(width: 16),
+              Icon(Icons.confirmation_number_outlined, size: 15, color: Colors.grey.shade500),
+              const SizedBox(width: 6),
+              Text(trip['tripNumber'] ?? 'N/A', style: TextStyle(fontSize: 12, color: Colors.grey.shade600)),
+            ]),
+            const SizedBox(height: 10),
+            Row(children: [
+              Expanded(
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(4),
+                  child: LinearProgressIndicator(
+                    value: progress / 100,
+                    backgroundColor: Colors.grey.shade100,
+                    valueColor: AlwaysStoppedAnimation<Color>(statusColor),
+                    minHeight: 5,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Text('${progress.toInt()}%',
+                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: statusColor)),
+            ]),
+            const SizedBox(height: 8),
+            Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+              _tripStat(Icons.people_outline, '${trip['customerCount'] ?? 0}', 'Customers'),
+              _tripStat(Icons.place_outlined, '${trip['completedStops'] ?? 0}/${trip['totalStops'] ?? 0}', 'Stops'),
+              _tripStat(Icons.route_outlined, '${(trip['totalDistance'] ?? 0).toStringAsFixed(1)} km', 'Distance'),
+            ]),
+          ]),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildStatusBadge(String status, bool isDelayed, Color statusColor) {
+    if (isDelayed) {
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        decoration: BoxDecoration(color: Colors.red.shade50, borderRadius: BorderRadius.circular(20), border: Border.all(color: Colors.red.shade200)),
+        child: const Row(mainAxisSize: MainAxisSize.min, children: [
+          Icon(Icons.warning_amber_rounded, size: 11, color: Colors.red),
+          SizedBox(width: 3),
+          Text('DELAYED', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.red)),
+        ]),
+      );
+    }
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      decoration: BoxDecoration(color: statusColor.withOpacity(0.12), borderRadius: BorderRadius.circular(20)),
+      child: Text(_getStatusText(status),
+          style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: statusColor)),
+    );
+  }
+
+  Widget _tripStat(IconData icon, String value, String label) {
+    return Row(mainAxisSize: MainAxisSize.min, children: [
+      Icon(icon, size: 13, color: Colors.grey.shade500),
+      const SizedBox(width: 4),
+      Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Text(value, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+        Text(label, style: TextStyle(fontSize: 10, color: Colors.grey.shade500)),
+      ]),
+    ]);
+  }
+
+  Widget _buildPagination() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+        IconButton(
+          icon: const Icon(Icons.chevron_left),
+          onPressed: _currentPage > 1 ? () {
+            setState(() => _currentPage--);
+            _loadTripList();
+          } : null,
+        ),
+        Text('$_currentPage / $_totalPages', style: const TextStyle(fontWeight: FontWeight.w600)),
+        IconButton(
+          icon: const Icon(Icons.chevron_right),
+          onPressed: _currentPage < _totalPages ? () {
+            setState(() => _currentPage++);
+            _loadTripList();
+          } : null,
+        ),
+      ]),
+    );
+  }
+
+  // ─── Utilities ────────────────────────────────────────────────────────────
+
+  Color _getStatusColor(String status) {
+    switch (status.toLowerCase()) {
+      case 'started': case 'in_progress': return Colors.green;
+      case 'assigned': return Colors.blue;
+      case 'completed': return Colors.grey;
+      case 'cancelled': return Colors.red;
+      default: return Colors.grey;
+    }
+  }
+
+  String _getStatusText(String status) {
+    switch (status.toLowerCase()) {
+      case 'started': case 'in_progress': return 'ONGOING';
+      case 'assigned': return 'SCHEDULED';
+      case 'completed': return 'COMPLETED';
+      case 'cancelled': return 'CANCELLED';
+      default: return status.toUpperCase();
+    }
+  }
+}

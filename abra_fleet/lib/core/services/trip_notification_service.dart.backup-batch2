@@ -1,0 +1,230 @@
+// lib/core/services/trip_notification_service.dart
+
+import 'dart:async';
+import 'dart:convert';
+import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_database/firebase_database.dart';
+import 'package:http/http.dart' as http;
+import 'package:abra_fleet/app/config/api_config.dart';
+
+class TripNotificationService {
+  static final TripNotificationService _instance = TripNotificationService._internal();
+  factory TripNotificationService() => _instance;
+  TripNotificationService._internal();
+
+  StreamSubscription<DatabaseEvent>? _tripResponseSubscription;
+  final Set<String> _acknowledgedResponses = {};
+  
+  // Callback for when driver responds to trip
+  Function(Map<String, dynamic>)? onDriverResponse;
+
+  /// Initialize trip notification listener
+  void initialize({Function(Map<String, dynamic>)? onDriverResponse}) {
+    this.onDriverResponse = onDriverResponse;
+    _setupTripResponseListener();
+  }
+
+  /// Setup Firebase listener for driver trip responses
+  void _setupTripResponseListener() {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
+
+    // Listen to trip responses in Firebase Realtime Database
+    final tripResponsesRef = FirebaseDatabase.instance.ref('trip_responses');
+    
+    _tripResponseSubscription = tripResponsesRef.onChildAdded.listen((event) {
+      if (!event.snapshot.exists) return;
+      
+      final data = event.snapshot.value as Map<dynamic, dynamic>?;
+      if (data == null) return;
+      
+      final responseId = event.snapshot.key;
+      if (responseId == null || _acknowledgedResponses.contains(responseId)) return;
+      
+      _acknowledgedResponses.add(responseId);
+      
+      // Convert to proper format
+      final response = Map<String, dynamic>.from(data);
+      response['id'] = responseId;
+      
+      // Notify callback
+      onDriverResponse?.call(response);
+    });
+  }
+
+  /// Show driver response notification
+  void showDriverResponseNotification(
+    BuildContext context, 
+    Map<String, dynamic> response
+  ) {
+    final isAccepted = response['response'] == 'accept';
+    final driverName = response['driverName'] ?? 'Driver';
+    final tripId = response['tripId'] ?? 'Unknown';
+    
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Row(
+          children: [
+            Icon(
+              isAccepted ? Icons.check_circle : Icons.cancel,
+              color: Colors.white,
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    isAccepted 
+                        ? '✅ Trip Accepted' 
+                        : '❌ Trip Declined',
+                    style: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white,
+                    ),
+                  ),
+                  Text(
+                    '$driverName ${isAccepted ? 'accepted' : 'declined'} Trip $tripId',
+                    style: const TextStyle(color: Colors.white),
+                  ),
+                  if (!isAccepted && response['reason'] != null)
+                    Text(
+                      'Reason: ${response['reason']}',
+                      style: const TextStyle(
+                        color: Colors.white70,
+                        fontSize: 12,
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ],
+        ),
+        backgroundColor: isAccepted ? Colors.green : Colors.red,
+        duration: Duration(seconds: isAccepted ? 4 : 6),
+        action: SnackBarAction(
+          label: 'VIEW',
+          textColor: Colors.white,
+          onPressed: () {
+            // Navigate to trip details or trips list
+          },
+        ),
+      ),
+    );
+  }
+
+  /// Get recent trip responses from backend
+  Future<List<Map<String, dynamic>>> getRecentTripResponses() async {
+    try {
+      final user = FirebaseAuth.instance.currentUser;
+      if (user == null) return [];
+
+      final token = await user.getIdToken();
+      final response = await http.get(
+        Uri.parse('${ApiConfig.baseUrl}/api/admin/trips?limit=50'),
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Content-Type': 'application/json',
+        },
+      );
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        final trips = List<Map<String, dynamic>>.from(data['data'] ?? []);
+        
+        // Filter trips with driver responses
+        return trips.where((trip) => 
+          trip['driverResponse'] != null && 
+          trip['driverResponseTime'] != null
+        ).toList();
+      }
+    } catch (e) {
+      debugPrint('Error getting recent trip responses: $e');
+    }
+    return [];
+  }
+
+  /// Check for pending driver responses
+  Future<int> getPendingResponsesCount() async {
+    try {
+      final user = FirebaseAuth.instance.currentUser;
+      if (user == null) return 0;
+
+      final token = await user.getIdToken();
+      final response = await http.get(
+        Uri.parse('${ApiConfig.baseUrl}/api/admin/trips?status=assigned'),
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Content-Type': 'application/json',
+        },
+      );
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        final trips = List<Map<String, dynamic>>.from(data['data'] ?? []);
+        return trips.length;
+      }
+    } catch (e) {
+      debugPrint('Error getting pending responses count: $e');
+    }
+    return 0;
+  }
+
+  /// Dispose resources
+  void dispose() {
+    _tripResponseSubscription?.cancel();
+    _acknowledgedResponses.clear();
+  }
+}
+
+/// Trip response model for type safety
+class TripResponse {
+  final String id;
+  final String tripId;
+  final String driverId;
+  final String driverName;
+  final String response; // 'accept' or 'decline'
+  final String? reason;
+  final DateTime responseTime;
+
+  TripResponse({
+    required this.id,
+    required this.tripId,
+    required this.driverId,
+    required this.driverName,
+    required this.response,
+    this.reason,
+    required this.responseTime,
+  });
+
+  factory TripResponse.fromMap(Map<String, dynamic> map) {
+    return TripResponse(
+      id: map['id'] ?? '',
+      tripId: map['tripId'] ?? '',
+      driverId: map['driverId'] ?? '',
+      driverName: map['driverName'] ?? '',
+      response: map['response'] ?? '',
+      reason: map['reason'],
+      responseTime: map['responseTime'] is String 
+          ? DateTime.parse(map['responseTime'])
+          : map['responseTime'] ?? DateTime.now(),
+    );
+  }
+
+  Map<String, dynamic> toMap() {
+    return {
+      'id': id,
+      'tripId': tripId,
+      'driverId': driverId,
+      'driverName': driverName,
+      'response': response,
+      'reason': reason,
+      'responseTime': responseTime.toIso8601String(),
+    };
+  }
+
+  bool get isAccepted => response == 'accept';
+  bool get isDeclined => response == 'decline';
+}

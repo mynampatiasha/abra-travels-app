@@ -1,0 +1,411 @@
+// lib/core/services/notice_service.dart
+
+import 'dart:convert';
+import 'package:http/http.dart' as http;
+import 'package:firebase_auth/firebase_auth.dart';
+import '../../../app/config/api_config.dart';
+
+class NoticeService {
+  static final String _baseUrl = '${ApiConfig.baseUrl}/api/notices';
+
+  // Get auth token
+  Future<String?> _getAuthToken() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user != null) {
+      return await user.getIdToken();
+    }
+    return null;
+  }
+
+  // Get headers with auth token
+  Future<Map<String, String>> _getHeaders() async {
+    final token = await _getAuthToken();
+    return {
+      'Content-Type': 'application/json',
+      if (token != null) 'Authorization': 'Bearer $token',
+    };
+  }
+
+  // Get all notices with pagination and filtering
+  Future<NoticeResponse> getNotices({
+    int page = 1,
+    int limit = 10,
+    String category = 'all',
+    String priority = 'all',
+    String search = '',
+  }) async {
+    try {
+      final queryParams = {
+        'page': page.toString(),
+        'limit': limit.toString(),
+        'category': category,
+        'priority': priority,
+        if (search.isNotEmpty) 'search': search,
+      };
+
+      final uri = Uri.parse(_baseUrl).replace(queryParameters: queryParams);
+      final headers = await _getHeaders();
+
+      print('🔍 Fetching notices: $uri');
+
+      final response = await http.get(uri, headers: headers);
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        print('✅ Notices fetched successfully: ${data['data']?.length ?? 0} notices');
+        return NoticeResponse.fromJson(data);
+      } else {
+        print('❌ Failed to fetch notices: ${response.statusCode}');
+        throw Exception('Failed to fetch notices: ${response.statusCode}');
+      }
+    } catch (e) {
+      print('❌ Error fetching notices: $e');
+      throw Exception('Error fetching notices: $e');
+    }
+  }
+
+  // Get single notice by ID
+  Future<NoticeItem> getNotice(String id) async {
+    try {
+      final uri = Uri.parse('$_baseUrl/$id');
+      final headers = await _getHeaders();
+
+      final response = await http.get(uri, headers: headers);
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        return NoticeItem.fromJson(data['data']);
+      } else {
+        throw Exception('Failed to fetch notice: ${response.statusCode}');
+      }
+    } catch (e) {
+      throw Exception('Error fetching notice: $e');
+    }
+  }
+
+  // Create new notice
+  Future<NoticeItem> createNotice({
+    required String title,
+    required String content,
+    required String category,
+    required String priority,
+    String? publishedByName,
+  }) async {
+    try {
+      final user = FirebaseAuth.instance.currentUser;
+      if (user == null) {
+        throw Exception('User not authenticated');
+      }
+
+      final uri = Uri.parse(_baseUrl);
+      final headers = await _getHeaders();
+
+      final body = json.encode({
+        'title': title,
+        'content': content,
+        'category': category,
+        'priority': priority,
+        'publishedBy': user.uid,
+        'publishedByName': publishedByName ?? user.displayName ?? 'Admin',
+      });
+
+      print('📝 Creating notice: $title');
+
+      final response = await http.post(uri, headers: headers, body: body);
+
+      if (response.statusCode == 201) {
+        final data = json.decode(response.body);
+        print('✅ Notice created successfully: $title');
+        return NoticeItem.fromJson(data['data']);
+      } else {
+        print('❌ Failed to create notice: ${response.statusCode}');
+        final errorData = json.decode(response.body);
+        throw Exception(errorData['message'] ?? 'Failed to create notice');
+      }
+    } catch (e) {
+      print('❌ Error creating notice: $e');
+      throw Exception('Error creating notice: $e');
+    }
+  }
+
+  // Update notice
+  Future<NoticeItem> updateNotice({
+    required String id,
+    String? title,
+    String? content,
+    String? category,
+    String? priority,
+    bool? isActive,
+  }) async {
+    try {
+      final uri = Uri.parse('$_baseUrl/$id');
+      final headers = await _getHeaders();
+
+      final body = json.encode({
+        if (title != null) 'title': title,
+        if (content != null) 'content': content,
+        if (category != null) 'category': category,
+        if (priority != null) 'priority': priority,
+        if (isActive != null) 'isActive': isActive,
+      });
+
+      final response = await http.put(uri, headers: headers, body: body);
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        return NoticeItem.fromJson(data['data']);
+      } else {
+        final errorData = json.decode(response.body);
+        throw Exception(errorData['message'] ?? 'Failed to update notice');
+      }
+    } catch (e) {
+      throw Exception('Error updating notice: $e');
+    }
+  }
+
+  // Delete notice
+  Future<void> deleteNotice(String id) async {
+    try {
+      final uri = Uri.parse('$_baseUrl/$id');
+      final headers = await _getHeaders();
+
+      final response = await http.delete(uri, headers: headers);
+
+      if (response.statusCode != 200) {
+        final errorData = json.decode(response.body);
+        throw Exception(errorData['message'] ?? 'Failed to delete notice');
+      }
+    } catch (e) {
+      throw Exception('Error deleting notice: $e');
+    }
+  }
+
+  // Increment view count
+  Future<void> incrementViewCount(String id) async {
+    try {
+      final uri = Uri.parse('$_baseUrl/$id/view');
+      final headers = await _getHeaders();
+
+      await http.post(uri, headers: headers);
+    } catch (e) {
+      print('⚠️ Failed to increment view count: $e');
+      // Don't throw error for view count - it's not critical
+    }
+  }
+
+  // Get notice categories
+  Future<List<String>> getCategories() async {
+    try {
+      final uri = Uri.parse('$_baseUrl/meta/categories');
+      final headers = await _getHeaders();
+
+      final response = await http.get(uri, headers: headers);
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        return List<String>.from(data['data']);
+      } else {
+        return ['General', 'Holiday', 'Training', 'Maintenance', 'Safety'];
+      }
+    } catch (e) {
+      return ['General', 'Holiday', 'Training', 'Maintenance', 'Safety'];
+    }
+  }
+
+  // Get notice statistics
+  Future<NoticeStats> getStats() async {
+    try {
+      final uri = Uri.parse('$_baseUrl/meta/stats');
+      final headers = await _getHeaders();
+
+      final response = await http.get(uri, headers: headers);
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        return NoticeStats.fromJson(data['data']);
+      } else {
+        throw Exception('Failed to fetch notice stats');
+      }
+    } catch (e) {
+      throw Exception('Error fetching notice stats: $e');
+    }
+  }
+}
+
+// Data models
+class NoticeResponse {
+  final List<NoticeItem> notices;
+  final NoticePagination pagination;
+
+  NoticeResponse({
+    required this.notices,
+    required this.pagination,
+  });
+
+  factory NoticeResponse.fromJson(Map<String, dynamic> json) {
+    return NoticeResponse(
+      notices: (json['data'] as List)
+          .map((item) => NoticeItem.fromJson(item))
+          .toList(),
+      pagination: NoticePagination.fromJson(json['pagination']),
+    );
+  }
+}
+
+class NoticePagination {
+  final int currentPage;
+  final int totalPages;
+  final int totalCount;
+  final bool hasNext;
+  final bool hasPrev;
+
+  NoticePagination({
+    required this.currentPage,
+    required this.totalPages,
+    required this.totalCount,
+    required this.hasNext,
+    required this.hasPrev,
+  });
+
+  factory NoticePagination.fromJson(Map<String, dynamic> json) {
+    return NoticePagination(
+      currentPage: json['currentPage'],
+      totalPages: json['totalPages'],
+      totalCount: json['totalCount'],
+      hasNext: json['hasNext'],
+      hasPrev: json['hasPrev'],
+    );
+  }
+}
+
+class NoticeItem {
+  final String id;
+  final String title;
+  final String content;
+  final String category;
+  final NoticePriority priority;
+  final DateTime publishedDate;
+  final String publishedBy;
+  final String publishedByName;
+  final bool isActive;
+  final int viewCount;
+  final DateTime createdAt;
+  final DateTime updatedAt;
+
+  NoticeItem({
+    required this.id,
+    required this.title,
+    required this.content,
+    required this.category,
+    required this.priority,
+    required this.publishedDate,
+    required this.publishedBy,
+    required this.publishedByName,
+    this.isActive = true,
+    this.viewCount = 0,
+    required this.createdAt,
+    required this.updatedAt,
+  });
+
+  factory NoticeItem.fromJson(Map<String, dynamic> json) {
+    return NoticeItem(
+      id: json['_id'] ?? json['id'],
+      title: json['title'],
+      content: json['content'],
+      category: json['category'],
+      priority: NoticePriority.values.firstWhere(
+        (p) => p.name == json['priority'],
+        orElse: () => NoticePriority.medium,
+      ),
+      publishedDate: DateTime.parse(json['publishedDate']),
+      publishedBy: json['publishedBy'],
+      publishedByName: json['publishedByName'],
+      isActive: json['isActive'] ?? true,
+      viewCount: json['viewCount'] ?? 0,
+      createdAt: DateTime.parse(json['createdAt']),
+      updatedAt: DateTime.parse(json['updatedAt']),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'title': title,
+      'content': content,
+      'category': category,
+      'priority': priority.name,
+      'publishedDate': publishedDate.toIso8601String(),
+      'publishedBy': publishedBy,
+      'publishedByName': publishedByName,
+      'isActive': isActive,
+      'viewCount': viewCount,
+      'createdAt': createdAt.toIso8601String(),
+      'updatedAt': updatedAt.toIso8601String(),
+    };
+  }
+}
+
+class NoticeStats {
+  final int totalNotices;
+  final int activeNotices;
+  final int inactiveNotices;
+  final List<PriorityCount> priorityBreakdown;
+  final List<CategoryCount> categoryBreakdown;
+  final List<NoticeItem> recentNotices;
+
+  NoticeStats({
+    required this.totalNotices,
+    required this.activeNotices,
+    required this.inactiveNotices,
+    required this.priorityBreakdown,
+    required this.categoryBreakdown,
+    required this.recentNotices,
+  });
+
+  factory NoticeStats.fromJson(Map<String, dynamic> json) {
+    return NoticeStats(
+      totalNotices: json['totalNotices'],
+      activeNotices: json['activeNotices'],
+      inactiveNotices: json['inactiveNotices'],
+      priorityBreakdown: (json['priorityBreakdown'] as List)
+          .map((item) => PriorityCount.fromJson(item))
+          .toList(),
+      categoryBreakdown: (json['categoryBreakdown'] as List)
+          .map((item) => CategoryCount.fromJson(item))
+          .toList(),
+      recentNotices: (json['recentNotices'] as List)
+          .map((item) => NoticeItem.fromJson(item))
+          .toList(),
+    );
+  }
+}
+
+class PriorityCount {
+  final String priority;
+  final int count;
+
+  PriorityCount({required this.priority, required this.count});
+
+  factory PriorityCount.fromJson(Map<String, dynamic> json) {
+    return PriorityCount(
+      priority: json['_id'],
+      count: json['count'],
+    );
+  }
+}
+
+class CategoryCount {
+  final String category;
+  final int count;
+
+  CategoryCount({required this.category, required this.count});
+
+  factory CategoryCount.fromJson(Map<String, dynamic> json) {
+    return CategoryCount(
+      category: json['_id'],
+      count: json['count'],
+    );
+  }
+}
+
+enum NoticePriority { low, medium, high }

@@ -1,0 +1,741 @@
+// lib/features/admin/vehicle_admin_management/trip_operations/trip_operation.dart
+
+import 'dart:async';
+import 'dart:convert';
+import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:http/http.dart' as http;
+import 'package:abra_fleet/app/config/api_config.dart';
+import 'package:abra_fleet/features/admin/vehicle_admin_management/trip_operations/start_new_trip.dart';
+import 'package:abra_fleet/features/admin/vehicle_admin_management/trip_operations/live_map_screen.dart';
+import 'package:abra_fleet/features/admin/vehicle_admin_management/trip_operations/emergency_alert_screen.dart';
+import 'package:abra_fleet/features/admin/vehicle_admin_management/trip_operations/trip_operations_list_screen.dart';
+
+// --- UI Constants - Copied for consistency ---
+const Color kPrimaryColor = Color(0xFF0D47A1);
+const Color kTextPrimaryColor = Color(0xFF212121);
+const Color kTextSecondaryColor = Color(0xFF757575);
+const Color kInfoColor = Color(0xFF0288D1);
+const Color kInfoBackgroundColor = Color(0xFFE3F2FD);
+
+class TripOperationScreen extends StatefulWidget {
+  final VoidCallback onStartNewTrip;
+  const TripOperationScreen({
+    Key? key,
+    required this.onStartNewTrip,
+  }) : super(key: key);
+
+  @override
+  State<TripOperationScreen> createState() => _TripOperationScreenState();
+}
+
+class _TripOperationScreenState extends State<TripOperationScreen> {
+  List<Widget> _overlayStack = [];
+  
+  // NEW: Trip data
+  List<Map<String, dynamic>> _adminTrips = [];
+  bool _isLoadingTrips = false;
+  String? _tripsError;
+  
+  Timer? _statsTimer;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadAdminTrips(); // NEW: Load admin trips
+    
+    // Update trips every 30 seconds
+    _statsTimer = Timer.periodic(const Duration(seconds: 30), (timer) {
+      _loadAdminTrips(); // NEW: Refresh trips
+    });
+  }
+
+  @override
+  void dispose() {
+    _statsTimer?.cancel();
+    super.dispose();
+  }
+
+  // NEW: Load admin-assigned trips
+  Future<void> _loadAdminTrips() async {
+    setState(() {
+      _isLoadingTrips = true;
+      _tripsError = null;
+    });
+
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final token = prefs.getString('jwt_token');
+      
+      if (token == null || token.isEmpty) {
+        setState(() {
+          _tripsError = 'Not authenticated';
+          _isLoadingTrips = false;
+        });
+        return;
+      }
+
+      final response = await http.get(
+        Uri.parse('${ApiConfig.baseUrl}/api/trips/start-trip-list'),
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Content-Type': 'application/json',
+        },
+      );
+
+      if (response.statusCode == 200 && mounted) {
+        final data = json.decode(response.body);
+        
+        setState(() {
+          _adminTrips = List<Map<String, dynamic>>.from(data['data'] ?? []);
+          _isLoadingTrips = false;
+        });
+        
+        print('✅ Loaded ${_adminTrips.length} admin trips');
+      } else {
+        setState(() {
+          _tripsError = 'Failed to load trips: ${response.statusCode}';
+          _isLoadingTrips = false;
+        });
+      }
+    } catch (e) {
+      debugPrint('Error loading admin trips: $e');
+      setState(() {
+        _tripsError = 'Error: $e';
+        _isLoadingTrips = false;
+      });
+    }
+  }
+
+  void _pushOverlay(Widget overlay) {
+    setState(() {
+      _overlayStack.add(overlay);
+    });
+  }
+
+  void _popOverlay() {
+    if (_overlayStack.isNotEmpty) {
+      setState(() {
+        _overlayStack.removeLast();
+      });
+    }
+  }
+
+  void _clearAllOverlays() {
+    setState(() {
+      _overlayStack.clear();
+    });
+  }
+
+  void _showStartNewTripScreen() {
+    _pushOverlay(
+      _buildOverlayWrapper(
+        title: 'Start New Trip',
+        child: StartNewTripPage(
+          onBack: () {
+            _popOverlay();
+            _loadAdminTrips(); // Refresh trips after creating new one
+          },
+        ),
+      ),
+    );
+  }
+
+  void _showEmergencyAlertScreen() {
+    _pushOverlay(
+      _buildOverlayWrapper(
+        title: 'Emergency Alert',
+        child: const EmergencyAlertScreen(),
+      ),
+    );
+  }
+
+  void _showTripsListScreen() {
+    _pushOverlay(
+      _buildOverlayWrapper(
+        title: 'All Trips - Real-time Status',
+        child: const TripOperationsListScreen(),
+        width: MediaQuery.of(context).size.width * 0.98,
+        height: MediaQuery.of(context).size.height * 0.95,
+      ),
+    );
+  }
+
+  Widget _buildOverlayWrapper({
+    required String title,
+    required Widget child,
+    double? width,
+    double? height,
+  }) {
+    return Material(
+      color: Colors.black54,
+      child: Center(
+        child: Container(
+          width: width ?? MediaQuery.of(context).size.width * 0.95,
+          height: height ?? MediaQuery.of(context).size.height * 0.90,
+          margin: const EdgeInsets.all(20),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(16),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.3),
+                blurRadius: 20,
+                offset: const Offset(0, 10),
+              ),
+            ],
+          ),
+          child: Column(
+            children: [
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: const BorderRadius.only(
+                    topLeft: Radius.circular(16),
+                    topRight: Radius.circular(16),
+                  ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.1),
+                      blurRadius: 4,
+                      offset: const Offset(0, 2),
+                    ),
+                  ],
+                ),
+                child: Row(
+                  children: [
+                    IconButton(
+                      onPressed: _popOverlay,
+                      icon: const Icon(Icons.arrow_back, color: Colors.black),
+                      tooltip: 'Back',
+                    ),
+                    const SizedBox(width: 12),
+                    Icon(
+                      title == 'Live Vehicle Tracking' 
+                        ? Icons.map_outlined 
+                        : title == 'Emergency Alert'
+                        ? Icons.emergency_rounded
+                        : Icons.rocket_launch_rounded,
+                      color: kPrimaryColor,
+                      size: 24,
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      title,
+                      style: const TextStyle(
+                        color: Colors.black,
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const Spacer(),
+                    TextButton(
+                      onPressed: _clearAllOverlays,
+                      child: const Text(
+                        'Close',
+                        style: TextStyle(
+                          color: Colors.black,
+                          fontWeight: FontWeight.w600,
+                          fontSize: 16,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Expanded(
+                child: ClipRRect(
+                  borderRadius: const BorderRadius.only(
+                    bottomLeft: Radius.circular(16),
+                    bottomRight: Radius.circular(16),
+                  ),
+                  child: child,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Stack(
+      children: [
+        _buildTripOperationView(),
+        ..._overlayStack,
+      ],
+    );
+  }
+
+  Widget _buildTripOperationView() {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(16.0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Card(
+            elevation: 4.0,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            child: Padding(
+              padding: const EdgeInsets.all(16.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const SizedBox(height: 24),
+                  _buildLiveMapCard(),
+                  const SizedBox(height: 24),
+                  _buildActionButtons(),
+                  const SizedBox(height: 24),
+                ],
+              ),
+            ),
+          ),
+          
+          // NEW: Admin Trips Table
+          const SizedBox(height: 24),
+          _buildAdminTripsTable(),
+        ],
+      ),
+    );
+  }
+
+  // NEW: Build Admin Trips Table
+  Widget _buildAdminTripsTable() {
+    return Card(
+      elevation: 4.0,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Icon(Icons.assignment, color: kPrimaryColor, size: 24),
+                const SizedBox(width: 12),
+                const Text(
+                  'Admin Assigned Trips',
+                  style: TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                    color: kTextPrimaryColor,
+                  ),
+                ),
+                const Spacer(),
+                if (_isLoadingTrips)
+                  const SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                else
+                  IconButton(
+                    icon: const Icon(Icons.refresh),
+                    onPressed: _loadAdminTrips,
+                    tooltip: 'Refresh',
+                  ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            
+            if (_tripsError != null)
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.red.shade50,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.red.shade200),
+                ),
+                child: Row(
+                  children: [
+                    Icon(Icons.error_outline, color: Colors.red.shade700),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        _tripsError!,
+                        style: TextStyle(color: Colors.red.shade700),
+                      ),
+                    ),
+                  ],
+                ),
+              )
+            else if (_adminTrips.isEmpty && !_isLoadingTrips)
+              Container(
+                padding: const EdgeInsets.all(24),
+                alignment: Alignment.center,
+                child: Column(
+                  children: [
+                    Icon(Icons.inbox_outlined, size: 64, color: Colors.grey.shade400),
+                    const SizedBox(height: 16),
+                    Text(
+                      'No admin-assigned trips found',
+                      style: TextStyle(
+                        fontSize: 16,
+                        color: Colors.grey.shade600,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      'Create a new trip to see it here',
+                      style: TextStyle(
+                        fontSize: 14,
+                        color: Colors.grey.shade500,
+                      ),
+                    ),
+                  ],
+                ),
+              )
+            else
+              SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: DataTable(
+                  headingRowColor: MaterialStateProperty.all(Colors.grey.shade100),
+                  columns: const [
+                    DataColumn(label: Text('Trip #', style: TextStyle(fontWeight: FontWeight.bold))),
+                    DataColumn(label: Text('Vehicle', style: TextStyle(fontWeight: FontWeight.bold))),
+                    DataColumn(label: Text('Driver', style: TextStyle(fontWeight: FontWeight.bold))),
+                    DataColumn(label: Text('Distance', style: TextStyle(fontWeight: FontWeight.bold))),
+                    DataColumn(label: Text('Pickup Time', style: TextStyle(fontWeight: FontWeight.bold))),
+                    DataColumn(label: Text('Status', style: TextStyle(fontWeight: FontWeight.bold))),
+                    DataColumn(label: Text('Actions', style: TextStyle(fontWeight: FontWeight.bold))),
+                  ],
+                  rows: _adminTrips.map((trip) {
+                    return DataRow(
+                      cells: [
+                        DataCell(
+                          Text(
+                            trip['tripNumber'] ?? 'N/A',
+                            style: const TextStyle(fontWeight: FontWeight.w600),
+                          ),
+                        ),
+                        DataCell(
+                          Text(trip['vehicleNumber'] ?? 'N/A'),
+                        ),
+                        DataCell(
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Text(
+                                trip['driverName'] ?? 'N/A',
+                                style: const TextStyle(fontWeight: FontWeight.w500),
+                              ),
+                              if (trip['driverPhone'] != null)
+                                Text(
+                                  trip['driverPhone'],
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: Colors.grey.shade600,
+                                  ),
+                                ),
+                            ],
+                          ),
+                        ),
+                        DataCell(
+                          Text('${trip['distance']?.toStringAsFixed(1) ?? '0'} km'),
+                        ),
+                        DataCell(
+                          Text(_formatDateTime(trip['scheduledPickupTime'])),
+                        ),
+                        DataCell(
+                          _buildStatusChip(trip['status'] ?? 'unknown'),
+                        ),
+                        DataCell(
+                          Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              IconButton(
+                                icon: const Icon(Icons.visibility, size: 20),
+                                onPressed: () => _showTripDetails(trip),
+                                tooltip: 'View Details',
+                                color: Colors.blue.shade700,
+                              ),
+                              IconButton(
+                                icon: const Icon(Icons.map, size: 20),
+                                onPressed: () => _trackTrip(trip),
+                                tooltip: 'Track on Map',
+                                color: Colors.green.shade700,
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    );
+                  }).toList(),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildStatusChip(String status) {
+    Color bgColor;
+    Color textColor;
+    String displayText;
+
+    switch (status.toLowerCase()) {
+      case 'assigned':
+        bgColor = Colors.orange.shade100;
+        textColor = Colors.orange.shade900;
+        displayText = 'Assigned';
+        break;
+      case 'accepted':
+        bgColor = Colors.blue.shade100;
+        textColor = Colors.blue.shade900;
+        displayText = 'Accepted';
+        break;
+      case 'started':
+        bgColor = Colors.green.shade100;
+        textColor = Colors.green.shade900;
+        displayText = 'Started';
+        break;
+      case 'completed':
+        bgColor = Colors.grey.shade200;
+        textColor = Colors.grey.shade900;
+        displayText = 'Completed';
+        break;
+      default:
+        bgColor = Colors.grey.shade100;
+        textColor = Colors.grey.shade900;
+        displayText = status;
+    }
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      decoration: BoxDecoration(
+        color: bgColor,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Text(
+        displayText,
+        style: TextStyle(
+          color: textColor,
+          fontWeight: FontWeight.w600,
+          fontSize: 12,
+        ),
+      ),
+    );
+  }
+
+  String _formatDateTime(dynamic dateTime) {
+    if (dateTime == null) return 'N/A';
+    try {
+      DateTime dt;
+      if (dateTime is String) {
+        dt = DateTime.parse(dateTime);
+      } else if (dateTime is DateTime) {
+        dt = dateTime;
+      } else {
+        return 'N/A';
+      }
+      
+      return '${dt.day}/${dt.month}/${dt.year} ${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
+    } catch (e) {
+      return dateTime.toString();
+    }
+  }
+
+  void _showTripDetails(Map<String, dynamic> trip) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Row(
+          children: [
+            const Icon(Icons.info_outline, color: kPrimaryColor),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                'Trip Details',
+                style: const TextStyle(fontSize: 18),
+              ),
+            ),
+          ],
+        ),
+        content: SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _buildDetailRow('Trip Number:', trip['tripNumber'] ?? 'N/A'),
+              _buildDetailRow('Status:', trip['status'] ?? 'N/A'),
+              const Divider(),
+              _buildDetailRow('Vehicle:', trip['vehicleNumber'] ?? 'N/A'),
+              _buildDetailRow('Driver:', trip['driverName'] ?? 'N/A'),
+              _buildDetailRow('Phone:', trip['driverPhone'] ?? 'N/A'),
+              const Divider(),
+              _buildDetailRow('Distance:', '${trip['distance']?.toStringAsFixed(1) ?? '0'} km'),
+              _buildDetailRow('Pickup Time:', _formatDateTime(trip['scheduledPickupTime'])),
+              _buildDetailRow('Drop Time:', _formatDateTime(trip['estimatedEndTime'])),
+              _buildDetailRow('Duration:', '${trip['estimatedDuration'] ?? 0} min'),
+              const Divider(),
+              _buildDetailRow('Customer:', trip['customer']?['name'] ?? 'Walk-in'),
+              if (trip['notes'] != null)
+                _buildDetailRow('Notes:', trip['notes']),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Close'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDetailRow(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 120,
+            child: Text(
+              label,
+              style: const TextStyle(
+                fontWeight: FontWeight.w600,
+                fontSize: 14,
+              ),
+            ),
+          ),
+          Expanded(
+            child: Text(
+              value,
+              style: const TextStyle(fontSize: 14),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _trackTrip(Map<String, dynamic> trip) {
+    // Navigate to live map with trip details
+    String? tripId;
+    
+    // Extract trip ID from different possible formats
+    if (trip['_id'] != null) {
+      if (trip['_id'] is Map && trip['_id']['\$oid'] != null) {
+        tripId = trip['_id']['\$oid'].toString();
+      } else {
+        tripId = trip['_id'].toString();
+      }
+    }
+    
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (context) => LiveMapScreen(
+          tripId: tripId,
+          tripNumber: trip['tripNumber']?.toString(),
+        ),
+      ),
+    );
+  }
+
+  // ... rest of the existing methods (buildLiveMapCard, buildActionButtons, etc.)
+
+  Widget _buildLiveMapCard() {
+    return Container(
+      padding: const EdgeInsets.all(16.0),
+      decoration: BoxDecoration(
+        color: kInfoBackgroundColor,
+        borderRadius: BorderRadius.circular(10),
+        border: Border(left: BorderSide(color: kInfoColor, width: 4)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            '🗺️ Live Map View',
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+              color: kPrimaryColor,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Interactive map showing real-time vehicle locations and routes.',
+            style: TextStyle(fontSize: 15, color: kTextSecondaryColor),
+          ),
+          const SizedBox(height: 12),
+          // ❌ COMMENTED OUT - View Live Map Button
+          // ElevatedButton.icon(
+          //   icon: const Icon(Icons.pin_drop_rounded, size: 20),
+          //   label: const Text('View Live Map'),
+          //   onPressed: () {
+          //     Navigator.of(context).push(
+          //       MaterialPageRoute(builder: (context) => const LiveMapScreen()),
+          //     );
+          //   },
+          //   style: ElevatedButton.styleFrom(
+          //     foregroundColor: Colors.white,
+          //     backgroundColor: kPrimaryColor,
+          //     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+          //   ),
+          // ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildActionButtons() {
+    return Wrap(
+      spacing: 12.0,
+      runSpacing: 12.0,
+      children: [
+        _buildActionButton(
+          icon: Icons.rocket_launch_rounded,
+          label: 'Start New Trip',
+          color: kPrimaryColor,
+          onPressed: _showStartNewTripScreen,
+        ),
+        // ❌ COMMENTED OUT - View All Trips
+        // _buildActionButton(
+        //   icon: Icons.list_alt_rounded,
+        //   label: 'View All Trips',
+        //   color: Colors.green.shade700,
+        //   onPressed: _showTripsListScreen,
+        // ),
+        // ❌ COMMENTED OUT - Emergency Alert
+        // _buildActionButton(
+        //   icon: Icons.emergency_rounded,
+        //   label: 'Emergency Alert',
+        //   color: Colors.red.shade700,
+        //   onPressed: _showEmergencyAlertScreen,
+        // ),
+      ],
+    );
+  }
+
+  Widget _buildActionButton({
+    required IconData icon,
+    required String label,
+    required Color color,
+    required VoidCallback onPressed,
+  }) {
+    return ElevatedButton.icon(
+      icon: Icon(icon, size: 18),
+      label: Text(label),
+      onPressed: onPressed,
+      style: ElevatedButton.styleFrom(
+        foregroundColor: Colors.white,
+        backgroundColor: color,
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+      ),
+    );
+  }
+
+
+
+
+}

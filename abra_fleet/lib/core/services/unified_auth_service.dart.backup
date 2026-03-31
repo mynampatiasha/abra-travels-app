@@ -1,0 +1,398 @@
+import 'dart:convert';
+import 'package:http/http.dart' as http;
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:abra_fleet/app/config/api_config.dart';
+
+class UnifiedAuthService {
+  static const String _baseUrl = ApiConfig.baseUrl;
+  final FirebaseAuth _firebaseAuth = FirebaseAuth.instance;
+
+  Map<String, String> get _headers => {
+    'Content-Type': 'application/json',
+  };
+
+  // ============================================================================
+  // UNIFIED REGISTRATION (Clients & Customers)
+  // ============================================================================
+
+  /// Register as client (self-registration)
+  Future<Map<String, dynamic>> registerAsClient({
+    required String name,
+    required String email,
+    required String password,
+    String? phone,
+    String? companyName,
+    String? organizationName,
+  }) async {
+    try {
+      final response = await http.post(
+        Uri.parse('$_baseUrl/auth/register'),
+        headers: _headers,
+        body: json.encode({
+          'name': name,
+          'email': email,
+          'password': password,
+          'phone': phone,
+          'companyName': companyName,
+          'organizationName': organizationName,
+          'role': 'client',
+          'status': 'active',
+        }),
+      );
+
+      if (response.statusCode == 201) {
+        final data = json.decode(response.body);
+        if (data['success']) {
+          // After successful registration, sign in with Firebase
+          await _firebaseAuth.signInWithEmailAndPassword(
+            email: email,
+            password: password,
+          );
+          return data;
+        }
+      }
+      
+      final errorData = json.decode(response.body);
+      throw Exception(errorData['message'] ?? 'Registration failed');
+    } catch (e) {
+      throw Exception('Client registration failed: $e');
+    }
+  }
+
+  /// Register as customer (self-registration)
+  Future<Map<String, dynamic>> registerAsCustomer({
+    required String name,
+    required String email,
+    required String password,
+    String? phone,
+    String? companyName,
+    String? department,
+    String? branch,
+    String? employeeId,
+  }) async {
+    try {
+      final response = await http.post(
+        Uri.parse('$_baseUrl/auth/register'),
+        headers: _headers,
+        body: json.encode({
+          'name': name,
+          'email': email,
+          'password': password,
+          'phone': phone,
+          'companyName': companyName,
+          'department': department,
+          'branch': branch,
+          'employeeId': employeeId,
+          'role': 'customer',
+          'status': 'active',
+        }),
+      );
+
+      if (response.statusCode == 201) {
+        final data = json.decode(response.body);
+        if (data['success']) {
+          // After successful registration, sign in with Firebase
+          await _firebaseAuth.signInWithEmailAndPassword(
+            email: email,
+            password: password,
+          );
+          return data;
+        }
+      }
+      
+      final errorData = json.decode(response.body);
+      throw Exception(errorData['message'] ?? 'Registration failed');
+    } catch (e) {
+      throw Exception('Customer registration failed: $e');
+    }
+  }
+
+  /// Generic registration method (role-based routing)
+  Future<Map<String, dynamic>> register({
+    required String name,
+    required String email,
+    required String password,
+    required String role, // 'client' or 'customer'
+    String? phone,
+    String? companyName,
+    String? organizationName,
+    String? department,
+    String? branch,
+    String? employeeId,
+  }) async {
+    try {
+      final body = {
+        'name': name,
+        'email': email,
+        'password': password,
+        'role': role.toLowerCase(),
+        'status': 'active',
+      };
+
+      // Add optional fields
+      if (phone != null && phone.isNotEmpty) body['phone'] = phone;
+      if (companyName != null && companyName.isNotEmpty) body['companyName'] = companyName;
+      if (organizationName != null && organizationName.isNotEmpty) body['organizationName'] = organizationName;
+      if (department != null && department.isNotEmpty) body['department'] = department;
+      if (branch != null && branch.isNotEmpty) body['branch'] = branch;
+      if (employeeId != null && employeeId.isNotEmpty) body['employeeId'] = employeeId;
+
+      final response = await http.post(
+        Uri.parse('$_baseUrl/auth/register'),
+        headers: _headers,
+        body: json.encode(body),
+      );
+
+      if (response.statusCode == 201) {
+        final data = json.decode(response.body);
+        if (data['success']) {
+          // After successful registration, sign in with Firebase
+          await _firebaseAuth.signInWithEmailAndPassword(
+            email: email,
+            password: password,
+          );
+          return data;
+        }
+      }
+      
+      final errorData = json.decode(response.body);
+      throw Exception(errorData['message'] ?? 'Registration failed');
+    } catch (e) {
+      throw Exception('Registration failed: $e');
+    }
+  }
+
+  // ============================================================================
+  // AUTHENTICATION METHODS
+  // ============================================================================
+
+  /// Sign in with email and password
+  Future<UserCredential> signInWithEmailAndPassword({
+    required String email,
+    required String password,
+  }) async {
+    try {
+      return await _firebaseAuth.signInWithEmailAndPassword(
+        email: email,
+        password: password,
+      );
+    } catch (e) {
+      throw Exception('Sign in failed: $e');
+    }
+  }
+
+  /// Sign out
+  Future<void> signOut() async {
+    try {
+      await _firebaseAuth.signOut();
+    } catch (e) {
+      throw Exception('Sign out failed: $e');
+    }
+  }
+
+  /// Get current user
+  User? getCurrentUser() {
+    return _firebaseAuth.currentUser;
+  }
+
+  /// Check if user is signed in
+  bool isSignedIn() {
+    return _firebaseAuth.currentUser != null;
+  }
+
+  /// Get current user token
+  Future<String?> getCurrentUserToken() async {
+    final user = _firebaseAuth.currentUser;
+    if (user != null) {
+      return await user.getIdToken();
+    }
+    return null;
+  }
+
+  /// Get current user role from custom claims
+  Future<String?> getCurrentUserRole() async {
+    final user = _firebaseAuth.currentUser;
+    if (user != null) {
+      final idTokenResult = await user.getIdTokenResult();
+      return idTokenResult.claims?['role'] as String?;
+    }
+    return null;
+  }
+
+  /// Get current user ID (clientId or customerId)
+  Future<String?> getCurrentUserId() async {
+    final user = _firebaseAuth.currentUser;
+    if (user != null) {
+      final idTokenResult = await user.getIdTokenResult();
+      final role = idTokenResult.claims?['role'] as String?;
+      
+      if (role == 'client') {
+        return idTokenResult.claims?['clientId'] as String?;
+      } else if (role == 'customer') {
+        return idTokenResult.claims?['customerId'] as String?;
+      }
+    }
+    return null;
+  }
+
+  // ============================================================================
+  // PASSWORD RESET
+  // ============================================================================
+
+  /// Send password reset email
+  Future<void> sendPasswordResetEmail(String email) async {
+    try {
+      await _firebaseAuth.sendPasswordResetEmail(email: email);
+    } catch (e) {
+      throw Exception('Failed to send password reset email: $e');
+    }
+  }
+
+  /// Confirm password reset
+  Future<void> confirmPasswordReset({
+    required String code,
+    required String newPassword,
+  }) async {
+    try {
+      await _firebaseAuth.confirmPasswordReset(
+        code: code,
+        newPassword: newPassword,
+      );
+    } catch (e) {
+      throw Exception('Failed to reset password: $e');
+    }
+  }
+
+  // ============================================================================
+  // EMAIL VERIFICATION
+  // ============================================================================
+
+  /// Send email verification
+  Future<void> sendEmailVerification() async {
+    try {
+      final user = _firebaseAuth.currentUser;
+      if (user != null && !user.emailVerified) {
+        await user.sendEmailVerification();
+      }
+    } catch (e) {
+      throw Exception('Failed to send email verification: $e');
+    }
+  }
+
+  /// Check if email is verified
+  bool isEmailVerified() {
+    final user = _firebaseAuth.currentUser;
+    return user?.emailVerified ?? false;
+  }
+
+  /// Reload user to get updated email verification status
+  Future<void> reloadUser() async {
+    try {
+      final user = _firebaseAuth.currentUser;
+      if (user != null) {
+        await user.reload();
+      }
+    } catch (e) {
+      throw Exception('Failed to reload user: $e');
+    }
+  }
+
+  // ============================================================================
+  // PROFILE MANAGEMENT
+  // ============================================================================
+
+  /// Update user profile
+  Future<void> updateProfile({
+    String? displayName,
+    String? photoURL,
+  }) async {
+    try {
+      final user = _firebaseAuth.currentUser;
+      if (user != null) {
+        await user.updateDisplayName(displayName);
+        if (photoURL != null) {
+          await user.updatePhotoURL(photoURL);
+        }
+      }
+    } catch (e) {
+      throw Exception('Failed to update profile: $e');
+    }
+  }
+
+  /// Update email
+  Future<void> updateEmail(String newEmail) async {
+    try {
+      final user = _firebaseAuth.currentUser;
+      if (user != null) {
+        await user.updateEmail(newEmail);
+      }
+    } catch (e) {
+      throw Exception('Failed to update email: $e');
+    }
+  }
+
+  /// Update password
+  Future<void> updatePassword(String newPassword) async {
+    try {
+      final user = _firebaseAuth.currentUser;
+      if (user != null) {
+        await user.updatePassword(newPassword);
+      }
+    } catch (e) {
+      throw Exception('Failed to update password: $e');
+    }
+  }
+
+  // ============================================================================
+  // VALIDATION METHODS
+  // ============================================================================
+
+  /// Check if email is available for registration
+  Future<bool> isEmailAvailable(String email) async {
+    try {
+      final response = await http.get(
+        Uri.parse('$_baseUrl/auth/validate-email?email=$email'),
+        headers: _headers,
+      );
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        return data['available'] ?? false;
+      }
+      return false;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  /// Check if employee ID is available for customer registration
+  Future<bool> isEmployeeIdAvailable(String employeeId) async {
+    try {
+      final response = await http.get(
+        Uri.parse('$_baseUrl/auth/validate-employee-id?employeeId=$employeeId'),
+        headers: _headers,
+      );
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        return data['available'] ?? false;
+      }
+      return false;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  // ============================================================================
+  // AUTH STATE STREAM
+  // ============================================================================
+
+  /// Get auth state changes stream
+  Stream<User?> get authStateChanges => _firebaseAuth.authStateChanges();
+
+  /// Get user changes stream (includes profile updates)
+  Stream<User?> get userChanges => _firebaseAuth.userChanges();
+
+  /// Get ID token changes stream
+  Stream<User?> get idTokenChanges => _firebaseAuth.idTokenChanges();
+}

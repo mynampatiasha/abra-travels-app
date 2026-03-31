@@ -1,0 +1,4241 @@
+// lib/features/admin/reports/admin_comprehensive_reports_screen.dart
+// ✅ COMPLETE VERSION - ALL 10 SECTIONS
+// ============================================================================
+// Sections: Trips, SOS, Feedback, Documents, Satisfaction, Tickets,
+//           Drivers, Vehicles, Customers, Clients
+// ============================================================================
+
+import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:http/http.dart' as http;
+import 'dart:convert';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:abra_fleet/app/config/api_config.dart';
+import 'package:intl/intl.dart';
+import 'package:fl_chart/fl_chart.dart';
+import 'package:pdf/pdf.dart';
+import 'package:pdf/widgets.dart' as pw;
+import 'package:printing/printing.dart';
+import 'package:abra_fleet/features/admin/widgets/country_state_city_filter.dart';
+import 'package:abra_fleet/core/utils/export_helper.dart';
+import 'package:url_launcher/url_launcher.dart';
+
+class AdminComprehensiveReportsScreen extends StatefulWidget {
+  const AdminComprehensiveReportsScreen({Key? key}) : super(key: key);
+
+  @override
+  State<AdminComprehensiveReportsScreen> createState() =>
+      _AdminComprehensiveReportsScreenState();
+}
+
+class _AdminComprehensiveReportsScreenState
+    extends State<AdminComprehensiveReportsScreen> {
+  
+  // ========================================================================
+  // STATE VARIABLES
+  // ========================================================================
+  
+  bool _isLoading = false;
+  String? _errorMessage;
+  
+  // Date range filters
+  DateTime? _startDate;
+  DateTime? _endDate;
+  
+  // ✅ NEW: Category filter
+  String _selectedCategory = 'All';
+  final List<String> _categories = [
+    'All',
+    'Trips',
+    'SOS',
+    'Feedback',
+    'Documents',
+    'Satisfaction',
+    'Tickets',
+    'Drivers',
+    'Vehicles',
+    'Customers',
+    'Clients',
+  ];
+
+  // ✅ NEW: Report type checkboxes (for Filter Dialog)
+final Map<String, bool> _selectedReportTypes = {
+  'trips': true,
+  'sos': true,
+  'feedback': true,
+  'documents': true,
+  'satisfaction': true,
+  'tickets': true,
+  'drivers': true,
+  'vehicles': true,
+  'customers': true,
+  'clients': true,
+};
+
+  // ✅ NEW: Hierarchical Location Filters (from CountryStateCityFilter)
+String? _selectedCountry;
+String? _selectedState;
+String? _selectedCity;
+String? _selectedArea;
+
+// ✅ NEW: Search functionality
+String _searchQuery = '';
+final TextEditingController _searchController = TextEditingController();
+final TextEditingController _areaController = TextEditingController();
+  
+  // Report data
+  Map<String, dynamic>? _tripStats;
+  Map<String, dynamic>? _groupingStats;
+  List<dynamic> _tripsByDate = [];
+  List<dynamic> _tripsByVehicle = [];
+  List<dynamic> _tripsByDriver = [];
+  
+  Map<String, dynamic>? _sosStats;
+  List<dynamic> _sosByDate = [];
+  List<dynamic> _sosByStatus = [];
+  List<dynamic> _sosByMonth = [];
+  
+  Map<String, dynamic>? _feedbackStats;
+  List<dynamic> _topDrivers = [];
+  List<dynamic> _bottomDrivers = [];
+  List<dynamic> _ratingDistribution = [];
+  
+  Map<String, dynamic>? _documentStats;
+  List<dynamic> _expiringDocs = [];
+  
+  Map<String, dynamic>? _customerStats;
+  List<dynamic> _rideAgainStats = [];
+  
+  Map<String, dynamic>? _ticketStats;
+  List<dynamic> _ticketsByCategory = [];
+  List<dynamic> _ticketsByPriority = [];
+  
+  // ✅ NEW: Driver, Vehicle, Customer, Client data
+  Map<String, dynamic>? _driverStats;
+  
+  Map<String, dynamic>? _vehicleStats;
+  List<dynamic> _vehiclesByType = [];
+  List<dynamic> _vehiclesByCapacity = [];
+  
+  Map<String, dynamic>? _customerStatsData;
+  List<dynamic> _customersByOrganization = [];
+  
+  Map<String, dynamic>? _clientStats;
+  List<dynamic> _topClientsByCustomers = [];
+  
+  @override
+  void initState() {
+    super.initState();
+    _fetchAllReports();
+  }
+  
+  // ========================================================================
+  // FETCH ALL REPORTS
+  // ========================================================================
+  
+Future<void> _fetchAllReports() async {
+  setState(() {
+    _isLoading = true;
+    _errorMessage = null;
+  });
+  
+  try {
+    final prefs = await SharedPreferences.getInstance();
+    final token = prefs.getString('jwt_token');
+    
+    if (token == null) {
+      throw Exception('Authentication required');
+    }
+    
+    // Build query parameters
+    final queryParams = <String, String>{};
+    
+    if (_startDate != null && _endDate != null) {
+      queryParams['startDate'] = DateFormat('yyyy-MM-dd').format(_startDate!);
+      queryParams['endDate'] = DateFormat('yyyy-MM-dd').format(_endDate!);
+    }
+    
+    // ✅ ADD LOCATION FILTERS
+    if (_selectedCountry != null && _selectedCountry!.isNotEmpty) {
+      queryParams['country'] = _selectedCountry!;
+    }
+    if (_selectedState != null && _selectedState!.isNotEmpty) {
+      queryParams['state'] = _selectedState!;
+    }
+    if (_selectedCity != null && _selectedCity!.isNotEmpty) {
+      queryParams['city'] = _selectedCity!;
+    }
+    if (_selectedArea != null && _selectedArea!.isNotEmpty) {
+      queryParams['area'] = _selectedArea!;
+    }
+    
+    // Add selected report types
+    final selectedTypes = _selectedReportTypes.entries
+        .where((e) => e.value)
+        .map((e) => e.key)
+        .toList();
+    
+    if (selectedTypes.isNotEmpty) {
+      queryParams['reportTypes'] = selectedTypes.join(',');
+    }
+    
+    final uri = Uri.parse('${ApiConfig.baseUrl}/api/reports/comprehensive')
+        .replace(queryParameters: queryParams);
+    
+    print('📊 Fetching comprehensive reports...');
+    print('URL: $uri');
+    
+    final response = await http.get(
+      uri,
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer $token',
+      },
+    ).timeout(const Duration(seconds: 60));
+    
+    print('Response status: ${response.statusCode}');
+    
+    if (response.statusCode == 200) {
+      final jsonData = json.decode(response.body);
+      
+      if (jsonData['success'] == true && jsonData['data'] != null) {
+        final data = jsonData['data'];
+        
+        setState(() {
+          // Trips
+          _tripStats = data['tripStats'];
+          _groupingStats = data['groupingStats'];
+          _tripsByDate = data['tripsByDate'] ?? [];
+          _tripsByVehicle = data['tripsByVehicle'] ?? [];
+          _tripsByDriver = data['tripsByDriver'] ?? [];
+          
+          // SOS
+          _sosStats = data['sosStats'];
+          _sosByDate = data['sosByDate'] ?? [];
+          _sosByStatus = data['sosByStatus'] ?? [];
+          _sosByMonth = data['sosByMonth'] ?? [];
+          
+          // Feedback
+          _feedbackStats = data['feedbackStats'];
+          _topDrivers = data['topDrivers'] ?? [];
+          _bottomDrivers = data['bottomDrivers'] ?? [];
+          _ratingDistribution = data['ratingDistribution'] ?? [];
+          
+          // Documents
+          _documentStats = data['documentStats'];
+          _expiringDocs = data['expiringDocs'] ?? [];
+          
+          // Satisfaction
+          _customerStats = data['customerStats'];
+          _rideAgainStats = data['rideAgainStats'] ?? [];
+          
+          // Tickets
+_ticketStats = data['ticketStats'];
+_ticketsByCategory = data['ticketsByCategory'] ?? [];
+_ticketsByPriority = data['ticketsByPriority'] ?? []; // ✅ ADD THIS LINE
+          
+          // ✅ NEW: Drivers, Vehicles, Customers, Clients
+          _driverStats = data['driverStats'];
+          
+          _vehicleStats = data['vehicleStats'];
+          _vehiclesByType = data['vehiclesByType'] ?? [];
+          _vehiclesByCapacity = data['vehiclesByCapacity'] ?? [];
+          
+          _customerStatsData = data['customerStats'];
+          _customersByOrganization = data['customersByOrganization'] ?? [];
+          
+          _clientStats = data['clientStats'];
+          _topClientsByCustomers = data['topClientsByCustomers'] ?? [];
+          
+          _isLoading = false;
+        });
+        
+        print('✅ Reports loaded successfully');
+      } else {
+        throw Exception(jsonData['message'] ?? 'Failed to load reports');
+      }
+    } else {
+      throw Exception('Server error: ${response.statusCode}');
+    }
+  } catch (e) {
+    print('❌ Error: $e');
+    setState(() {
+      _errorMessage = e.toString();
+      _isLoading = false;
+    });
+  }
+}
+  // ========================================================================
+  // BUILD METHOD
+  // ========================================================================
+  
+@override
+Widget build(BuildContext context) {
+  final hasAnyData = _tripStats != null ||
+      _sosStats != null ||
+      _feedbackStats != null ||
+      _documentStats != null ||
+      _customerStats != null ||
+      _ticketStats != null ||
+      _driverStats != null ||
+      _vehicleStats != null ||
+      _customerStatsData != null ||
+      _clientStats != null;
+  
+  return Scaffold(
+    backgroundColor: const Color(0xFFF5F7FA),
+    appBar: AppBar(
+  title: const Text('Comprehensive Reports & Analytics'),
+  backgroundColor: const Color(0xFF1565C0),
+  foregroundColor: Colors.white,
+  actions: [
+    // Search Icon
+    IconButton(
+      icon: const Icon(Icons.search),
+      tooltip: 'Search',
+      onPressed: () {
+        showSearch(
+          context: context,
+          delegate: ReportSearchDelegate(),
+        );
+      },
+    ),
+    // ✅ COMMENTED OUT - Filter Icon (Filters are now always visible in dashboard)
+    // IconButton(
+    //   icon: const Icon(Icons.filter_list),
+    //   tooltip: 'Filters',
+    //   onPressed: _showFiltersDialog,
+    // ),
+    // Refresh Icon
+    IconButton(
+      icon: const Icon(Icons.refresh),
+      tooltip: 'Refresh',
+      onPressed: _fetchAllReports,
+    ),
+  ],
+),
+    body: _isLoading
+        ? const Center(child: CircularProgressIndicator())
+        : _errorMessage != null
+            ? Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const Icon(Icons.error_outline, size: 64, color: Colors.red),
+                    const SizedBox(height: 16),
+                    Text(_errorMessage!, style: const TextStyle(color: Colors.red)),
+                    const SizedBox(height: 16),
+                    ElevatedButton.icon(
+                      onPressed: _fetchAllReports,
+                      icon: const Icon(Icons.refresh),
+                      label: const Text('Retry'),
+                    ),
+                  ],
+                ),
+              )
+            : hasAnyData
+                ? SingleChildScrollView(
+                    child: Column(
+                      children: [
+                        // ✅ CATEGORY FILTER CARDS
+                        _buildCategoryFilterCards(),
+                        
+                        // ✅ TOP BAR WITH ACTION BUTTONS
+                        _buildTopBar(hasAnyData),
+                        
+                        // ✅ ALL REPORTS CONTENT
+                        _buildAllReportsContent(),
+                      ],
+                    ),
+                  )
+                : Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.bar_chart,
+                            size: 64, color: Colors.grey[400]),
+                        const SizedBox(height: 16),
+                        Text('No data available',
+                            style: TextStyle(
+                                fontSize: 18,
+                                color: Colors.grey[600])),
+                        const SizedBox(height: 12),
+                        ElevatedButton.icon(
+                          onPressed: _fetchAllReports,
+                          icon: const Icon(Icons.refresh),
+                          label: const Text('Retry'),
+                          style: ElevatedButton.styleFrom(
+                              backgroundColor:
+                                  const Color(0xFF1565C0)),
+                        ),
+                      ],
+                    ),
+                  ),
+  );
+}
+  
+// ========================================================================
+// TOP BAR - THREE ACTION BUTTONS + TWO ROWS OF FILTERS
+// ========================================================================
+Widget _buildTopBar(bool hasData) {
+  return Container(
+    color: Colors.white,
+    padding: const EdgeInsets.fromLTRB(16, 10, 16, 10),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // ========================================================================
+        // ACTION BUTTONS ROW: PDF, EXCEL, WHATSAPP
+        // ========================================================================
+        if (hasData)
+          Row(
+            children: [
+              // Generate PDF Button
+              Expanded(
+                child: ElevatedButton.icon(
+                  onPressed: _generatePDF,
+                  icon: const Icon(Icons.picture_as_pdf, size: 18),
+                  label: const Text(
+                    'PDF',
+                    style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
+                  ),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFFD32F2F),
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    elevation: 2,
+                  ),
+                ),
+              ),
+              
+              const SizedBox(width: 10),
+              
+              // Generate Excel Button
+              Expanded(
+                child: ElevatedButton.icon(
+                  onPressed: _exportToExcel,
+                  icon: const Icon(Icons.table_chart, size: 18),
+                  label: const Text(
+                    'Excel',
+                    style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
+                  ),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF2E7D32),
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    elevation: 2,
+                  ),
+                ),
+              ),
+              
+              const SizedBox(width: 10),
+              
+              // WhatsApp Share Button
+              Expanded(
+                child: ElevatedButton.icon(
+                  onPressed: _shareViaWhatsApp,
+                  icon: const Icon(Icons.share, size: 18),
+                  label: const Text(
+                    'WhatsApp',
+                    style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
+                  ),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF25D366),
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    elevation: 2,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        
+        if (hasData) const SizedBox(height: 14),
+        
+        // ========================================================================
+        // ROW 1: COUNTRY/STATE/CITY FILTERS (from CountryStateCityFilter)
+        // ========================================================================
+        CountryStateCityFilter(
+          initialFromDate: _startDate,
+          initialToDate: _endDate,
+          initialCountry: _selectedCountry,
+          initialState: _selectedState,
+          initialCity: _selectedCity,
+          initialLocalArea: _selectedArea,
+          onFilterApplied: (filters) {
+            setState(() {
+              _startDate = filters['fromDate'];
+              _endDate = filters['toDate'];
+              _selectedCountry = filters['country'];
+              _selectedState = filters['state'];
+              _selectedCity = filters['city'];
+              _selectedArea = filters['localArea'];
+            });
+            _fetchAllReports();
+          },
+        ),
+        
+        const SizedBox(height: 14),
+        
+        // ========================================================================
+        // ROW 2: CHECKBOX FILTERS (Always Visible)
+        // ========================================================================
+        Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: Colors.grey[50],
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: Colors.grey[300]!),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  const Icon(Icons.filter_alt, size: 18, color: Color(0xFF1565C0)),
+                  const SizedBox(width: 8),
+                  const Text(
+                    'Report Sections',
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      color: Color(0xFF1565C0),
+                    ),
+                  ),
+                  const Spacer(),
+                  TextButton.icon(
+                    onPressed: () {
+                      setState(() {
+                        final allSelected = _selectedReportTypes.values.every((v) => v);
+                        _selectedReportTypes.updateAll((key, value) => !allSelected);
+                      });
+                      _fetchAllReports();
+                    },
+                    icon: const Icon(Icons.select_all, size: 16),
+                    label: Text(
+                      _selectedReportTypes.values.every((v) => v) ? 'Deselect All' : 'Select All',
+                      style: const TextStyle(fontSize: 12),
+                    ),
+                    style: TextButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 10),
+              Wrap(
+                spacing: 16,
+                runSpacing: 8,
+                children: [
+                  _buildCheckboxFilter('Trips', 'trips', Icons.assignment),
+                  _buildCheckboxFilter('SOS', 'sos', Icons.warning_amber),
+                  _buildCheckboxFilter('Feedback', 'feedback', Icons.star),
+                  _buildCheckboxFilter('Documents', 'documents', Icons.description),
+                  _buildCheckboxFilter('Satisfaction', 'satisfaction', Icons.mood),
+                  // _buildCheckboxFilter('Tickets', 'tickets', Icons.support), // ✅ COMMENTED OUT
+                  _buildCheckboxFilter('Drivers', 'drivers', Icons.person),
+                  _buildCheckboxFilter('Vehicles', 'vehicles', Icons.directions_car),
+                  _buildCheckboxFilter('Customers', 'customers', Icons.people),
+                  _buildCheckboxFilter('Clients', 'clients', Icons.business),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ],
+    ),
+  );
+}
+
+// ========================================================================
+// CHECKBOX FILTER WIDGET
+// ========================================================================
+Widget _buildCheckboxFilter(String label, String key, IconData icon) {
+  return InkWell(
+    onTap: () {
+      setState(() {
+        _selectedReportTypes[key] = !(_selectedReportTypes[key] ?? false);
+      });
+      _fetchAllReports();
+    },
+    child: Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: _selectedReportTypes[key] == true
+            ? const Color(0xFF1565C0).withOpacity(0.1)
+            : Colors.white,
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(
+          color: _selectedReportTypes[key] == true
+              ? const Color(0xFF1565C0)
+              : Colors.grey[300]!,
+          width: _selectedReportTypes[key] == true ? 1.5 : 1,
+        ),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            _selectedReportTypes[key] == true
+                ? Icons.check_box
+                : Icons.check_box_outline_blank,
+            size: 18,
+            color: _selectedReportTypes[key] == true
+                ? const Color(0xFF1565C0)
+                : Colors.grey[600],
+          ),
+          const SizedBox(width: 6),
+          Icon(icon, size: 16, color: Colors.grey[700]),
+          const SizedBox(width: 6),
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: _selectedReportTypes[key] == true
+                  ? FontWeight.w600
+                  : FontWeight.normal,
+              color: _selectedReportTypes[key] == true
+                  ? const Color(0xFF1565C0)
+                  : Colors.grey[800],
+            ),
+          ),
+        ],
+      ),
+    ),
+  );
+}
+
+
+// ========================================================================
+// ALL REPORTS CONTENT (No ScrollView - parent handles scrolling)
+// ========================================================================
+Widget _buildAllReportsContent() {
+  return Padding(
+    padding: const EdgeInsets.all(16),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // TRIPS
+        if (_shouldShowSection('Trips') && _tripStats != null) ...[
+          _buildSectionHeader('TRIP STATISTICS', Icons.assignment),
+          const SizedBox(height: 16),
+          _buildTripOverview(),
+          const SizedBox(height: 16),
+          _buildTripStatusPieChart(),
+          const SizedBox(height: 16),
+          if (_groupingStats != null) _buildGroupingStats(),
+          const SizedBox(height: 16),
+          _buildTripsByDateChart(),
+          const SizedBox(height: 16),
+          _buildTripsByVehicleChart(),
+          const SizedBox(height: 16),
+          _buildTripsByDriverChart(),
+          const SizedBox(height: 32),
+          if (_selectedCategory == 'All') ...[
+            const Divider(thickness: 2),
+            const SizedBox(height: 32),
+          ],
+        ],
+
+        // SOS
+        if (_shouldShowSection('SOS') && _sosStats != null) ...[
+          _buildSectionHeader('SOS ANALYTICS', Icons.warning_amber),
+          const SizedBox(height: 16),
+          _buildSOSOverview(),
+          const SizedBox(height: 16),
+          _buildSOSMonthlyBarChart(),
+          const SizedBox(height: 16),
+          _buildSOSStatusChart(),
+          const SizedBox(height: 16),
+          _buildSOSResponseTimeCard(),
+          const SizedBox(height: 32),
+          if (_selectedCategory == 'All') ...[
+            const Divider(thickness: 2),
+            const SizedBox(height: 32),
+          ],
+        ],
+
+        // FEEDBACK
+        if (_shouldShowSection('Feedback') && _feedbackStats != null) ...[
+          _buildSectionHeader('DRIVER FEEDBACK', Icons.star),
+          const SizedBox(height: 16),
+          _buildFeedbackOverview(),
+          const SizedBox(height: 16),
+          _buildRatingDistributionChart(),
+          const SizedBox(height: 16),
+          _buildTopDriversCard(),
+          const SizedBox(height: 16),
+          _buildBottomDriversCard(),
+          const SizedBox(height: 32),
+          if (_selectedCategory == 'All') ...[
+            const Divider(thickness: 2),
+            const SizedBox(height: 32),
+          ],
+        ],
+
+        // DOCUMENTS
+        if (_shouldShowSection('Documents') && _documentStats != null) ...[
+          _buildSectionHeader('DOCUMENT STATUS', Icons.description),
+          const SizedBox(height: 16),
+          _buildDocumentOverview(),
+          const SizedBox(height: 16),
+          _buildExpiringDocsList(),
+          const SizedBox(height: 32),
+          if (_selectedCategory == 'All') ...[
+            const Divider(thickness: 2),
+            const SizedBox(height: 32),
+          ],
+        ],
+
+        // SATISFACTION
+        if (_shouldShowSection('Satisfaction') && _customerStats != null) ...[
+          _buildSectionHeader('CUSTOMER SATISFACTION', Icons.mood),
+          const SizedBox(height: 16),
+          _buildSatisfactionOverview(),
+          const SizedBox(height: 16),
+          _buildRideAgainChart(),
+          const SizedBox(height: 32),
+          if (_selectedCategory == 'All') ...[
+            const Divider(thickness: 2),
+            const SizedBox(height: 32),
+          ],
+        ],
+
+        // TICKETS
+        if (_shouldShowSection('Tickets') && _ticketStats != null) ...[
+          _buildSectionHeader('SUPPORT TICKETS', Icons.support),
+          const SizedBox(height: 16),
+          _buildTicketOverview(),
+          _buildTicketStatusPieChart(), // ✅ ADD PIE CHART
+  const SizedBox(height: 16),
+  _buildTicketsByPriorityBarChart(), // ✅ ADD BAR CHART
+  const SizedBox(height: 16),
+          const SizedBox(height: 16),
+          // ✅ COMMENTED OUT: Tickets by Category
+          // _buildTicketsByCategoryChart(),
+          const SizedBox(height: 32),
+          if (_selectedCategory == 'All') ...[
+            const Divider(thickness: 2),
+            const SizedBox(height: 32),
+          ],
+        ],
+
+        // ✅ DRIVERS
+        if (_shouldShowSection('Drivers') && _driverStats != null) ...[
+          _buildSectionHeader('DRIVER STATISTICS', Icons.person),
+          const SizedBox(height: 16),
+          _buildDriverOverview(),
+          const SizedBox(height: 16),
+          _buildDriverStatusPieChart(),
+          const SizedBox(height: 32),
+          if (_selectedCategory == 'All') ...[
+            const Divider(thickness: 2),
+            const SizedBox(height: 32),
+          ],
+        ],
+
+        // ✅ VEHICLES
+        if (_shouldShowSection('Vehicles') && _vehicleStats != null) ...[
+          _buildSectionHeader('VEHICLE STATISTICS', Icons.directions_car),
+          const SizedBox(height: 16),
+          _buildVehicleOverview(),
+          const SizedBox(height: 16),
+          _buildVehiclesByTypeChart(),
+          const SizedBox(height: 16),
+          _buildVehiclesByCapacityChart(),
+          const SizedBox(height: 32),
+          if (_selectedCategory == 'All') ...[
+            const Divider(thickness: 2),
+            const SizedBox(height: 32),
+          ],
+        ],
+
+        // ✅ CUSTOMERS
+        if (_shouldShowSection('Customers') && _customerStatsData != null) ...[
+          _buildSectionHeader('CUSTOMER STATISTICS', Icons.people),
+          const SizedBox(height: 16),
+          _buildCustomerOverview(),
+          const SizedBox(height: 16),
+          _buildCustomersByOrgChart(),
+          const SizedBox(height: 32),
+          if (_selectedCategory == 'All') ...[
+            const Divider(thickness: 2),
+            const SizedBox(height: 32),
+          ],
+        ],
+
+        // ✅ CLIENTS
+        if (_shouldShowSection('Clients') && _clientStats != null) ...[
+          _buildSectionHeader('CLIENT STATISTICS', Icons.business),
+          const SizedBox(height: 16),
+          _buildClientOverview(),
+          const SizedBox(height: 16),
+          _buildTopClientsByCustomersChart(),
+          const SizedBox(height: 32),
+        ],
+
+        const SizedBox(height: 16),
+      ],
+    ),
+  );
+}
+
+// ========================================================================
+// FILTER DIALOG HELPER METHODS
+// ========================================================================
+
+Widget _buildFilterSectionHeader(String title, IconData icon) {
+  return Row(
+    children: [
+      Icon(icon, color: Colors.blue.shade700, size: 20),
+      const SizedBox(width: 8),
+      Text(
+        title,
+        style: TextStyle(
+          fontSize: 16,
+          fontWeight: FontWeight.bold,
+          color: Colors.blue.shade700,
+        ),
+      ),
+    ],
+  );
+}
+
+Widget _buildDatePickerField({
+  required BuildContext context,
+  required String label,
+  required DateTime? selectedDate,
+  required Function(DateTime?) onDateSelected,
+}) {
+  return Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      Text(
+        label,
+        style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Colors.grey.shade700),
+      ),
+      const SizedBox(height: 8),
+      InkWell(
+        onTap: () async {
+          final picked = await showDatePicker(
+            context: context,
+            initialDate: selectedDate ?? DateTime.now(),
+            firstDate: DateTime(2020),
+            lastDate: DateTime.now(),
+          );
+          if (picked != null) {
+            onDateSelected(picked);
+          }
+        },
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+          decoration: BoxDecoration(
+            border: Border.all(color: selectedDate != null ? Colors.blue.shade300 : Colors.grey.shade300),
+            borderRadius: BorderRadius.circular(8),
+            color: Colors.white,
+          ),
+          child: Row(
+            children: [
+              Icon(Icons.calendar_today, size: 18, color: selectedDate != null ? Colors.blue.shade700 : Colors.grey),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  selectedDate != null ? DateFormat('MMM dd, yyyy').format(selectedDate) : 'Select $label',
+                  style: TextStyle(
+                    color: selectedDate != null ? Colors.black87 : Colors.grey.shade500,
+                    fontSize: 14,
+                  ),
+                ),
+              ),
+              if (selectedDate != null)
+                GestureDetector(
+                  onTap: () => onDateSelected(null),
+                  child: Icon(Icons.cancel, size: 18, color: Colors.grey.shade600),
+                ),
+            ],
+          ),
+        ),
+      ),
+    ],
+  );
+}
+
+Widget _buildCountryPicker(StateSetter setDialogState) {
+  return Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      Text(
+        'Country',
+        style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Colors.grey.shade700),
+      ),
+      const SizedBox(height: 8),
+      // Country picker temporarily disabled - requires country_picker package
+      Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+        decoration: BoxDecoration(
+          border: Border.all(color: Colors.grey.shade300),
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(
+              _selectedCountry ?? 'Select Country',
+              style: TextStyle(
+                fontSize: 14,
+                color: _selectedCountry != null ? Colors.black87 : Colors.grey.shade600,
+              ),
+            ),
+            Icon(Icons.arrow_drop_down, color: Colors.grey.shade600),
+          ],
+        ),
+      ),
+      /* Commented out - requires country_picker package
+      InkWell(
+        onTap: () {
+          showCountryPicker(
+            context: context,
+            showPhoneCode: false,
+            onSelect: (Country country) {
+              setDialogState(() {
+                _selectedCountry = country.name;
+                _selectedState = null;
+                _selectedCity = null;
+                _selectedArea = null;
+                _areaController.clear();
+              });
+              setState(() {
+                _selectedCountry = country.name;
+                _selectedState = null;
+                _selectedCity = null;
+                _selectedArea = null;
+                _areaController.clear();
+              });
+            },
+          );
+        },
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+          decoration: BoxDecoration(
+            border: Border.all(color: _selectedCountry != null ? Colors.blue.shade300 : Colors.grey.shade300),
+            borderRadius: BorderRadius.circular(8),
+            color: Colors.white,
+          ),
+          child: Row(
+            children: [
+              Icon(Icons.public, size: 18, color: _selectedCountry != null ? Colors.blue.shade700 : Colors.grey),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  _selectedCountry ?? 'Select Country',
+                  style: TextStyle(
+                    color: _selectedCountry != null ? Colors.black87 : Colors.grey.shade500,
+                    fontSize: 14,
+                  ),
+                ),
+              ),
+              if (_selectedCountry != null)
+                GestureDetector(
+                  onTap: () {
+                    setDialogState(() {
+                      _selectedCountry = null;
+                      _selectedState = null;
+                      _selectedCity = null;
+                      _selectedArea = null;
+                      _areaController.clear();
+                    });
+                    setState(() {
+                      _selectedCountry = null;
+                      _selectedState = null;
+                      _selectedCity = null;
+                      _selectedArea = null;
+                      _areaController.clear();
+                    });
+                  },
+                  child: Icon(Icons.cancel, size: 18, color: Colors.grey.shade600),
+                )
+              else
+                Icon(Icons.arrow_drop_down, color: Colors.grey.shade600),
+            ],
+          ),
+        ),
+      ),
+      */
+    ],
+  );
+}
+
+Widget _buildStatePicker(StateSetter setDialogState) {
+  return Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      Text(
+        'State / Province',
+        style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Colors.grey.shade700),
+      ),
+      const SizedBox(height: 8),
+      IgnorePointer(
+        ignoring: _selectedCountry == null,
+        child: Opacity(
+          opacity: _selectedCountry != null ? 1.0 : 0.6,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+            decoration: BoxDecoration(
+              border: Border.all(color: _selectedState != null ? Colors.blue.shade300 : Colors.grey.shade300),
+              borderRadius: BorderRadius.circular(8),
+              color: _selectedCountry != null ? Colors.white : Colors.grey.shade100,
+            ),
+            child: Row(
+              children: [
+                Icon(Icons.location_city, size: 18, color: _selectedState != null ? Colors.blue.shade700 : Colors.grey),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    _selectedState ?? 'Select State',
+                    style: TextStyle(
+                      color: _selectedState != null ? Colors.black87 : Colors.grey.shade500,
+                      fontSize: 14,
+                    ),
+                  ),
+                ),
+                Icon(Icons.arrow_drop_down, color: Colors.grey.shade600),
+              ],
+            ),
+          ),
+        ),
+      ),
+    ],
+  );
+}
+
+Widget _buildCityPicker(StateSetter setDialogState) {
+  return Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      Text(
+        'City / District',
+        style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Colors.grey.shade700),
+      ),
+      const SizedBox(height: 8),
+      IgnorePointer(
+        ignoring: _selectedState == null,
+        child: Opacity(
+          opacity: _selectedState != null ? 1.0 : 0.6,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+            decoration: BoxDecoration(
+              border: Border.all(color: _selectedCity != null ? Colors.blue.shade300 : Colors.grey.shade300),
+              borderRadius: BorderRadius.circular(8),
+              color: _selectedState != null ? Colors.white : Colors.grey.shade100,
+            ),
+            child: Row(
+              children: [
+                Icon(Icons.location_on, size: 18, color: _selectedCity != null ? Colors.blue.shade700 : Colors.grey),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    _selectedCity ?? 'Select City',
+                    style: TextStyle(
+                      color: _selectedCity != null ? Colors.black87 : Colors.grey.shade500,
+                      fontSize: 14,
+                    ),
+                  ),
+                ),
+                Icon(Icons.arrow_drop_down, color: Colors.grey.shade600),
+              ],
+            ),
+          ),
+        ),
+      ),
+    ],
+  );
+}
+
+Widget _buildAreaTextField(StateSetter setDialogState) {
+  return Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      Text(
+        'Area / Locality',
+        style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Colors.grey.shade700),
+      ),
+      const SizedBox(height: 8),
+      TextField(
+        controller: _areaController,
+        onChanged: (value) {
+          setDialogState(() => _selectedArea = value);
+          setState(() => _selectedArea = value);
+        },
+        decoration: InputDecoration(
+          hintText: 'Enter area or locality',
+          prefixIcon: Icon(Icons.place_outlined, size: 18, color: Colors.grey.shade600),
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(8),
+            borderSide: BorderSide(color: Colors.grey.shade300),
+          ),
+          enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(8),
+            borderSide: BorderSide(color: Colors.grey.shade300),
+          ),
+          focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(8),
+            borderSide: BorderSide(color: Colors.blue.shade300, width: 2),
+          ),
+          filled: true,
+          fillColor: Colors.white,
+          contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+        ),
+        style: const TextStyle(fontSize: 14),
+      ),
+    ],
+  );
+}
+
+Widget _buildCheckbox(String key, String label, IconData icon, StateSetter setDialogState) {
+  return SizedBox(
+    width: 160,
+    child: CheckboxListTile(
+      title: Row(
+        children: [
+          Icon(icon, size: 16, color: const Color(0xFF1565C0)),
+          const SizedBox(width: 8),
+          Expanded(child: Text(label, style: const TextStyle(fontSize: 14))),
+        ],
+      ),
+      value: _selectedReportTypes[key],
+      onChanged: (val) {
+        setDialogState(() => _selectedReportTypes[key] = val ?? false);
+        setState(() => _selectedReportTypes[key] = val ?? false);
+      },
+      controlAffinity: ListTileControlAffinity.leading,
+      contentPadding: EdgeInsets.zero,
+      dense: true,
+    ),
+  );
+}
+
+// ========================================================================
+// TRIP STATUS PIE CHART
+// ========================================================================
+Widget _buildTripStatusPieChart() {
+  final scheduled = (_tripStats!['scheduled'] ?? 0).toDouble();
+  final ongoing = (_tripStats!['ongoing'] ?? 0).toDouble();
+  final completed = (_tripStats!['completed'] ?? 0).toDouble();
+  final total = scheduled + ongoing + completed;
+  if (total == 0) return const SizedBox.shrink();
+
+  return Card(
+    elevation: 2,
+    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+    child: Padding(
+      padding: const EdgeInsets.all(16),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        const Text('Trip Status Distribution',
+            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+        const SizedBox(height: 20),
+        SizedBox(
+          height: 200,
+          child: PieChart(PieChartData(
+            sectionsSpace: 2,
+            centerSpaceRadius: 50,
+            sections: [
+              if (scheduled > 0)
+                PieChartSectionData(
+                    value: scheduled,
+                    title: '${((scheduled / total) * 100).toStringAsFixed(0)}%',
+                    color: Colors.orange,
+                    radius: 60,
+                    titleStyle: const TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white)),
+              if (ongoing > 0)
+                PieChartSectionData(
+                    value: ongoing,
+                    title: '${((ongoing / total) * 100).toStringAsFixed(0)}%',
+                    color: Colors.blue,
+                    radius: 60,
+                    titleStyle: const TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white)),
+              if (completed > 0)
+                PieChartSectionData(
+                    value: completed,
+                    title:
+                        '${((completed / total) * 100).toStringAsFixed(0)}%',
+                    color: Colors.green,
+                    radius: 60,
+                    titleStyle: const TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white)),
+            ],
+          )),
+        ),
+        const SizedBox(height: 12),
+        Wrap(spacing: 16, children: [
+          if (scheduled > 0) _legendItem('Scheduled', Colors.orange),
+          if (ongoing > 0) _legendItem('Ongoing', Colors.blue),
+          if (completed > 0) _legendItem('Completed', Colors.green),
+        ]),
+      ]),
+    ),
+  );
+}
+  // ========================================================================
+  // ✅ CATEGORY FILTER LOGIC
+  // ========================================================================
+  
+  bool _shouldShowSection(String section) {
+    if (_selectedCategory == 'All') return true;
+    return _selectedCategory == section;
+  }
+  
+  // ========================================================================
+  // ✅ CATEGORY FILTER CARDS (Horizontal Scroll)
+  // ========================================================================
+  
+  // ========================================================================
+// ✅ CATEGORY FILTER CARDS (Horizontal Scroll with Colored Cards)
+// ========================================================================
+
+  // ========================================================================
+  // ✅ CATEGORY FILTER CARDS (Horizontal Scroll with Colored Cards)
+  // ========================================================================
+
+
+Widget _buildCategoryFilterCards() {
+  // Define colors for each category
+  final Map<String, Color> categoryColors = {
+    'All': const Color(0xFF1565C0),
+    'Trips': const Color(0xFF2E7D32),
+    'SOS': const Color(0xFFD32F2F),
+    'Feedback': const Color(0xFFF57C00),
+    'Documents': const Color(0xFF7B1FA2),
+    'Satisfaction': const Color(0xFF0097A7),
+    'Tickets': const Color(0xFFC2185B),
+    'Drivers': const Color(0xFF5D4037),
+    'Vehicles': const Color(0xFF455A64),
+    'Customers': const Color(0xFF00796B),
+    'Clients': const Color(0xFF303F9F),
+  };
+
+  // Define icons for each category
+  final Map<String, IconData> categoryIcons = {
+    'All': Icons.dashboard,
+    'Trips': Icons.assignment,
+    'SOS': Icons.warning_amber,
+    'Feedback': Icons.star,
+    'Documents': Icons.description,
+    'Satisfaction': Icons.mood,
+    'Tickets': Icons.support,
+    'Drivers': Icons.person,
+    'Vehicles': Icons.directions_car,
+    'Customers': Icons.people,
+    'Clients': Icons.business,
+  };
+
+  return Container(
+    height: 100,
+    padding: const EdgeInsets.symmetric(vertical: 8),
+    color: Colors.white,
+    child: ListView.builder(
+      scrollDirection: Axis.horizontal,
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      itemCount: _categories.length,
+      itemBuilder: (context, index) {
+          final category = _categories[index];
+          final isSelected = _selectedCategory == category;
+          final color = categoryColors[category] ?? Colors.blue;
+          final icon = categoryIcons[category] ?? Icons.category;
+          
+          return Padding(
+            padding: const EdgeInsets.only(right: 12),
+            child: Material(
+              color: Colors.transparent,
+              child: InkWell(
+                onTap: () {
+                  setState(() {
+                    _selectedCategory = category;
+                  });
+                },
+                borderRadius: BorderRadius.circular(16),
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 200),
+                  width: 140,
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: isSelected ? color : Colors.white,
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(
+                      color: isSelected ? color : Colors.grey.shade300,
+                      width: isSelected ? 2.5 : 1.5,
+                    ),
+                    boxShadow: isSelected
+                        ? [
+                            BoxShadow(
+                              color: color.withOpacity(0.4),
+                              blurRadius: 12,
+                              offset: const Offset(0, 4),
+                            ),
+                          ]
+                        : [
+                            BoxShadow(
+                              color: Colors.grey.withOpacity(0.1),
+                              blurRadius: 4,
+                              offset: const Offset(0, 2),
+                            ),
+                          ],
+                  ),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(
+                        icon,
+                        color: isSelected ? Colors.white : color,
+                        size: 28,
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        category,
+                        style: TextStyle(
+                          color: isSelected ? Colors.white : Colors.black87,
+                          fontWeight: isSelected ? FontWeight.bold : FontWeight.w600,
+                          fontSize: 13,
+                        ),
+                        textAlign: TextAlign.center,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+  // ========================================================================
+  // DATE FILTER CHIPS
+  // ========================================================================
+  
+  Widget _buildDateFilterChips() {
+    return Wrap(
+      spacing: 8,
+      runSpacing: 8,
+      children: [
+        if (_startDate != null && _endDate != null)
+          Chip(
+            label: Text(
+              '${DateFormat('MMM dd').format(_startDate!)} - ${DateFormat('MMM dd, yyyy').format(_endDate!)}',
+            ),
+            onDeleted: () {
+              setState(() {
+                _startDate = null;
+                _endDate = null;
+                _selectedCategory = 'All'; // ✅ Reset to ALL view
+              });
+              _fetchAllReports();
+            },
+          ),
+        ActionChip(
+          label: const Text('Filter by Date'),
+          avatar: const Icon(Icons.calendar_today, size: 18),
+          onPressed: _showFilterDialog,
+        ),
+      ],
+    );
+  }
+  
+  // ========================================================================
+  // FILTER DIALOG
+  // ========================================================================
+  
+  Future<void> _showFilterDialog() async {
+    DateTime? startDate = _startDate;
+    DateTime? endDate = _endDate;
+    
+    await showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Filter Reports'),
+        content: StatefulBuilder(
+          builder: (context, setDialogState) => Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ListTile(
+                title: const Text('Start Date'),
+                subtitle: Text(
+                  startDate != null
+                      ? DateFormat('MMM dd, yyyy').format(startDate!)
+                      : 'Not set',
+                ),
+                trailing: const Icon(Icons.calendar_today),
+                onTap: () async {
+                  final picked = await showDatePicker(
+                    context: context,
+                    initialDate: startDate ?? DateTime.now(),
+                    firstDate: DateTime(2020),
+                    lastDate: DateTime.now(),
+                  );
+                  if (picked != null) {
+                    setDialogState(() {
+                      startDate = picked;
+                    });
+                  }
+                },
+              ),
+              ListTile(
+                title: const Text('End Date'),
+                subtitle: Text(
+                  endDate != null
+                      ? DateFormat('MMM dd, yyyy').format(endDate!)
+                      : 'Not set',
+                ),
+                trailing: const Icon(Icons.calendar_today),
+                onTap: () async {
+                  final picked = await showDatePicker(
+                    context: context,
+                    initialDate: endDate ?? DateTime.now(),
+                    firstDate: startDate ?? DateTime(2020),
+                    lastDate: DateTime.now(),
+                  );
+                  if (picked != null) {
+                    setDialogState(() {
+                      endDate = picked;
+                    });
+                  }
+                },
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              setState(() {
+                _startDate = startDate;
+                _endDate = endDate;
+                _selectedCategory = 'All'; // ✅ Reset to ALL view when applying filters
+              });
+              Navigator.pop(context);
+              _fetchAllReports();
+            },
+            child: const Text('Apply'),
+          ),
+        ],
+      ),
+    );
+  }
+  
+  // ========================================================================
+  // SECTION HEADER
+  // ========================================================================
+  
+  Widget _buildSectionHeader(String title, IconData icon) {
+    return Row(
+      children: [
+        Icon(icon, color: Colors.blue, size: 28),
+        const SizedBox(width: 12),
+        Text(
+          title,
+          style: const TextStyle(
+            fontSize: 22,
+            fontWeight: FontWeight.bold,
+            color: Colors.black87,
+          ),
+        ),
+      ],
+    );
+  }
+  // ========================================================================
+  // TRIP OVERVIEW - 5 CARDS IN 1 ROW
+  // ========================================================================
+  
+  Widget _buildTripOverview() {
+    final total = _tripStats!['total'] ?? 0;
+    final scheduled = _tripStats!['scheduled'] ?? 0;
+    final ongoing = _tripStats!['ongoing'] ?? 0;
+    final completed = _tripStats!['completed'] ?? 0;
+    final cancelled = _tripStats!['cancelled'] ?? 0;
+    
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text('Trip Overview',
+            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+        const SizedBox(height: 16),
+        SizedBox(
+          height: 120,
+          child: ListView(
+            scrollDirection: Axis.horizontal,
+            children: [
+              SizedBox(
+                width: 160,
+                child: _statCard('Total', '$total', Icons.trip_origin, const Color(0xFF1565C0)),
+              ),
+              const SizedBox(width: 12),
+              SizedBox(
+                width: 160,
+                child: _statCard('Scheduled', '$scheduled', Icons.schedule, Colors.orange),
+              ),
+              const SizedBox(width: 12),
+              SizedBox(
+                width: 160,
+                child: _statCard('Ongoing', '$ongoing', Icons.local_shipping, Colors.blue),
+              ),
+              const SizedBox(width: 12),
+              SizedBox(
+                width: 160,
+                child: _statCard('Completed', '$completed', Icons.check_circle, Colors.green),
+              ),
+              const SizedBox(width: 12),
+              SizedBox(
+                width: 160,
+                child: _statCard('Cancelled', '$cancelled', Icons.cancel, Colors.red),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+  
+  // ========================================================================
+  // SOS OVERVIEW - 4 CARDS IN 1 ROW
+  // ========================================================================
+  
+  Widget _buildSOSOverview() {
+    final total = _sosStats!['total'] ?? 0;
+    final active = _sosStats!['active'] ?? 0;
+    final resolved = _sosStats!['resolved'] ?? 0;
+    final avgResponse = _sosStats!['avgResponseFormatted'] ?? '0 min';
+    
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text('SOS Overview',
+            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+        const SizedBox(height: 16),
+        SizedBox(
+          height: 120,
+          child: ListView(
+            scrollDirection: Axis.horizontal,
+            children: [
+              SizedBox(
+                width: 160,
+                child: _statCard('Total', '$total', Icons.emergency, const Color(0xFF1565C0)),
+              ),
+              const SizedBox(width: 12),
+              SizedBox(
+                width: 160,
+                child: _statCard('Active', '$active', Icons.error, Colors.red),
+              ),
+              const SizedBox(width: 12),
+              SizedBox(
+                width: 160,
+                child: _statCard('Resolved', '$resolved', Icons.check_circle, Colors.green),
+              ),
+              const SizedBox(width: 12),
+              SizedBox(
+                width: 160,
+                child: _statCard('Avg Response', avgResponse, Icons.timer, Colors.blue),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+  
+  // ========================================================================
+  // FEEDBACK OVERVIEW - 4 CARDS IN 1 ROW
+  // ========================================================================
+  
+  Widget _buildFeedbackOverview() {
+    final total = _feedbackStats!['total'] ?? 0;
+    final avg = (_feedbackStats!['avgRating'] ?? 0.0).toDouble();
+    final five = _feedbackStats!['fiveStars'] ?? 0;
+    final pos = _feedbackStats!['positive'] ?? 0;
+    
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text('Feedback Overview',
+            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+        const SizedBox(height: 16),
+        SizedBox(
+          height: 120,
+          child: ListView(
+            scrollDirection: Axis.horizontal,
+            children: [
+              SizedBox(
+                width: 160,
+                child: _statCard('Total Reviews', '$total', Icons.feedback, const Color(0xFF1565C0)),
+              ),
+              const SizedBox(width: 12),
+              SizedBox(
+                width: 160,
+                child: _statCard('Avg Rating', avg.toStringAsFixed(1), Icons.star, Colors.amber),
+              ),
+              const SizedBox(width: 12),
+              SizedBox(
+                width: 160,
+                child: _statCard('5 Stars', '$five', Icons.stars, Colors.green),
+              ),
+              const SizedBox(width: 12),
+              SizedBox(
+                width: 160,
+                child: _statCard('Positive', '$pos%', Icons.thumb_up, Colors.blue),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+  
+  // ========================================================================
+  // DOCUMENT OVERVIEW - 3 CARDS IN 1 ROW
+  // ========================================================================
+  
+  Widget _buildDocumentOverview() {
+    final total = _documentStats!['total'] as Map<String, dynamic>?;
+    final expired = total?['expired'] ?? 0;
+    final soon = total?['expiringSoon'] ?? 0;
+    final valid = total?['valid'] ?? 0;
+    
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text('Document Overview',
+            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+        const SizedBox(height: 16),
+        SizedBox(
+          height: 120,
+          child: ListView(
+            scrollDirection: Axis.horizontal,
+            children: [
+              SizedBox(
+                width: 160,
+                child: _statCard('Expired', '$expired', Icons.error, Colors.red),
+              ),
+              const SizedBox(width: 12),
+              SizedBox(
+                width: 160,
+                child: _statCard('Expiring Soon', '$soon', Icons.warning, Colors.orange),
+              ),
+              const SizedBox(width: 12),
+              SizedBox(
+                width: 160,
+                child: _statCard('Valid', '$valid', Icons.check_circle, Colors.green),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+  
+  // ========================================================================
+  // SATISFACTION OVERVIEW - 4 CARDS IN 1 ROW
+  // ========================================================================
+  
+  Widget _buildSatisfactionOverview() {
+    final total = _customerStats!['totalFeedback'] ?? 0;
+    final avg = (_customerStats!['avgRating'] ?? 0.0).toDouble();
+    final yes = _customerStats!['wouldRideAgain'] ?? 0;
+    final no = _customerStats!['wouldNotRideAgain'] ?? 0;
+    
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text('Satisfaction Overview',
+            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+        const SizedBox(height: 16),
+        SizedBox(
+          height: 120,
+          child: ListView(
+            scrollDirection: Axis.horizontal,
+            children: [
+              SizedBox(
+                width: 160,
+                child: _statCard('Total Reviews', '$total', Icons.feedback, const Color(0xFF1565C0)),
+              ),
+              const SizedBox(width: 12),
+              SizedBox(
+                width: 160,
+                child: _statCard('Avg Rating', avg.toStringAsFixed(1), Icons.star, Colors.amber),
+              ),
+              const SizedBox(width: 12),
+              SizedBox(
+                width: 160,
+                child: _statCard('Would Ride Again', '$yes', Icons.thumb_up, Colors.green),
+              ),
+              const SizedBox(width: 12),
+              SizedBox(
+                width: 160,
+                child: _statCard('Would Not', '$no', Icons.thumb_down, Colors.red),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+  
+  // ========================================================================
+  // ✅ TICKET OVERVIEW - 4 CARDS IN 1 ROW (FIXED)
+  // ========================================================================
+  
+  Widget _buildTicketOverview() {
+  final total = _ticketStats!['total'] ?? 0;
+  final open = _ticketStats!['open'] ?? 0;
+  final inProgress = _ticketStats!['inProgress'] ?? 0;
+  final closed = _ticketStats!['closed'] ?? 0;
+  final avgTime = _ticketStats!['avgResolutionTime'] ?? 0;
+  
+  return Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      const Text('Ticket Overview',
+          style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+      const SizedBox(height: 16),
+      SizedBox(
+        height: 120,
+        child: ListView(
+          scrollDirection: Axis.horizontal,
+          children: [
+            SizedBox(
+              width: 160,
+              child: _statCard('Total', '$total', Icons.support, const Color(0xFF1565C0)),
+            ),
+            const SizedBox(width: 12),
+            SizedBox(
+              width: 160,
+              child: _statCard('Open', '$open', Icons.error_outline, Colors.orange),
+            ),
+            const SizedBox(width: 12),
+            SizedBox(
+              width: 160,
+              child: _statCard('In Progress', '$inProgress', Icons.hourglass_empty, Colors.blue),
+            ),
+            const SizedBox(width: 12),
+            SizedBox(
+              width: 160,
+              child: _statCard('Closed', '$closed', Icons.check_circle, Colors.green),
+            ),
+            const SizedBox(width: 12),
+            SizedBox(
+              width: 160,
+              child: _statCard('Avg Time', '${avgTime}h', Icons.timer, Colors.purple),
+            ),
+          ],
+        ),
+      ),
+    ],
+  );
+}
+
+
+Widget _buildTicketStatusPieChart() {
+  final open = (_ticketStats!['open'] ?? 0).toDouble();
+  final inProgress = (_ticketStats!['inProgress'] ?? 0).toDouble();
+  final closed = (_ticketStats!['closed'] ?? 0).toDouble();
+  final total = open + inProgress + closed;
+  
+  if (total == 0) return const SizedBox.shrink();
+
+  return Card(
+    elevation: 2,
+    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+    child: Padding(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text('Ticket Status Distribution',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+          const SizedBox(height: 20),
+          SizedBox(
+            height: 200,
+            child: PieChart(PieChartData(
+              sectionsSpace: 2,
+              centerSpaceRadius: 50,
+              sections: [
+                if (open > 0)
+                  PieChartSectionData(
+                    value: open,
+                    title: '${((open / total) * 100).toStringAsFixed(0)}%',
+                    color: Colors.orange,
+                    radius: 60,
+                    titleStyle: const TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white),
+                  ),
+                if (inProgress > 0)
+                  PieChartSectionData(
+                    value: inProgress,
+                    title: '${((inProgress / total) * 100).toStringAsFixed(0)}%',
+                    color: Colors.blue,
+                    radius: 60,
+                    titleStyle: const TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white),
+                  ),
+                if (closed > 0)
+                  PieChartSectionData(
+                    value: closed,
+                    title: '${((closed / total) * 100).toStringAsFixed(0)}%',
+                    color: Colors.green,
+                    radius: 60,
+                    titleStyle: const TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white),
+                  ),
+              ],
+            )),
+          ),
+          const SizedBox(height: 12),
+          Wrap(
+            spacing: 16,
+            children: [
+              if (open > 0) _legendItem('Open', Colors.orange),
+              if (inProgress > 0) _legendItem('In Progress', Colors.blue),
+              if (closed > 0) _legendItem('Closed', Colors.green),
+            ],
+          ),
+        ],
+      ),
+    ),
+  );
+}
+
+Widget _buildTicketsByPriorityBarChart() {
+  if (_ticketsByPriority.isEmpty) return const SizedBox.shrink();
+  
+  final maxCount = _ticketsByPriority
+      .map((p) => p['count'] as int)
+      .reduce((a, b) => a > b ? a : b);
+  
+  return Card(
+    elevation: 2,
+    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+    child: Padding(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text('Tickets by Priority Level',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+          const SizedBox(height: 16),
+          SizedBox(
+            height: 250,
+            child: BarChart(BarChartData(
+              alignment: BarChartAlignment.spaceAround,
+              maxY: maxCount * 1.2,
+              barTouchData: BarTouchData(enabled: false),
+              titlesData: FlTitlesData(
+                bottomTitles: AxisTitles(
+                  sideTitles: SideTitles(
+                    showTitles: true,
+                    getTitlesWidget: (val, meta) {
+                      if (val.toInt() >= 0 && val.toInt() < _ticketsByPriority.length) {
+                        final priority = _ticketsByPriority[val.toInt()]['priority'] ?? '';
+                        return Padding(
+                          padding: const EdgeInsets.only(top: 6),
+                          child: Text(
+                            priority,
+                            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                          ),
+                        );
+                      }
+                      return const Text('');
+                    },
+                  ),
+                ),
+                leftTitles: AxisTitles(
+                  sideTitles: SideTitles(
+                    showTitles: true,
+                    reservedSize: 36,
+                    getTitlesWidget: (val, meta) =>
+                        Text('${val.toInt()}', style: const TextStyle(fontSize: 10)),
+                  ),
+                ),
+                topTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                rightTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
+              ),
+              gridData: FlGridData(show: true, drawVerticalLine: false),
+              borderData: FlBorderData(show: true),
+              barGroups: List.generate(
+                _ticketsByPriority.length,
+                (i) {
+                  final priority = _ticketsByPriority[i]['priority'] ?? '';
+                  Color barColor = Colors.grey;
+                  
+                  if (priority.toLowerCase() == 'high') {
+                    barColor = Colors.red;
+                  } else if (priority.toLowerCase() == 'medium') {
+                    barColor = Colors.orange;
+                  } else if (priority.toLowerCase() == 'low') {
+                    barColor = Colors.green;
+                  }
+                  
+                  return BarChartGroupData(
+                    x: i,
+                    barRods: [
+                      BarChartRodData(
+                        toY: (_ticketsByPriority[i]['count'] as int).toDouble(),
+                        color: barColor,
+                        width: 30,
+                        borderRadius: const BorderRadius.vertical(top: Radius.circular(4)),
+                      ),
+                    ],
+                  );
+                },
+              ),
+            )),
+          ),
+        ],
+      ),
+    ),
+  );
+}
+  
+  // ========================================================================
+  // ✅ DRIVER OVERVIEW - 4 CARDS IN 1 ROW (NEW)
+  // ========================================================================
+  
+  Widget _buildDriverOverview() {
+    final total = _driverStats!['total'] ?? 0;
+    final active = _driverStats!['active'] ?? 0;
+    final onLeave = _driverStats!['onLeave'] ?? 0;
+    final inactive = _driverStats!['inactive'] ?? 0;
+    
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text('Driver Overview',
+            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+        const SizedBox(height: 16),
+        SizedBox(
+          height: 120,
+          child: ListView(
+            scrollDirection: Axis.horizontal,
+            children: [
+              SizedBox(
+                width: 160,
+                child: _statCard('Total', '$total', Icons.person, const Color(0xFF1565C0)),
+              ),
+              const SizedBox(width: 12),
+              SizedBox(
+                width: 160,
+                child: _statCard('Active', '$active', Icons.check_circle, Colors.green),
+              ),
+              const SizedBox(width: 12),
+              SizedBox(
+                width: 160,
+                child: _statCard('On Leave', '$onLeave', Icons.beach_access, Colors.orange),
+              ),
+              const SizedBox(width: 12),
+              SizedBox(
+                width: 160,
+                child: _statCard('Inactive', '$inactive', Icons.cancel, Colors.red),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+  
+  // ========================================================================
+  // ✅ VEHICLE OVERVIEW - 4 CARDS IN 1 ROW (NEW)
+  // ========================================================================
+  
+  Widget _buildVehicleOverview() {
+    final total = _vehicleStats!['total'] ?? 0;
+    final active = _vehicleStats!['active'] ?? 0;
+    final maintenance = _vehicleStats!['maintenance'] ?? 0;
+    final inactive = _vehicleStats!['inactive'] ?? 0;
+    
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text('Vehicle Overview',
+            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+        const SizedBox(height: 16),
+        SizedBox(
+          height: 120,
+          child: ListView(
+            scrollDirection: Axis.horizontal,
+            children: [
+              SizedBox(
+                width: 160,
+                child: _statCard('Total', '$total', Icons.directions_car, const Color(0xFF1565C0)),
+              ),
+              const SizedBox(width: 12),
+              SizedBox(
+                width: 160,
+                child: _statCard('Active', '$active', Icons.check_circle, Colors.green),
+              ),
+              const SizedBox(width: 12),
+              SizedBox(
+                width: 160,
+                child: _statCard('Maintenance', '$maintenance', Icons.build, Colors.orange),
+              ),
+              const SizedBox(width: 12),
+              SizedBox(
+                width: 160,
+                child: _statCard('Inactive', '$inactive', Icons.cancel, Colors.red),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+  
+  // ========================================================================
+  // ✅ CUSTOMER OVERVIEW - 4 CARDS IN 1 ROW (NEW)
+  // ========================================================================
+  
+  Widget _buildCustomerOverview() {
+    final total = _customerStatsData!['total'] ?? 0;
+    final active = _customerStatsData!['active'] ?? 0;
+    final inactive = _customerStatsData!['inactive'] ?? 0;
+    final pending = _customerStatsData!['pending'] ?? 0;
+    
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text('Customer Overview',
+            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+        const SizedBox(height: 16),
+        SizedBox(
+          height: 120,
+          child: ListView(
+            scrollDirection: Axis.horizontal,
+            children: [
+              SizedBox(
+                width: 160,
+                child: _statCard('Total', '$total', Icons.people, const Color(0xFF1565C0)),
+              ),
+              const SizedBox(width: 12),
+              SizedBox(
+                width: 160,
+                child: _statCard('Active', '$active', Icons.check_circle, Colors.green),
+              ),
+              const SizedBox(width: 12),
+              SizedBox(
+                width: 160,
+                child: _statCard('Inactive', '$inactive', Icons.cancel, Colors.red),
+              ),
+              const SizedBox(width: 12),
+              SizedBox(
+                width: 160,
+                child: _statCard('Pending', '$pending', Icons.hourglass_empty, Colors.orange),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+  
+  // ========================================================================
+  // ✅ CLIENT OVERVIEW - 4 CARDS IN 1 ROW (NEW)
+  // ========================================================================
+  
+  Widget _buildClientOverview() {
+    final total = _clientStats!['total'] ?? 0;
+    final active = _clientStats!['active'] ?? 0;
+    final inactive = _clientStats!['inactive'] ?? 0;
+    final pending = _clientStats!['pending'] ?? 0;
+    
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text('Client Overview',
+            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+        const SizedBox(height: 16),
+        SizedBox(
+          height: 120,
+          child: ListView(
+            scrollDirection: Axis.horizontal,
+            children: [
+              SizedBox(
+                width: 160,
+                child: _statCard('Total', '$total', Icons.business, const Color(0xFF1565C0)),
+              ),
+              const SizedBox(width: 12),
+              SizedBox(
+                width: 160,
+                child: _statCard('Active', '$active', Icons.check_circle, Colors.green),
+              ),
+              const SizedBox(width: 12),
+              SizedBox(
+                width: 160,
+                child: _statCard('Inactive', '$inactive', Icons.cancel, Colors.red),
+              ),
+              const SizedBox(width: 12),
+              SizedBox(
+                width: 160,
+                child: _statCard('Pending', '$pending', Icons.hourglass_empty, Colors.orange),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+  // ========================================================================
+  // GROUPING STATS
+  // ========================================================================
+  
+  Widget _buildGroupingStats() {
+    return Card(
+      elevation: 2,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text('Grouping Statistics',
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+            const Divider(height: 24),
+            Row(
+              children: [
+                Expanded(
+                  child: _groupingStat(
+                    'Total Groups',
+                    '${_groupingStats!['totalGroups'] ?? 0}',
+                    Icons.group_work,
+                    Colors.purple,
+                  ),
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: _groupingStat(
+                    'Avg Customers',
+                    '${_groupingStats!['avgCustomersPerGroup'] ?? 0}',
+                    Icons.person,
+                    Colors.blue,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            Row(
+              children: [
+                Expanded(
+                  child: _groupingStat(
+                    'Vehicles Used',
+                    '${_groupingStats!['totalVehicles'] ?? 0}',
+                    Icons.directions_car,
+                    Colors.green,
+                  ),
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: _groupingStat(
+                    'Drivers Assigned',
+                    '${_groupingStats!['totalDrivers'] ?? 0}',
+                    Icons.drive_eta,
+                    Colors.orange,
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+  
+  // ========================================================================
+  // ✅ DRIVER STATUS PIE CHART (NEW)
+  // ========================================================================
+  
+  Widget _buildDriverStatusPieChart() {
+    final total = _driverStats!['total'] ?? 0;
+    if (total == 0) return const SizedBox.shrink();
+    
+    final active = (_driverStats!['active'] ?? 0).toDouble();
+    final onLeave = (_driverStats!['onLeave'] ?? 0).toDouble();
+    final inactive = (_driverStats!['inactive'] ?? 0).toDouble();
+    
+    return Card(
+      elevation: 2,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text('Driver Status Distribution',
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 20),
+            SizedBox(
+              height: 200,
+              child: PieChart(PieChartData(
+                sectionsSpace: 2,
+                centerSpaceRadius: 50,
+                sections: [
+                  PieChartSectionData(
+                    value: active,
+                    title: '${((active / total) * 100).toStringAsFixed(0)}%',
+                    color: Colors.green,
+                    radius: 60,
+                    titleStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.white),
+                  ),
+                  if (onLeave > 0)
+                    PieChartSectionData(
+                      value: onLeave,
+                      title: '${((onLeave / total) * 100).toStringAsFixed(0)}%',
+                      color: Colors.orange,
+                      radius: 60,
+                      titleStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.white),
+                    ),
+                  if (inactive > 0)
+                    PieChartSectionData(
+                      value: inactive,
+                      title: '${((inactive / total) * 100).toStringAsFixed(0)}%',
+                      color: Colors.red,
+                      radius: 60,
+                      titleStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.white),
+                    ),
+                ],
+              )),
+            ),
+            const SizedBox(height: 12),
+            Wrap(
+              spacing: 16,
+              children: [
+                _legendItem('Active', Colors.green),
+                if (onLeave > 0) _legendItem('On Leave', Colors.orange),
+                if (inactive > 0) _legendItem('Inactive', Colors.red),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+  
+  // ========================================================================
+  // ✅ VEHICLES BY TYPE CHART (NEW)
+  // ========================================================================
+  
+  Widget _buildVehiclesByTypeChart() {
+    if (_vehiclesByType.isEmpty) return const SizedBox.shrink();
+    
+    final maxCount = _vehiclesByType.map((v) => v['count'] as int).reduce((a, b) => a > b ? a : b);
+    
+    return Card(
+      elevation: 2,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text('Vehicles by Type',
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 16),
+            SizedBox(
+              height: 250,
+              child: BarChart(BarChartData(
+                alignment: BarChartAlignment.spaceAround,
+                maxY: maxCount * 1.2,
+                barTouchData: BarTouchData(enabled: false),
+                titlesData: FlTitlesData(
+                  bottomTitles: AxisTitles(
+                    sideTitles: SideTitles(
+                      showTitles: true,
+                      getTitlesWidget: (val, meta) {
+                        if (val.toInt() >= 0 && val.toInt() < _vehiclesByType.length) {
+                          return Padding(
+                            padding: const EdgeInsets.only(top: 6),
+                            child: Text(
+                              _vehiclesByType[val.toInt()]['type'] ?? '',
+                              style: const TextStyle(fontSize: 10),
+                            ),
+                          );
+                        }
+                        return const Text('');
+                      },
+                    ),
+                  ),
+                  leftTitles: AxisTitles(
+                    sideTitles: SideTitles(
+                      showTitles: true,
+                      reservedSize: 36,
+                      getTitlesWidget: (val, meta) =>
+                          Text('${val.toInt()}', style: const TextStyle(fontSize: 10)),
+                    ),
+                  ),
+                  topTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                  rightTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                ),
+                gridData: FlGridData(show: true, drawVerticalLine: false),
+                borderData: FlBorderData(show: true),
+                barGroups: List.generate(
+                  _vehiclesByType.length,
+                  (i) => BarChartGroupData(
+                    x: i,
+                    barRods: [
+                      BarChartRodData(
+                        toY: (_vehiclesByType[i]['count'] as int).toDouble(),
+                        color: Colors.blue,
+                        width: 20,
+                        borderRadius: const BorderRadius.vertical(top: Radius.circular(4)),
+                      ),
+                    ],
+                  ),
+                ),
+              )),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+  
+  // ========================================================================
+  // ✅ VEHICLES BY SEATING CAPACITY CHART (NEW)
+  // ========================================================================
+  
+  Widget _buildVehiclesByCapacityChart() {
+    if (_vehiclesByCapacity.isEmpty) return const SizedBox.shrink();
+    
+    final maxCount = _vehiclesByCapacity.map((v) => v['count'] as int).reduce((a, b) => a > b ? a : b);
+    
+    return Card(
+      elevation: 2,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text('Vehicles by Seating Capacity',
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 16),
+            SizedBox(
+              height: 250,
+              child: BarChart(BarChartData(
+                alignment: BarChartAlignment.spaceAround,
+                maxY: maxCount * 1.2,
+                barTouchData: BarTouchData(enabled: false),
+                titlesData: FlTitlesData(
+                  bottomTitles: AxisTitles(
+                    sideTitles: SideTitles(
+                      showTitles: true,
+                      getTitlesWidget: (val, meta) {
+                        if (val.toInt() >= 0 && val.toInt() < _vehiclesByCapacity.length) {
+                          return Padding(
+                            padding: const EdgeInsets.only(top: 6),
+                            child: Text(
+                              '${_vehiclesByCapacity[val.toInt()]['capacity']} seats',
+                              style: const TextStyle(fontSize: 10),
+                            ),
+                          );
+                        }
+                        return const Text('');
+                      },
+                    ),
+                  ),
+                  leftTitles: AxisTitles(
+                    sideTitles: SideTitles(
+                      showTitles: true,
+                      reservedSize: 36,
+                      getTitlesWidget: (val, meta) =>
+                          Text('${val.toInt()}', style: const TextStyle(fontSize: 10)),
+                    ),
+                  ),
+                  topTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                  rightTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                ),
+                gridData: FlGridData(show: true, drawVerticalLine: false),
+                borderData: FlBorderData(show: true),
+                barGroups: List.generate(
+                  _vehiclesByCapacity.length,
+                  (i) => BarChartGroupData(
+                    x: i,
+                    barRods: [
+                      BarChartRodData(
+                        toY: (_vehiclesByCapacity[i]['count'] as int).toDouble(),
+                        color: Colors.green,
+                        width: 20,
+                        borderRadius: const BorderRadius.vertical(top: Radius.circular(4)),
+                      ),
+                    ],
+                  ),
+                ),
+              )),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+  
+  // ========================================================================
+  // ✅ CUSTOMERS BY ORGANIZATION CHART (NEW)
+  // ========================================================================
+  
+  Widget _buildCustomersByOrgChart() {
+    if (_customersByOrganization.isEmpty) return const SizedBox.shrink();
+    
+    final maxCount = _customersByOrganization
+        .map((c) => c['count'] as int)
+        .reduce((a, b) => a > b ? a : b);
+    
+    return Card(
+      elevation: 2,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text('Top 10 Organizations by Customer Count',
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 16),
+            ..._customersByOrganization.take(10).map((org) {
+              final name = org['organization'] ?? 'Unknown';
+              final count = org['count'] ?? 0;
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 12),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Expanded(
+                          child: Text(
+                            name,
+                            style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
+                          ),
+                        ),
+                        Text(
+                          '$count',
+                          style: const TextStyle(fontWeight: FontWeight.bold),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                    LinearProgressIndicator(
+                      value: maxCount > 0 ? count / maxCount : 0,
+                      backgroundColor: Colors.grey[200],
+                      valueColor: const AlwaysStoppedAnimation(Colors.blue),
+                    ),
+                  ],
+                ),
+              );
+            }),
+          ],
+        ),
+      ),
+    );
+  }
+  
+  // ========================================================================
+  // ✅ TOP CLIENTS BY CUSTOMERS CHART (NEW)
+  // ========================================================================
+  
+  Widget _buildTopClientsByCustomersChart() {
+    if (_topClientsByCustomers.isEmpty) return const SizedBox.shrink();
+    
+    final maxCount = _topClientsByCustomers
+        .map((c) => c['customerCount'] as int)
+        .reduce((a, b) => a > b ? a : b);
+    
+    return Card(
+      elevation: 2,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text('Top Clients by Customer Count',
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 16),
+            ..._topClientsByCustomers.take(10).map((client) {
+              final name = client['name'] ?? 'Unknown';
+              final count = client['customerCount'] ?? 0;
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 12),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Expanded(
+                          child: Text(
+                            name,
+                            style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
+                          ),
+                        ),
+                        Text(
+                          '$count',
+                          style: const TextStyle(fontWeight: FontWeight.bold),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                    LinearProgressIndicator(
+                      value: maxCount > 0 ? count / maxCount : 0,
+                      backgroundColor: Colors.grey[200],
+                      valueColor: const AlwaysStoppedAnimation(Colors.purple),
+                    ),
+                  ],
+                ),
+              );
+            }),
+          ],
+        ),
+      ),
+    );
+  }
+  
+  // ========================================================================
+  // ✅ TICKETS BY CATEGORY CHART (FIXED)
+  // ========================================================================
+  
+  Widget _buildTicketsByCategoryChart() {
+    if (_ticketsByCategory.isEmpty) return const SizedBox.shrink();
+    
+    final total = _ticketsByCategory.fold<int>(0, (s, c) => s + (c['count'] as int));
+    
+    return Card(
+      elevation: 2,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text('Tickets by Category',
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 16),
+            ..._ticketsByCategory.map((cat) {
+              final name = cat['category'] ?? 'Unknown';
+              final count = cat['count'] ?? 0;
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 12),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Expanded(child: Text(name, style: const TextStyle(fontSize: 14))),
+                        Text('$count', style: const TextStyle(fontWeight: FontWeight.bold)),
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                    LinearProgressIndicator(
+                      value: total > 0 ? count / total : 0,
+                      backgroundColor: Colors.grey[200],
+                      valueColor: const AlwaysStoppedAnimation(Colors.purple),
+                    ),
+                  ],
+                ),
+              );
+            }),
+          ],
+        ),
+      ),
+    );
+  }
+  
+  // ========================================================================
+  // EXISTING CHARTS (Trips, SOS, Feedback, Documents, Satisfaction)
+  // ========================================================================
+  
+  Widget _buildTripsByDateChart() {
+    if (_tripsByDate.isEmpty) return const SizedBox.shrink();
+    final maxY = _tripsByDate.map((t) => (t['count'] as num).toDouble()).reduce((a, b) => a > b ? a : b);
+    return _barChartCard(
+      'Trips by Date',
+      _tripsByDate.length,
+      maxY,
+      Colors.blue,
+      barGroups: List.generate(_tripsByDate.length, (i) => BarChartGroupData(x: i, barRods: [
+        BarChartRodData(toY: (_tripsByDate[i]['count'] as num).toDouble(), color: Colors.blue, width: 12,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(4))),
+      ])),
+      bottomTitles: (val, meta) {
+        if (val.toInt() >= 0 && val.toInt() < _tripsByDate.length) {
+          final date = _tripsByDate[val.toInt()]['date'] as String;
+          return Padding(padding: const EdgeInsets.only(top: 6),
+              child: Text(date.length >= 10 ? date.substring(5) : date, style: const TextStyle(fontSize: 10)));
+        }
+        return const Text('');
+      },
+      tooltip: (group, rod) => '${_tripsByDate[group.x]['date']}\n${rod.toY.toInt()} trips',
+    );
+  }
+  
+  Widget _buildTripsByVehicleChart() {
+    if (_tripsByVehicle.isEmpty) return const SizedBox.shrink();
+    final maxY = _tripsByVehicle.map((v) => (v['count'] as num).toDouble()).reduce((a, b) => a > b ? a : b);
+    return _barChartCard(
+      'Trips by Vehicle (Top 10)',
+      _tripsByVehicle.length,
+      maxY,
+      Colors.green,
+      barGroups: List.generate(_tripsByVehicle.length, (i) => BarChartGroupData(x: i, barRods: [
+        BarChartRodData(toY: (_tripsByVehicle[i]['count'] as num).toDouble(), color: Colors.green, width: 12,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(4))),
+      ])),
+      bottomTitles: (val, meta) {
+        if (val.toInt() >= 0 && val.toInt() < _tripsByVehicle.length) {
+          return Padding(padding: const EdgeInsets.only(top: 6),
+              child: Text(_tripsByVehicle[val.toInt()]['vehicleNumber'] ?? '', style: const TextStyle(fontSize: 9)));
+        }
+        return const Text('');
+      },
+      tooltip: (group, rod) => '${_tripsByVehicle[group.x]['vehicleNumber']}\n${rod.toY.toInt()} trips',
+    );
+  }
+  
+  Widget _buildTripsByDriverChart() {
+    if (_tripsByDriver.isEmpty) return const SizedBox.shrink();
+    final maxY = _tripsByDriver.map((d) => (d['count'] as num).toDouble()).reduce((a, b) => a > b ? a : b);
+    return _barChartCard(
+      'Trips by Driver (Top 10)',
+      _tripsByDriver.length,
+      maxY,
+      Colors.orange,
+      barGroups: List.generate(_tripsByDriver.length, (i) => BarChartGroupData(x: i, barRods: [
+        BarChartRodData(toY: (_tripsByDriver[i]['count'] as num).toDouble(), color: Colors.orange, width: 12,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(4))),
+      ])),
+      bottomTitles: (val, meta) {
+        if (val.toInt() >= 0 && val.toInt() < _tripsByDriver.length) {
+          final name = _tripsByDriver[val.toInt()]['driverName'] ?? '';
+          return Padding(padding: const EdgeInsets.only(top: 6),
+              child: Text(name.length > 10 ? name.substring(0, 10) : name, style: const TextStyle(fontSize: 9)));
+        }
+        return const Text('');
+      },
+      tooltip: (group, rod) => '${_tripsByDriver[group.x]['driverName']}\n${rod.toY.toInt()} trips',
+    );
+  }
+  
+  Widget _buildRatingDistributionChart() {
+    if (_ratingDistribution.isEmpty) return const SizedBox.shrink();
+    final total = _ratingDistribution.fold<int>(0, (s, r) => s + (r['count'] as int));
+    return Card(
+      elevation: 2,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          const Text('Rating Distribution', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+          const SizedBox(height: 16),
+          ..._ratingDistribution.reversed.map((r) {
+            final stars = r['rating'] ?? 0;
+            final count = r['count'] ?? 0;
+            final pct = total > 0 ? (count / total * 100).toStringAsFixed(1) : '0.0';
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 12),
+              child: Row(children: [
+                SizedBox(width: 60, child: Row(children: [
+                  Text('$stars', style: const TextStyle(fontWeight: FontWeight.bold)),
+                  const Icon(Icons.star, size: 14, color: Colors.amber),
+                ])),
+                Expanded(child: LinearProgressIndicator(
+                  value: total > 0 ? count / total : 0,
+                  backgroundColor: Colors.grey[200],
+                  valueColor: AlwaysStoppedAnimation(_ratingColor(stars)),
+                )),
+                const SizedBox(width: 12),
+                SizedBox(width: 75, child: Text('$count ($pct%)',
+                    style: const TextStyle(fontSize: 11, color: Colors.grey))),
+              ]),
+            );
+          }),
+        ]),
+      ),
+    );
+  }
+  
+  Widget _buildTopDriversCard() {
+    if (_topDrivers.isEmpty) return const SizedBox.shrink();
+    return Card(
+      elevation: 2,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Row(children: const [
+            Icon(Icons.emoji_events, color: Colors.amber, size: 26),
+            SizedBox(width: 10),
+            Text('Top Performing Drivers', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+          ]),
+          const Divider(height: 24),
+          ..._topDrivers.take(10).map((d) {
+            final name = d['driverName'] ?? 'Unknown';
+            final phone = d['phoneNumber'] ?? '';
+            final avg = (d['avgRating'] ?? 0.0).toDouble();
+            final reviews = d['totalReviews'] ?? 0;
+            return Container(
+              margin: const EdgeInsets.only(bottom: 10),
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.green.shade50,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.green.shade200),
+              ),
+              child: Row(children: [
+                const Icon(Icons.person, color: Colors.green),
+                const SizedBox(width: 12),
+                Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Text(name, style: const TextStyle(fontWeight: FontWeight.bold)),
+                  if (phone.isNotEmpty) Text(phone, style: const TextStyle(fontSize: 12, color: Colors.grey)),
+                  Row(children: [
+                    ...List.generate(5, (i) => Icon(
+                        i < avg.floor() ? Icons.star : Icons.star_border,
+                        size: 14, color: Colors.amber)),
+                    const SizedBox(width: 6),
+                    Text('${avg.toStringAsFixed(1)} ($reviews reviews)',
+                        style: const TextStyle(fontSize: 11)),
+                  ]),
+                ])),
+              ]),
+            );
+          }),
+        ]),
+      ),
+    );
+  }
+  
+  Widget _buildBottomDriversCard() {
+    if (_bottomDrivers.isEmpty) return const SizedBox.shrink();
+    return Card(
+      elevation: 2,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Row(children: const [
+            Icon(Icons.trending_down, color: Colors.red, size: 22),
+            SizedBox(width: 10),
+            Text('Drivers Needing Improvement', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+          ]),
+          const Divider(height: 24),
+          ..._bottomDrivers.map((d) {
+            final name = d['driverName'] ?? 'Unknown';
+            final avg = (d['avgRating'] ?? 0.0).toDouble();
+            final reviews = d['totalReviews'] ?? 0;
+            return Container(
+              margin: const EdgeInsets.only(bottom: 10),
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.red.shade50,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.red.shade200),
+              ),
+              child: Row(children: [
+                const Icon(Icons.warning, color: Colors.red),
+                const SizedBox(width: 12),
+                Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Text(name, style: const TextStyle(fontWeight: FontWeight.bold)),
+                  Row(children: [
+                    ...List.generate(5, (i) => Icon(
+                        i < avg.floor() ? Icons.star : Icons.star_border,
+                        size: 14, color: Colors.amber)),
+                    const SizedBox(width: 6),
+                    Text('${avg.toStringAsFixed(1)} ($reviews reviews)',
+                        style: const TextStyle(fontSize: 11)),
+                  ]),
+                ])),
+              ]),
+            );
+          }),
+        ]),
+      ),
+    );
+  }
+  
+  Widget _buildExpiringDocsList() {
+    if (_expiringDocs.isEmpty) {
+      return Card(
+        elevation: 2,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        child: const Padding(
+          padding: EdgeInsets.all(32),
+          child: Center(child: Column(children: [
+            Icon(Icons.check_circle, size: 48, color: Colors.green),
+            SizedBox(height: 8),
+            Text('All documents are valid', style: TextStyle(color: Colors.grey)),
+          ])),
+        ),
+      );
+    }
+    return Card(
+      elevation: 2,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          const Text('Documents Requiring Attention',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+          const SizedBox(height: 16),
+          ..._expiringDocs.take(50).map((doc) {
+            final type = doc['type'] ?? 'unknown';
+            final name = doc['name'] ?? 'Unknown';
+            final docType = doc['documentType'] ?? 'Document';
+            final expiry = doc['expiryDate'];
+            final daysLeft = doc['daysLeft'] ?? 0;
+            final isExpired = doc['status'] == 'expired' || daysLeft <= 0;
+            return Container(
+              margin: const EdgeInsets.only(bottom: 10),
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: isExpired ? Colors.red.shade50 : Colors.orange.shade50,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: isExpired ? Colors.red : Colors.orange, width: 1.5),
+              ),
+              child: Row(children: [
+                Icon(type == 'vehicle' ? Icons.directions_car : Icons.person,
+                    color: isExpired ? Colors.red : Colors.orange),
+                const SizedBox(width: 12),
+                Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Text(name, style: const TextStyle(fontWeight: FontWeight.bold)),
+                  Text(docType, style: const TextStyle(fontSize: 12, color: Colors.grey)),
+                  Text(
+                    isExpired ? 'EXPIRED ${daysLeft.abs()} days ago' : '$daysLeft days left',
+                    style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold,
+                        color: isExpired ? Colors.red : Colors.orange),
+                  ),
+                ])),
+                if (expiry != null)
+                  Text(DateFormat('MMM dd').format(DateTime.parse(expiry)),
+                      style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+              ]),
+            );
+          }),
+        ]),
+      ),
+    );
+  }
+  
+  Widget _buildRideAgainChart() {
+    if (_rideAgainStats.isEmpty) return const SizedBox.shrink();
+    final total = _rideAgainStats.fold<double>(0, (s, i) => s + (i['count'] as int));
+    return Card(
+      elevation: 2,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          const Text('"Would Ride Again" Distribution',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+          const SizedBox(height: 20),
+          SizedBox(height: 200, child: PieChart(PieChartData(
+            sectionsSpace: 2,
+            centerSpaceRadius: 50,
+            sections: _rideAgainStats.map((item) {
+              final val = (item['count'] as int).toDouble();
+              final resp = item['response'] ?? 'unknown';
+              return PieChartSectionData(
+                value: val,
+                title: '${((val / total) * 100).toStringAsFixed(0)}%',
+                color: resp == 'yes' ? Colors.green : resp == 'no' ? Colors.red : Colors.grey,
+                radius: 60,
+                titleStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.white),
+              );
+            }).toList(),
+          ))),
+          const SizedBox(height: 12),
+          Wrap(spacing: 16, children: _rideAgainStats.map((item) {
+            final resp = item['response'] ?? 'unknown';
+            return _legendItem(
+              resp == 'yes' ? 'Yes' : resp == 'no' ? 'No' : 'Not Specified',
+              resp == 'yes' ? Colors.green : resp == 'no' ? Colors.red : Colors.grey,
+            );
+          }).toList()),
+        ]),
+      ),
+    );
+  }
+  
+  Widget _buildSOSMonthlyBarChart() {
+    if (_sosByMonth.isEmpty) return const SizedBox.shrink();
+    final maxY = _sosByMonth.map((m) {
+      return ((m['active'] as num?)?.toDouble() ?? 0) + ((m['resolved'] as num?)?.toDouble() ?? 0);
+    }).reduce((a, b) => a > b ? a : b);
+    return Card(
+      elevation: 2,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          const Text('SOS by Month', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+          const SizedBox(height: 16),
+          SizedBox(height: 250, child: BarChart(BarChartData(
+            alignment: BarChartAlignment.spaceAround,
+            maxY: maxY * 1.2,
+            barTouchData: BarTouchData(enabled: false),
+            titlesData: FlTitlesData(
+              bottomTitles: AxisTitles(sideTitles: SideTitles(showTitles: true,
+                getTitlesWidget: (val, meta) {
+                  if (val.toInt() >= 0 && val.toInt() < _sosByMonth.length) {
+                    final m = _sosByMonth[val.toInt()]['month'] as String;
+                    return Padding(padding: const EdgeInsets.only(top: 6),
+                        child: Text(m.length >= 7 ? m.substring(5) : m, style: const TextStyle(fontSize: 10)));
+                  }
+                  return const Text('');
+                },
+              )),
+              leftTitles: AxisTitles(sideTitles: SideTitles(showTitles: true, reservedSize: 36,
+                  getTitlesWidget: (val, meta) => Text('${val.toInt()}', style: const TextStyle(fontSize: 10)))),
+              topTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
+              rightTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
+            ),
+            gridData: FlGridData(show: true, drawVerticalLine: false),
+            borderData: FlBorderData(show: true),
+            barGroups: List.generate(_sosByMonth.length, (i) => BarChartGroupData(x: i, barRods: [
+              BarChartRodData(toY: (_sosByMonth[i]['active'] as num?)?.toDouble() ?? 0,
+                  color: Colors.red, width: 12, borderRadius: const BorderRadius.vertical(top: Radius.circular(4))),
+              BarChartRodData(toY: (_sosByMonth[i]['resolved'] as num?)?.toDouble() ?? 0,
+                  color: Colors.green, width: 12, borderRadius: const BorderRadius.vertical(top: Radius.circular(4))),
+            ])),
+          ))),
+          const SizedBox(height: 12),
+          Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+            _legendItem('Active', Colors.red),
+            const SizedBox(width: 24),
+            _legendItem('Resolved', Colors.green),
+          ]),
+        ]),
+      ),
+    );
+  }
+  
+  Widget _buildSOSStatusChart() {
+    if (_sosByStatus.isEmpty) return const SizedBox.shrink();
+    final total = _sosByStatus.fold<double>(0, (s, item) => s + (item['count'] as int));
+    return Card(
+      elevation: 2,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          const Text('SOS Status Distribution', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+          const SizedBox(height: 16),
+          ..._sosByStatus.map((s) {
+            final count = s['count'] as int;
+            final pct = (count / total * 100).toStringAsFixed(1);
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 12),
+              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+                  Text(s['status'] ?? 'Unknown', style: const TextStyle(fontWeight: FontWeight.w500)),
+                  Text('$count ($pct%)', style: const TextStyle(color: Colors.grey)),
+                ]),
+                const SizedBox(height: 4),
+                LinearProgressIndicator(
+                  value: count / total,
+                  backgroundColor: Colors.grey[200],
+                  valueColor: AlwaysStoppedAnimation(_sosStatusColor(s['status'])),
+                ),
+              ]),
+            );
+          }),
+        ]),
+      ),
+    );
+  }
+  
+  Widget _buildSOSResponseTimeCard() {
+    if (_sosStats == null) return const SizedBox.shrink();
+    return Card(
+      elevation: 2,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          const Text('Response Time Analysis', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+          const SizedBox(height: 16),
+          _responseStat('Average', _sosStats!['avgResponseFormatted'] ?? '0 min', Colors.blue),
+          const SizedBox(height: 12),
+          _responseStat('Fastest', _sosStats!['fastestResponseFormatted'] ?? '0 min', Colors.green),
+          const SizedBox(height: 12),
+          _responseStat('Slowest', _sosStats!['slowestResponseFormatted'] ?? '0 min', Colors.orange),
+        ]),
+      ),
+    );
+  }
+  
+  // ========================================================================
+  // REUSABLE BAR CHART CARD
+  // ========================================================================
+  
+  Widget _barChartCard(
+    String title,
+    int dataLength,
+    double maxY,
+    Color barColor, {
+    required List<BarChartGroupData> barGroups,
+    required Widget Function(double, TitleMeta) bottomTitles,
+    required String Function(BarChartGroupData, BarChartRodData) tooltip,
+    double height = 250,
+  }) {
+    return Card(
+      elevation: 2,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text(title, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+          const SizedBox(height: 16),
+          SizedBox(height: height, child: BarChart(BarChartData(
+            alignment: BarChartAlignment.spaceAround,
+            maxY: maxY * 1.2,
+            barTouchData: BarTouchData(
+              enabled: true,
+              touchTooltipData: BarTouchTooltipData(
+                getTooltipItem: (group, gi, rod, ri) =>
+                    BarTooltipItem(tooltip(group, rod),
+                        const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+              ),
+            ),
+            titlesData: FlTitlesData(
+              bottomTitles: AxisTitles(sideTitles: SideTitles(showTitles: true, getTitlesWidget: bottomTitles)),
+              leftTitles: AxisTitles(sideTitles: SideTitles(showTitles: true, reservedSize: 36,
+                  getTitlesWidget: (val, meta) => Text('${val.toInt()}', style: const TextStyle(fontSize: 10)))),
+              topTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
+              rightTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
+            ),
+            gridData: FlGridData(show: true, drawVerticalLine: false),
+            borderData: FlBorderData(show: true),
+            barGroups: barGroups,
+          ))),
+        ]),
+      ),
+    );
+  }
+  
+  // ========================================================================
+  // HELPER WIDGETS
+  // ========================================================================
+  
+  Widget _statCard(String label, String value, IconData icon, Color color) {
+    return Card(
+      elevation: 2,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(12),
+          gradient: LinearGradient(
+              colors: [color.withOpacity(0.1), Colors.white],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight),
+        ),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Row(children: [
+            Icon(icon, color: color, size: 22),
+            const Spacer(),
+            Text(value, style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: color)),
+          ]),
+          const SizedBox(height: 6),
+          Text(label, style: const TextStyle(fontSize: 12, color: Colors.grey, fontWeight: FontWeight.w500)),
+        ]),
+      ),
+    );
+  }
+  
+  Widget _groupingStat(String label, String value, IconData icon, Color color) {
+    return Row(children: [
+      Container(
+        padding: const EdgeInsets.all(10),
+        decoration: BoxDecoration(color: color.withOpacity(0.1), borderRadius: BorderRadius.circular(10)),
+        child: Icon(icon, color: color, size: 22),
+      ),
+      const SizedBox(width: 14),
+      Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Text(label, style: const TextStyle(fontSize: 12, color: Colors.grey)),
+        Text(value, style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: color)),
+      ])),
+    ]);
+  }
+  
+  Widget _responseStat(String label, String value, Color color) {
+    return Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+      Text(label, style: const TextStyle(fontSize: 15)),
+      Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        decoration: BoxDecoration(color: color.withOpacity(0.1), borderRadius: BorderRadius.circular(8)),
+        child: Text(value, style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: color)),
+      ),
+    ]);
+  }
+  
+  Widget _legendItem(String label, Color color) {
+    return Row(mainAxisSize: MainAxisSize.min, children: [
+      Container(width: 14, height: 14,
+          decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(3))),
+      const SizedBox(width: 6),
+      Text(label, style: const TextStyle(fontSize: 13)),
+    ]);
+  }
+  
+  Color _sosStatusColor(String? status) {
+    switch (status?.toLowerCase()) {
+      case 'active': case 'pending': return Colors.red;
+      case 'in progress': return Colors.orange;
+      case 'resolved': return Colors.green;
+      default: return Colors.grey;
+    }
+  }
+  
+  Color _ratingColor(int rating) {
+    if (rating >= 5) return Colors.green;
+    if (rating >= 4) return Colors.lightGreen;
+    if (rating >= 3) return Colors.orange;
+    if (rating >= 2) return Colors.deepOrange;
+    return Colors.red;
+  }
+  
+  // ========================================================================
+// FILTER DIALOG - WITH HIERARCHICAL LOCATION FILTERS
+// ========================================================================
+void _showFiltersDialog() {
+  showDialog(
+    context: context,
+    builder: (context) => StatefulBuilder(
+      builder: (context, setDialogState) => Dialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        child: Container(
+          width: MediaQuery.of(context).size.width * 0.9,
+          constraints: const BoxConstraints(maxHeight: 700),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // ========================================
+              // DIALOG HEADER
+              // ========================================
+              Container(
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [Colors.blue.shade700, Colors.blue.shade600],
+                  ),
+                  borderRadius: const BorderRadius.only(
+                    topLeft: Radius.circular(16),
+                    topRight: Radius.circular(16),
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withOpacity(0.2),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: const Icon(Icons.filter_list, color: Colors.white, size: 24),
+                    ),
+                    const SizedBox(width: 12),
+                    const Text(
+                      'Advanced Filters',
+                      style: TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
+                      ),
+                    ),
+                    const Spacer(),
+                    IconButton(
+                      icon: const Icon(Icons.close, color: Colors.white),
+                      onPressed: () => Navigator.pop(context),
+                    ),
+                  ],
+                ),
+              ),
+
+              // ========================================
+              // SCROLLABLE CONTENT
+              // ========================================
+              Expanded(
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.all(20),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // ========================================
+                      // DATE RANGE SECTION
+                      // ========================================
+                      _buildFilterSectionHeader('Date Range', Icons.date_range),
+                      const SizedBox(height: 12),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: _buildDatePickerField(
+                              context: context,
+                              label: 'Start Date',
+                              selectedDate: _startDate,
+                              onDateSelected: (date) {
+                                setDialogState(() => _startDate = date);
+                                setState(() => _startDate = date);
+                              },
+                            ),
+                          ),
+                          const SizedBox(width: 16),
+                          Expanded(
+                            child: _buildDatePickerField(
+                              context: context,
+                              label: 'End Date',
+                              selectedDate: _endDate,
+                              onDateSelected: (date) {
+                                setDialogState(() => _endDate = date);
+                                setState(() => _endDate = date);
+                              },
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 24),
+
+                      // ========================================
+                      // LOCATION HIERARCHY SECTION
+                      // ========================================
+                      _buildFilterSectionHeader('Location Filters', Icons.location_on),
+                      const SizedBox(height: 12),
+                      
+                      // Country
+                      _buildCountryPicker(setDialogState),
+                      const SizedBox(height: 12),
+                      
+                      // State
+                      _buildStatePicker(setDialogState),
+                      const SizedBox(height: 12),
+                      
+                      // City
+                      _buildCityPicker(setDialogState),
+                      const SizedBox(height: 12),
+                      
+                      // Area (Text Input)
+                      _buildAreaTextField(setDialogState),
+                      const SizedBox(height: 24),
+
+                      // ========================================
+                      // REPORT TYPES SECTION
+                      // ========================================
+                      _buildFilterSectionHeader('Select Report Types', Icons.analytics),
+                      const SizedBox(height: 12),
+                      
+                      // Select All / Deselect All
+                      Row(
+                        children: [
+                          TextButton.icon(
+                            icon: const Icon(Icons.check_box, size: 18),
+                            label: const Text('Select All'),
+                            onPressed: () {
+                              setDialogState(() => _selectedReportTypes.updateAll((k, v) => true));
+                              setState(() => _selectedReportTypes.updateAll((k, v) => true));
+                            },
+                          ),
+                          TextButton.icon(
+                            icon: const Icon(Icons.check_box_outline_blank, size: 18),
+                            label: const Text('Deselect All'),
+                            onPressed: () {
+                              setDialogState(() => _selectedReportTypes.updateAll((k, v) => false));
+                              setState(() => _selectedReportTypes.updateAll((k, v) => false));
+                            },
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      
+                      // Checkboxes Grid (2 columns)
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 4,
+                        children: [
+                          _buildCheckbox('trips', 'Trips', Icons.assignment, setDialogState),
+                          _buildCheckbox('sos', 'SOS', Icons.warning_amber, setDialogState),
+                          _buildCheckbox('feedback', 'Feedback', Icons.star, setDialogState),
+                          _buildCheckbox('documents', 'Documents', Icons.description, setDialogState),
+                          _buildCheckbox('satisfaction', 'Satisfaction', Icons.mood, setDialogState),
+                          _buildCheckbox('tickets', 'Tickets', Icons.support, setDialogState),
+                          _buildCheckbox('drivers', 'Drivers', Icons.person, setDialogState),
+                          _buildCheckbox('vehicles', 'Vehicles', Icons.directions_car, setDialogState),
+                          _buildCheckbox('customers', 'Customers', Icons.people, setDialogState),
+                          _buildCheckbox('clients', 'Clients', Icons.business, setDialogState),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+
+              // ========================================
+              // FOOTER BUTTONS
+              // ========================================
+              Container(
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  color: Colors.grey.shade50,
+                  border: Border(top: BorderSide(color: Colors.grey.shade300)),
+                ),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: () {
+                          setState(() {
+                            _startDate = null;
+                            _endDate = null;
+                            _selectedCountry = null;
+                            _selectedState = null;
+                            _selectedCity = null;
+                            _selectedArea = null;
+                            _areaController.clear();
+                            _selectedReportTypes.updateAll((k, v) => true);
+                            _selectedCategory = 'All';
+                          });
+                          Navigator.pop(context);
+                          _fetchAllReports();
+                        },
+                        icon: const Icon(Icons.refresh),
+                        label: const Text('Clear All'),
+                        style: OutlinedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      flex: 2,
+                      child: ElevatedButton.icon(
+                        onPressed: () {
+                          setState(() {
+                            _selectedCategory = 'All';
+                          });
+                          Navigator.pop(context);
+                          _fetchAllReports();
+                        },
+                        icon: const Icon(Icons.check_circle),
+                        label: const Text('Apply Filters'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.green.shade600,
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    ),
+  );
+}
+
+
+
+
+
+
+  // ========================================================================
+  // PDF GENERATION
+  // ========================================================================
+  
+  // ========================================================================
+  // WHATSAPP SHARE - Share report summary via WhatsApp
+  // ========================================================================
+  Future<void> _shareViaWhatsApp() async {
+    try {
+      // Check if there's any data to share
+      final hasAnyData = _tripStats != null ||
+          _sosStats != null ||
+          _feedbackStats != null ||
+          _documentStats != null ||
+          _customerStats != null ||
+          _ticketStats != null ||
+          _driverStats != null ||
+          _vehicleStats != null ||
+          _customerStatsData != null ||
+          _clientStats != null;
+      
+      if (!hasAnyData) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('No data available to share'),
+              backgroundColor: Colors.orange,
+            ),
+          );
+        }
+        return;
+      }
+
+      // Build WhatsApp message
+      String message = '📊 *Fleet Management Report*\n\n';
+      message += '📅 Generated: ${DateFormat('MMM dd, yyyy HH:mm').format(DateTime.now())}\n';
+      
+      if (_startDate != null && _endDate != null) {
+        message += '📆 Period: ${DateFormat('MMM dd, yyyy').format(_startDate!)} - ${DateFormat('MMM dd, yyyy').format(_endDate!)}\n';
+      }
+      
+      message += '\n━━━━━━━━━━━━━━━━━━━━\n\n';
+
+      // Add Trip Statistics
+      if (_tripStats != null && (_selectedReportTypes['trips'] ?? false)) {
+        message += '🚗 *TRIP STATISTICS*\n';
+        message += '• Total: ${_tripStats!['total'] ?? 0}\n';
+        message += '• Scheduled: ${_tripStats!['scheduled'] ?? 0}\n';
+        message += '• Ongoing: ${_tripStats!['ongoing'] ?? 0}\n';
+        message += '• Completed: ${_tripStats!['completed'] ?? 0}\n';
+        message += '• Cancelled: ${_tripStats!['cancelled'] ?? 0}\n\n';
+      }
+
+      // Add SOS Analytics
+      if (_sosStats != null && (_selectedReportTypes['sos'] ?? false)) {
+        message += '🚨 *SOS ANALYTICS*\n';
+        message += '• Total: ${_sosStats!['total'] ?? 0}\n';
+        message += '• Active: ${_sosStats!['active'] ?? 0}\n';
+        message += '• Resolved: ${_sosStats!['resolved'] ?? 0}\n';
+        message += '• Avg Response: ${_sosStats!['avgResponseFormatted'] ?? '0 min'}\n\n';
+      }
+
+      // Add Driver Feedback
+      if (_feedbackStats != null && (_selectedReportTypes['feedback'] ?? false)) {
+        message += '⭐ *DRIVER FEEDBACK*\n';
+        message += '• Total Reviews: ${_feedbackStats!['total'] ?? 0}\n';
+        message += '• Avg Rating: ${(_feedbackStats!['avgRating'] ?? 0.0).toStringAsFixed(2)}/5.0\n';
+        message += '• 5 Stars: ${_feedbackStats!['fiveStars'] ?? 0}\n';
+        message += '• Positive: ${_feedbackStats!['positive'] ?? 0}%\n\n';
+      }
+
+      // Add Document Status
+      if (_documentStats != null && (_selectedReportTypes['documents'] ?? false)) {
+        message += '📄 *DOCUMENT STATUS*\n';
+        message += '• Expired: ${_documentStats!['total']?['expired'] ?? 0}\n';
+        message += '• Expiring Soon: ${_documentStats!['total']?['expiringSoon'] ?? 0}\n';
+        message += '• Valid: ${_documentStats!['total']?['valid'] ?? 0}\n\n';
+      }
+
+      // Add Driver Statistics
+      if (_driverStats != null && (_selectedReportTypes['drivers'] ?? false)) {
+        message += '👨‍✈️ *DRIVER STATISTICS*\n';
+        message += '• Total: ${_driverStats!['total'] ?? 0}\n';
+        message += '• Active: ${_driverStats!['active'] ?? 0}\n';
+        message += '• On Leave: ${_driverStats!['onLeave'] ?? 0}\n';
+        message += '• Inactive: ${_driverStats!['inactive'] ?? 0}\n\n';
+      }
+
+      // Add Vehicle Statistics
+      if (_vehicleStats != null && (_selectedReportTypes['vehicles'] ?? false)) {
+        message += '🚙 *VEHICLE STATISTICS*\n';
+        message += '• Total: ${_vehicleStats!['total'] ?? 0}\n';
+        message += '• Active: ${_vehicleStats!['active'] ?? 0}\n';
+        message += '• Maintenance: ${_vehicleStats!['maintenance'] ?? 0}\n';
+        message += '• Inactive: ${_vehicleStats!['inactive'] ?? 0}\n\n';
+      }
+
+      // Add Customer Statistics
+      if (_customerStatsData != null && (_selectedReportTypes['customers'] ?? false)) {
+        message += '👥 *CUSTOMER STATISTICS*\n';
+        message += '• Total: ${_customerStatsData!['total'] ?? 0}\n';
+        message += '• Active: ${_customerStatsData!['active'] ?? 0}\n';
+        message += '• Inactive: ${_customerStatsData!['inactive'] ?? 0}\n\n';
+      }
+
+      // Add Client Statistics
+      if (_clientStats != null && (_selectedReportTypes['clients'] ?? false)) {
+        message += '🏢 *CLIENT STATISTICS*\n';
+        message += '• Total: ${_clientStats!['total'] ?? 0}\n';
+        message += '• Active: ${_clientStats!['active'] ?? 0}\n';
+        message += '• Inactive: ${_clientStats!['inactive'] ?? 0}\n\n';
+      }
+
+      message += '━━━━━━━━━━━━━━━━━━━━\n';
+      message += '📱 Generated by Abra Fleet Management';
+
+      // URL encode the message
+      final encodedMessage = Uri.encodeComponent(message);
+      
+      // Create WhatsApp URL
+      final String whatsappUrl;
+      if (kIsWeb) {
+        whatsappUrl = 'https://web.whatsapp.com/send?text=$encodedMessage';
+      } else {
+        whatsappUrl = 'whatsapp://send?text=$encodedMessage';
+      }
+
+      print('📱 Opening WhatsApp with report summary...');
+      print('🔗 URL: $whatsappUrl');
+
+      final uri = Uri.parse(whatsappUrl);
+      
+      if (await canLaunchUrl(uri)) {
+        await launchUrl(uri, mode: LaunchMode.externalApplication);
+        
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('✅ Opening WhatsApp...'),
+              backgroundColor: Color(0xFF25D366),
+              duration: Duration(seconds: 2),
+            ),
+          );
+        }
+      } else {
+        throw 'WhatsApp is not installed or cannot be opened';
+      }
+    } catch (e) {
+      print('❌ WhatsApp Share Error: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to open WhatsApp: $e'),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 4),
+          ),
+        );
+      }
+    }
+  }
+
+  // ========================================================================
+  // EXCEL EXPORT - Export all report data to Excel
+  // ========================================================================
+Future<void> _exportToExcel() async {
+  try {
+    print('📤 Starting Excel export for reports...');
+    
+    // Check if there's any data to export
+    final hasAnyData = _tripStats != null ||
+        _sosStats != null ||
+        _feedbackStats != null ||
+        _documentStats != null ||
+        _customerStats != null ||
+        _ticketStats != null ||
+        _driverStats != null ||
+        _vehicleStats != null ||
+        _customerStatsData != null ||
+        _clientStats != null;
+    
+    if (!hasAnyData) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('No data available to export'),
+            backgroundColor: Colors.orange,
+          ),
+        );
+      }
+      return;
+    }
+
+    // Show loading message
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Preparing Excel export...'),
+          backgroundColor: Colors.blue,
+          duration: Duration(seconds: 2),
+        ),
+      );
+    }
+
+    // Prepare data for export
+    List<List<dynamic>> csvData = [
+      // Main Header
+      ['FLEET MANAGEMENT COMPREHENSIVE REPORT'],
+      ['Generated on: ${DateFormat('MMM dd, yyyy HH:mm').format(DateTime.now())}'],
+      ['Date Range: ${_startDate != null && _endDate != null ? '${DateFormat('MMM dd, yyyy').format(_startDate!)} - ${DateFormat('MMM dd, yyyy').format(_endDate!)}' : 'All Time'}'],
+      [], // Empty row
+    ];
+
+    // TRIP STATISTICS
+    if (_tripStats != null) {
+      csvData.addAll([
+        ['TRIP STATISTICS'],
+        ['Metric', 'Value'],
+        ['Total Trips', '${_tripStats!['total'] ?? 0}'],
+        ['Scheduled', '${_tripStats!['scheduled'] ?? 0}'],
+        ['Ongoing', '${_tripStats!['ongoing'] ?? 0}'],
+        ['Completed', '${_tripStats!['completed'] ?? 0}'],
+        ['Cancelled', '${_tripStats!['cancelled'] ?? 0}'],
+        [], // Empty row
+      ]);
+      
+      if (_groupingStats != null) {
+        csvData.addAll([
+          ['GROUPING STATISTICS'],
+          ['Metric', 'Value'],
+          ['Total Groups', '${_groupingStats!['totalGroups'] ?? 0}'],
+          ['Avg Customers/Group', '${_groupingStats!['avgCustomersPerGroup'] ?? 0}'],
+          ['Vehicles Used', '${_groupingStats!['totalVehicles'] ?? 0}'],
+          ['Drivers Assigned', '${_groupingStats!['totalDrivers'] ?? 0}'],
+          [], // Empty row
+        ]);
+      }
+    }
+
+    // SOS ANALYTICS
+    if (_sosStats != null) {
+      csvData.addAll([
+        ['SOS ANALYTICS'],
+        ['Metric', 'Value'],
+        ['Total SOS', '${_sosStats!['total'] ?? 0}'],
+        ['Active', '${_sosStats!['active'] ?? 0}'],
+        ['Resolved', '${_sosStats!['resolved'] ?? 0}'],
+        ['Avg Response Time', '${_sosStats!['avgResponseFormatted'] ?? '0 min'}'],
+        ['Fastest Response', '${_sosStats!['fastestResponseFormatted'] ?? '0 min'}'],
+        ['Slowest Response', '${_sosStats!['slowestResponseFormatted'] ?? '0 min'}'],
+        [], // Empty row
+      ]);
+    }
+
+    // DRIVER FEEDBACK
+    if (_feedbackStats != null) {
+      csvData.addAll([
+        ['DRIVER FEEDBACK'],
+        ['Metric', 'Value'],
+        ['Total Reviews', '${_feedbackStats!['total'] ?? 0}'],
+        ['Average Rating', '${(_feedbackStats!['avgRating'] ?? 0.0).toStringAsFixed(2)} / 5.0'],
+        ['5 Star Reviews', '${_feedbackStats!['fiveStars'] ?? 0}'],
+        ['Positive %', '${_feedbackStats!['positive'] ?? 0}%'],
+        [], // Empty row
+      ]);
+    }
+
+    // DOCUMENT STATUS
+    if (_documentStats != null) {
+      csvData.addAll([
+        ['DOCUMENT STATUS'],
+        ['Metric', 'Value'],
+        ['Expired Documents', '${_documentStats!['total']?['expired'] ?? 0}'],
+        ['Expiring Soon', '${_documentStats!['total']?['expiringSoon'] ?? 0}'],
+        ['Valid Documents', '${_documentStats!['total']?['valid'] ?? 0}'],
+        [], // Empty row
+      ]);
+    }
+
+    // CUSTOMER SATISFACTION
+    if (_customerStats != null) {
+      csvData.addAll([
+        ['CUSTOMER SATISFACTION'],
+        ['Metric', 'Value'],
+        ['Total Feedback', '${_customerStats!['totalFeedback'] ?? 0}'],
+        ['Average Rating', '${(_customerStats!['avgRating'] ?? 0.0).toStringAsFixed(2)} / 5.0'],
+        ['Would Ride Again', '${_customerStats!['wouldRideAgain'] ?? 0}'],
+        ['Would Not Ride Again', '${_customerStats!['wouldNotRideAgain'] ?? 0}'],
+        [], // Empty row
+      ]);
+    }
+
+    // SUPPORT TICKETS
+    if (_ticketStats != null) {
+      csvData.addAll([
+        ['SUPPORT TICKETS'],
+        ['Metric', 'Value'],
+        ['Total Tickets', '${_ticketStats!['total'] ?? 0}'],
+        ['Open Tickets', '${_ticketStats!['open'] ?? 0}'],
+        ['Closed Tickets', '${_ticketStats!['closed'] ?? 0}'],
+        ['Avg Resolution Time', '${_ticketStats!['avgResolutionTime'] ?? 0}h'],
+        [], // Empty row
+      ]);
+    }
+
+    // DRIVER STATISTICS
+    if (_driverStats != null) {
+      csvData.addAll([
+        ['DRIVER STATISTICS'],
+        ['Metric', 'Value'],
+        ['Total Drivers', '${_driverStats!['total'] ?? 0}'],
+        ['Active', '${_driverStats!['active'] ?? 0}'],
+        ['On Leave', '${_driverStats!['onLeave'] ?? 0}'],
+        ['Inactive', '${_driverStats!['inactive'] ?? 0}'],
+        [], // Empty row
+      ]);
+    }
+
+    // VEHICLE STATISTICS
+    if (_vehicleStats != null) {
+      csvData.addAll([
+        ['VEHICLE STATISTICS'],
+        ['Metric', 'Value'],
+        ['Total Vehicles', '${_vehicleStats!['total'] ?? 0}'],
+        ['Active', '${_vehicleStats!['active'] ?? 0}'],
+        ['In Maintenance', '${_vehicleStats!['maintenance'] ?? 0}'],
+        ['Inactive', '${_vehicleStats!['inactive'] ?? 0}'],
+        [], // Empty row
+      ]);
+      
+      if (_vehiclesByType.isNotEmpty) {
+        csvData.add(['VEHICLES BY TYPE']);
+        csvData.add(['Type', 'Count']);
+        for (var v in _vehiclesByType) {
+          csvData.add(['${v['type'] ?? 'Unknown'}', '${v['count'] ?? 0}']);
+        }
+        csvData.add([]); // Empty row
+      }
+    }
+
+    // CUSTOMER STATISTICS
+    if (_customerStatsData != null) {
+      csvData.addAll([
+        ['CUSTOMER STATISTICS'],
+        ['Metric', 'Value'],
+        ['Total Customers', '${_customerStatsData!['total'] ?? 0}'],
+        ['Active', '${_customerStatsData!['active'] ?? 0}'],
+        ['Inactive', '${_customerStatsData!['inactive'] ?? 0}'],
+        ['Pending', '${_customerStatsData!['pending'] ?? 0}'],
+        [], // Empty row
+      ]);
+      
+      if (_customersByOrganization.isNotEmpty) {
+        csvData.add(['TOP ORGANIZATIONS']);
+        csvData.add(['Organization', 'Count']);
+        for (var org in _customersByOrganization.take(10)) {
+          csvData.add(['${org['organization'] ?? 'Unknown'}', '${org['count'] ?? 0}']);
+        }
+        csvData.add([]); // Empty row
+      }
+    }
+
+    // CLIENT STATISTICS
+    if (_clientStats != null) {
+      csvData.addAll([
+        ['CLIENT STATISTICS'],
+        ['Metric', 'Value'],
+        ['Total Clients', '${_clientStats!['total'] ?? 0}'],
+        ['Active', '${_clientStats!['active'] ?? 0}'],
+        ['Inactive', '${_clientStats!['inactive'] ?? 0}'],
+        ['Pending', '${_clientStats!['pending'] ?? 0}'],
+        [], // Empty row
+      ]);
+      
+      if (_topClientsByCustomers.isNotEmpty) {
+        csvData.add(['TOP CLIENTS BY CUSTOMERS']);
+        csvData.add(['Client Name', 'Customer Count']);
+        for (var client in _topClientsByCustomers.take(10)) {
+          csvData.add(['${client['name'] ?? 'Unknown'}', '${client['customerCount'] ?? 0}']);
+        }
+        csvData.add([]); // Empty row
+      }
+    }
+
+    print('📦 Total rows to export: ${csvData.length}');
+
+    // Use ExportHelper - exactly like invoice list page
+    final filePath = await ExportHelper.exportToExcel(
+      data: csvData,
+      filename: 'comprehensive_report_${DateFormat('yyyyMMdd_HHmmss').format(DateTime.now())}',
+    );
+
+    print('✅ Excel export completed: $filePath');
+
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('✅ Excel file downloaded successfully!'),
+          backgroundColor: Colors.green,
+          duration: Duration(seconds: 3),
+        ),
+      );
+    }
+  } catch (e) {
+    print('❌ Excel Export Error: $e');
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Failed to export Excel: $e'),
+          backgroundColor: Colors.red,
+          duration: const Duration(seconds: 4),
+        ),
+      );
+    }
+  }
+}
+
+  // ========================================================================
+// PDF GENERATION - COMPLETE WITH ALL 10 SECTIONS
+// ========================================================================
+Future<void> _generatePDF() async {
+  try {
+    final pdf = pw.Document();
+
+    String reportTitle = 'Fleet Management Comprehensive Report';
+
+    String dateRangeText = 'All Time';
+    if (_startDate != null && _endDate != null) {
+      dateRangeText =
+          '${DateFormat('MMM dd, yyyy').format(_startDate!)} - ${DateFormat('MMM dd, yyyy').format(_endDate!)}';
+    }
+
+    pdf.addPage(
+      pw.MultiPage(
+        pageFormat: PdfPageFormat.a4,
+        margin: const pw.EdgeInsets.all(36),
+        header: (pw.Context ctx) => pw.Container(
+          padding: const pw.EdgeInsets.only(bottom: 8),
+          decoration: const pw.BoxDecoration(
+            border: pw.Border(
+                bottom: pw.BorderSide(color: PdfColors.blue900, width: 2)),
+          ),
+          child: pw.Row(
+            mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+            children: [
+              pw.Text('Fleet Management System',
+                  style: pw.TextStyle(
+                      fontSize: 10,
+                      color: PdfColors.blue900,
+                      fontWeight: pw.FontWeight.bold)),
+              pw.Text(
+                  'Page ${ctx.pageNumber} of ${ctx.pagesCount}',
+                  style: const pw.TextStyle(
+                      fontSize: 10, color: PdfColors.grey600)),
+            ],
+          ),
+        ),
+        footer: (pw.Context ctx) => pw.Container(
+          padding: const pw.EdgeInsets.only(top: 8),
+          decoration: const pw.BoxDecoration(
+            border: pw.Border(
+                top: pw.BorderSide(color: PdfColors.grey300, width: 0.5)),
+          ),
+          child: pw.Center(
+            child: pw.Text(
+              'CONFIDENTIAL - Fleet Management System Report',
+              style: const pw.TextStyle(
+                  fontSize: 9, color: PdfColors.grey500),
+            ),
+          ),
+        ),
+        build: (pw.Context context) => [
+          // ========================================
+          // TITLE HEADER
+          // ========================================
+          pw.Container(
+            padding: const pw.EdgeInsets.all(20),
+            decoration: pw.BoxDecoration(
+              color: PdfColors.blue900,
+              borderRadius: const pw.BorderRadius.all(pw.Radius.circular(8)),
+            ),
+            child: pw.Column(
+              crossAxisAlignment: pw.CrossAxisAlignment.start,
+              children: [
+                pw.Text(reportTitle,
+                    style: pw.TextStyle(
+                        fontSize: 22,
+                        fontWeight: pw.FontWeight.bold,
+                        color: PdfColors.white)),
+                pw.SizedBox(height: 10),
+                pw.Row(
+                  mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                  children: [
+                    pw.Column(
+                      crossAxisAlignment: pw.CrossAxisAlignment.start,
+                      children: [
+                        pw.Text('Date Range: $dateRangeText',
+                            style: const pw.TextStyle(
+                                fontSize: 11, color: PdfColors.white)),
+                        pw.SizedBox(height: 4),
+                        pw.Text('Sections: All',
+                            style: const pw.TextStyle(
+                                fontSize: 11, color: PdfColors.white)),
+                      ],
+                    ),
+                    pw.Column(
+                      crossAxisAlignment: pw.CrossAxisAlignment.end,
+                      children: [
+                        pw.Text(
+                            'Generated: ${DateFormat('MMM dd, yyyy').format(DateTime.now())}',
+                            style: const pw.TextStyle(
+                                fontSize: 10, color: PdfColors.white)),
+                        pw.SizedBox(height: 4),
+                        pw.Text(
+                            'Time: ${DateFormat('HH:mm').format(DateTime.now())}',
+                            style: const pw.TextStyle(
+                                fontSize: 10, color: PdfColors.white)),
+                      ],
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          pw.SizedBox(height: 28),
+
+          // ========================================
+          // SECTION 1: TRIP STATISTICS
+          // ========================================
+          if (_tripStats != null) ...[
+            _pdfSectionHeader('TRIP STATISTICS'),
+            pw.SizedBox(height: 12),
+            _pdfTwoColumnTable('Trip Overview', [
+              ['Total Trips', '${_tripStats?['total'] ?? 0}'],
+              ['Scheduled', '${_tripStats?['scheduled'] ?? 0}'],
+              ['Ongoing', '${_tripStats?['ongoing'] ?? 0}'],
+              ['Completed', '${_tripStats?['completed'] ?? 0}'],
+              ['Cancelled', '${_tripStats?['cancelled'] ?? 0}'],
+            ]),
+            pw.SizedBox(height: 16),
+            if (_groupingStats != null)
+              _pdfTwoColumnTable('Grouping Statistics', [
+                ['Total Groups', '${_groupingStats?['totalGroups'] ?? 0}'],
+                ['Avg Customers/Group', '${_groupingStats?['avgCustomersPerGroup'] ?? 0}'],
+                ['Vehicles Used', '${_groupingStats?['totalVehicles'] ?? 0}'],
+                ['Drivers Assigned', '${_groupingStats?['totalDrivers'] ?? 0}'],
+              ]),
+            pw.SizedBox(height: 24),
+          ],
+
+          // ========================================
+          // SECTION 2: SOS ANALYTICS
+          // ========================================
+          if (_sosStats != null) ...[
+            _pdfSectionHeader('SOS ANALYTICS'),
+            pw.SizedBox(height: 12),
+            _pdfTwoColumnTable('SOS Overview', [
+              ['Total SOS', '${_sosStats?['total'] ?? 0}'],
+              ['Active', '${_sosStats?['active'] ?? 0}'],
+              ['Resolved', '${_sosStats?['resolved'] ?? 0}'],
+              ['Avg Response Time', '${_sosStats?['avgResponseFormatted'] ?? '0 min'}'],
+              ['Fastest Response', '${_sosStats?['fastestResponseFormatted'] ?? '0 min'}'],
+              ['Slowest Response', '${_sosStats?['slowestResponseFormatted'] ?? '0 min'}'],
+            ]),
+            pw.SizedBox(height: 24),
+          ],
+
+          // ========================================
+          // SECTION 3: DRIVER FEEDBACK
+          // ========================================
+          if (_feedbackStats != null) ...[
+            _pdfSectionHeader('DRIVER FEEDBACK'),
+            pw.SizedBox(height: 12),
+            _pdfTwoColumnTable('Feedback Summary', [
+              ['Total Reviews', '${_feedbackStats?['total'] ?? 0}'],
+              ['Average Rating', '${(_feedbackStats?['avgRating'] ?? 0.0).toStringAsFixed(2)} / 5.0'],
+              ['5 Star Reviews', '${_feedbackStats?['fiveStars'] ?? 0}'],
+              ['Positive %', '${_feedbackStats?['positive'] ?? 0}%'],
+            ]),
+            pw.SizedBox(height: 24),
+          ],
+
+          // ========================================
+          // SECTION 4: DOCUMENT STATUS
+          // ========================================
+          if (_documentStats != null) ...[
+            _pdfSectionHeader('DOCUMENT STATUS'),
+            pw.SizedBox(height: 12),
+            _pdfTwoColumnTable('Document Overview', [
+              ['Expired Documents', '${_documentStats?['total']?['expired'] ?? 0}'],
+              ['Expiring Soon', '${_documentStats?['total']?['expiringSoon'] ?? 0}'],
+              ['Valid Documents', '${_documentStats?['total']?['valid'] ?? 0}'],
+            ]),
+            pw.SizedBox(height: 24),
+          ],
+
+          // ========================================
+          // SECTION 5: CUSTOMER SATISFACTION
+          // ========================================
+          if (_customerStats != null) ...[
+            _pdfSectionHeader('CUSTOMER SATISFACTION'),
+            pw.SizedBox(height: 12),
+            _pdfTwoColumnTable('Satisfaction Summary', [
+              ['Total Feedback', '${_customerStats?['totalFeedback'] ?? 0}'],
+              ['Average Rating', '${(_customerStats?['avgRating'] ?? 0.0).toStringAsFixed(2)} / 5.0'],
+              ['Would Ride Again', '${_customerStats?['wouldRideAgain'] ?? 0}'],
+              ['Would Not Ride Again', '${_customerStats?['wouldNotRideAgain'] ?? 0}'],
+            ]),
+            pw.SizedBox(height: 24),
+          ],
+
+          // ========================================
+          // SECTION 6: SUPPORT TICKETS
+          // ========================================
+          if (_ticketStats != null) ...[
+            _pdfSectionHeader('SUPPORT TICKETS'),
+            pw.SizedBox(height: 12),
+            _pdfTwoColumnTable('Ticket Summary', [
+              ['Total Tickets', '${_ticketStats?['total'] ?? 0}'],
+              ['Open Tickets', '${_ticketStats?['open'] ?? 0}'],
+              ['Closed Tickets', '${_ticketStats?['closed'] ?? 0}'],
+              ['Avg Resolution Time', '${_ticketStats?['avgResolutionTime'] ?? 0}h'],
+            ]),
+            pw.SizedBox(height: 24),
+          ],
+
+          // ========================================
+          // ✅ SECTION 7: DRIVER STATISTICS (NEW)
+          // ========================================
+          if (_driverStats != null) ...[
+            _pdfSectionHeader('DRIVER STATISTICS'),
+            pw.SizedBox(height: 12),
+            _pdfTwoColumnTable('Driver Overview', [
+              ['Total Drivers', '${_driverStats?['total'] ?? 0}'],
+              ['Active', '${_driverStats?['active'] ?? 0}'],
+              ['On Leave', '${_driverStats?['onLeave'] ?? 0}'],
+              ['Inactive', '${_driverStats?['inactive'] ?? 0}'],
+            ]),
+            pw.SizedBox(height: 24),
+          ],
+
+          // ========================================
+          // ✅ SECTION 8: VEHICLE STATISTICS (NEW)
+          // ========================================
+          if (_vehicleStats != null) ...[
+            _pdfSectionHeader('VEHICLE STATISTICS'),
+            pw.SizedBox(height: 12),
+            _pdfTwoColumnTable('Vehicle Overview', [
+              ['Total Vehicles', '${_vehicleStats?['total'] ?? 0}'],
+              ['Active', '${_vehicleStats?['active'] ?? 0}'],
+              ['In Maintenance', '${_vehicleStats?['maintenance'] ?? 0}'],
+              ['Inactive', '${_vehicleStats?['inactive'] ?? 0}'],
+            ]),
+            pw.SizedBox(height: 16),
+            if (_vehiclesByType.isNotEmpty)
+              _pdfTwoColumnTable('Vehicles by Type', 
+                _vehiclesByType.map((v) => [
+                  '${v['type'] ?? 'Unknown'}',
+                  '${v['count'] ?? 0}'
+                ]).toList()
+              ),
+            pw.SizedBox(height: 24),
+          ],
+
+          // ========================================
+          // ✅ SECTION 9: CUSTOMER STATISTICS (NEW)
+          // ========================================
+          if (_customerStatsData != null) ...[
+            _pdfSectionHeader('CUSTOMER STATISTICS'),
+            pw.SizedBox(height: 12),
+            _pdfTwoColumnTable('Customer Overview', [
+              ['Total Customers', '${_customerStatsData?['total'] ?? 0}'],
+              ['Active', '${_customerStatsData?['active'] ?? 0}'],
+              ['Inactive', '${_customerStatsData?['inactive'] ?? 0}'],
+              ['Pending', '${_customerStatsData?['pending'] ?? 0}'],
+            ]),
+            pw.SizedBox(height: 16),
+            if (_customersByOrganization.isNotEmpty)
+              _pdfTwoColumnTable('Top Organizations', 
+                _customersByOrganization.take(10).map((org) => [
+                  '${org['organization'] ?? 'Unknown'}',
+                  '${org['count'] ?? 0}'
+                ]).toList()
+              ),
+            pw.SizedBox(height: 24),
+          ],
+
+          // ========================================
+          // ✅ SECTION 10: CLIENT STATISTICS (NEW)
+          // ========================================
+          if (_clientStats != null) ...[
+            _pdfSectionHeader('CLIENT STATISTICS'),
+            pw.SizedBox(height: 12),
+            _pdfTwoColumnTable('Client Overview', [
+              ['Total Clients', '${_clientStats?['total'] ?? 0}'],
+              ['Active', '${_clientStats?['active'] ?? 0}'],
+              ['Inactive', '${_clientStats?['inactive'] ?? 0}'],
+              ['Pending', '${_clientStats?['pending'] ?? 0}'],
+            ]),
+            pw.SizedBox(height: 16),
+            if (_topClientsByCustomers.isNotEmpty)
+              _pdfTwoColumnTable('Top Clients by Customers', 
+                _topClientsByCustomers.take(10).map((client) => [
+                  '${client['name'] ?? 'Unknown'}',
+                  '${client['customerCount'] ?? 0} customers'
+                ]).toList()
+              ),
+            pw.SizedBox(height: 24),
+          ],
+        ],
+      ),
+    );
+
+    await Printing.layoutPdf(
+      onLayout: (format) async => pdf.save(),
+      name:
+          'fleet_report_${DateFormat('yyyyMMdd_HHmmss').format(DateTime.now())}.pdf',
+    );
+
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('PDF Report generated successfully!'),
+          backgroundColor: Colors.green,
+        ),
+      );
+    }
+  } catch (e) {
+    print('❌ PDF Error: $e');
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+            content: Text('Failed to generate PDF: $e'),
+            backgroundColor: Colors.red),
+      );
+    }
+  }
+}
+
+// ========================================================================
+// PDF HELPER METHODS (FROM DOCUMENT 2)
+// ========================================================================
+
+pw.Widget _pdfSectionHeader(String title) {
+  return pw.Container(
+    width: double.infinity,
+    padding: const pw.EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+    decoration: pw.BoxDecoration(
+      color: PdfColors.blue800,
+      borderRadius: const pw.BorderRadius.all(pw.Radius.circular(4)),
+    ),
+    child: pw.Text(
+      title,
+      style: pw.TextStyle(
+          fontSize: 13,
+          fontWeight: pw.FontWeight.bold,
+          color: PdfColors.white),
+    ),
+  );
+}
+
+pw.Widget _pdfTwoColumnTable(String title, List<List<String>> rows) {
+  return pw.Column(
+    crossAxisAlignment: pw.CrossAxisAlignment.start,
+    children: [
+      pw.Text(title,
+          style: pw.TextStyle(
+              fontSize: 11,
+              fontWeight: pw.FontWeight.bold,
+              color: PdfColors.grey700)),
+      pw.SizedBox(height: 5),
+      pw.Table(
+        border: pw.TableBorder.all(color: PdfColors.grey300, width: 0.5),
+        columnWidths: {
+          0: const pw.FlexColumnWidth(2.5),
+          1: const pw.FlexColumnWidth(1),
+        },
+        children: rows.asMap().entries.map((entry) {
+          final isEven = entry.key % 2 == 0;
+          final row = entry.value;
+          return pw.TableRow(
+            decoration: pw.BoxDecoration(
+                color: isEven ? PdfColors.grey50 : PdfColors.white),
+            children: [
+              pw.Padding(
+                padding: const pw.EdgeInsets.symmetric(
+                    horizontal: 10, vertical: 8),
+                child: pw.Text(row[0],
+                    style: pw.TextStyle(
+                        fontWeight: pw.FontWeight.bold, fontSize: 10)),
+              ),
+              pw.Padding(
+                padding: const pw.EdgeInsets.symmetric(
+                    horizontal: 10, vertical: 8),
+                child: pw.Text(row[1],
+                    style: const pw.TextStyle(fontSize: 10),
+                    textAlign: pw.TextAlign.right),
+              ),
+            ],
+          );
+        }).toList(),
+      ),
+    ],
+  );
+}
+    }
+    
+// ========================================================================
+// SEARCH DELEGATE
+// ========================================================================
+class ReportSearchDelegate extends SearchDelegate<String> {
+  @override
+  List<Widget> buildActions(BuildContext context) {
+    return [
+      IconButton(
+        icon: const Icon(Icons.clear),
+        onPressed: () {
+          query = '';
+        },
+      ),
+    ];
+  }
+
+  @override
+  Widget buildLeading(BuildContext context) {
+    return IconButton(
+      icon: const Icon(Icons.arrow_back),
+      onPressed: () {
+        close(context, '');
+      },
+    );
+  }
+
+  @override
+  Widget buildResults(BuildContext context) {
+    return Center(
+      child: Text('Search results for: $query'),
+    );
+  }
+
+  @override
+  Widget buildSuggestions(BuildContext context) {
+    final suggestions = [
+      'Trips',
+      'SOS Events',
+      'Driver Feedback',
+      'Documents',
+      'Customer Satisfaction',
+      'Support Tickets',
+      'Drivers',
+      'Vehicles',
+      'Customers',
+      'Clients',
+    ].where((item) => item.toLowerCase().contains(query.toLowerCase())).toList();
+
+    return ListView.builder(
+      itemCount: suggestions.length,
+      itemBuilder: (context, index) {
+        return ListTile(
+          leading: const Icon(Icons.search),
+          title: Text(suggestions[index]),
+          onTap: () {
+            query = suggestions[index];
+            showResults(context);
+          },
+        );
+      },
+    );
+  }
+}

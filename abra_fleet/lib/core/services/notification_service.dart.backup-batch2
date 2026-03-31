@@ -1,0 +1,882 @@
+// lib/core/services/notification_service.dart
+import 'dart:async';
+import 'dart:convert';
+import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_database/firebase_database.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:audioplayers/audioplayers.dart';
+import 'package:abra_fleet/app/config/api_config.dart';
+import 'package:abra_fleet/core/services/floating_notification_service.dart';
+
+class NotificationService with WidgetsBindingObserver {
+  static NotificationService? _instance;
+  
+  final FirebaseMessaging _firebaseMessaging = FirebaseMessaging.instance;
+  final FirebaseDatabase _database = FirebaseDatabase.instance;
+  final FirebaseAuth _auth = FirebaseAuth.instance;
+  final FlutterLocalNotificationsPlugin _localNotifications = 
+      FlutterLocalNotificationsPlugin();
+  
+  final FloatingNotificationService _floatingNotificationService = 
+      FloatingNotificationService();
+  
+  static GlobalKey<NavigatorState>? navigatorKey;
+  
+  StreamSubscription<DatabaseEvent>? _notificationSubscription;
+  final StreamController<Map<String, dynamic>> _newNotificationController =
+      StreamController<Map<String, dynamic>>.broadcast();
+
+  Stream<Map<String, dynamic>> get onNewNotification =>
+      _newNotificationController.stream;
+
+  // User preferences for notification sounds
+  static const String _customSoundEnabledKey = 'notification_custom_sound_enabled';
+  bool _customSoundEnabled = true;
+  
+  // ✅ Track processed notifications to prevent duplicates
+  final Set<String> _processedNotificationIds = {};
+  static const int _maxProcessedIds = 100; // Keep last 100 IDs
+
+  NotificationService._internal();
+
+  factory NotificationService() {
+    _instance ??= NotificationService._internal();
+    return _instance!;
+  }
+
+  static NotificationService get instance {
+    _instance ??= NotificationService._internal();
+    return _instance!;
+  }
+
+  static void setNavigatorKey(GlobalKey<NavigatorState> key) {
+    navigatorKey = key;
+    debugPrint('✅ Navigator key set in NotificationService');
+  }
+
+  // ========== USER PREFERENCES ==========
+
+  /// Load user notification preferences
+  Future<void> _loadUserPreferences() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      _customSoundEnabled = prefs.getBool(_customSoundEnabledKey) ?? true;
+      debugPrint('📱 Custom notification sound enabled: $_customSoundEnabled');
+    } catch (e) {
+      debugPrint('❌ Error loading notification preferences: $e');
+      _customSoundEnabled = true; // Default to enabled
+    }
+  }
+
+  /// Enable or disable custom notification sounds
+  Future<void> setCustomSoundEnabled(bool enabled) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool(_customSoundEnabledKey, enabled);
+      _customSoundEnabled = enabled;
+      debugPrint('📱 Custom notification sound ${enabled ? 'enabled' : 'disabled'}');
+    } catch (e) {
+      debugPrint('❌ Error saving notification preference: $e');
+    }
+  }
+
+  /// Get current custom sound preference
+  bool get isCustomSoundEnabled => _customSoundEnabled;
+
+  // ========== INITIALIZATION ==========
+
+  Future<void> initialize() async {
+    try {
+      debugPrint('🔔 Initializing NotificationService...');
+      
+      // ✅ Add lifecycle observer
+      WidgetsBinding.instance.addObserver(this);
+      
+      await _loadUserPreferences();
+      await _requestFCMPermission();
+      await _initializeLocalNotifications();
+      _setupFCMHandlers();
+      await _getTokenAndSave();
+      
+      // ✅ Start realtime listener immediately
+      _startRealtimeListener();
+      
+      // ✅ Listen for token refresh
+      FirebaseMessaging.instance.onTokenRefresh.listen((newToken) {
+        debugPrint('📱 FCM Token refreshed');
+        _saveFCMTokenToBackend(newToken);
+      });
+      
+      debugPrint('✅ NotificationService initialized successfully');
+    } catch (e) {
+      debugPrint('❌ Error initializing NotificationService: $e');
+    }
+  }
+
+  // ✅ ADD: Lifecycle observer method
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    debugPrint('📱 App lifecycle state: $state');
+    
+    if (state == AppLifecycleState.resumed) {
+      // App came to foreground, ensure listener is active
+      debugPrint('✅ App resumed, checking notification listener');
+      if (_notificationSubscription == null) {
+        _startRealtimeListener();
+      }
+    }
+  }
+
+  // ========== FCM SETUP ==========
+
+  Future<void> _requestFCMPermission() async {
+    try {
+      final settings = await _firebaseMessaging.requestPermission(
+        alert: true,
+        badge: true,
+        sound: true,
+        provisional: false,
+      );
+      
+      debugPrint('FCM Permission status: ${settings.authorizationStatus}');
+    } catch (e) {
+      debugPrint('❌ Error requesting FCM permission: $e');
+    }
+  }
+
+  Future<void> _initializeLocalNotifications() async {
+    const androidSettings = AndroidInitializationSettings('@mipmap/ic_launcher');
+    const iosSettings = DarwinInitializationSettings(
+      requestAlertPermission: true,
+      requestBadgePermission: true,
+      requestSoundPermission: true,
+    );
+    
+    const settings = InitializationSettings(
+      android: androidSettings,
+      iOS: iosSettings,
+    );
+    
+    await _localNotifications.initialize(
+      settings,
+      onDidReceiveNotificationResponse: _onNotificationTapped,
+    );
+    
+    // Default notification channel
+    const androidChannel = AndroidNotificationChannel(
+      'fleet_notifications',
+      'Fleet Notifications',
+      description: 'Real-time fleet management notifications',
+      importance: Importance.high,
+      playSound: true,
+    );
+    
+    // Special channel for leave request notifications with custom sound
+    const leaveRequestChannel = AndroidNotificationChannel(
+      'leave_notifications',
+      'Leave Request Notifications',
+      description: 'Leave request related notifications',
+      importance: Importance.high,
+      playSound: true,
+      sound: RawResourceAndroidNotificationSound('notification'),
+    );
+    
+    final androidPlugin = _localNotifications
+        .resolvePlatformSpecificImplementation<
+            AndroidFlutterLocalNotificationsPlugin>();
+    
+    await androidPlugin?.createNotificationChannel(androidChannel);
+    await androidPlugin?.createNotificationChannel(leaveRequestChannel);
+  }
+
+  void _setupFCMHandlers() {
+    FirebaseMessaging.onMessage.listen(_handleForegroundMessage);
+    FirebaseMessaging.onMessageOpenedApp.listen(_handleBackgroundMessage);
+    
+    _firebaseMessaging.getInitialMessage().then((message) {
+      if (message != null) {
+        _handleBackgroundMessage(message);
+      }
+    });
+  }
+
+  // ✅ UPDATED: Improved foreground message handler with duplicate prevention
+  Future<void> _handleForegroundMessage(RemoteMessage message) async {
+    debugPrint('📬 ========================================');
+    debugPrint('📬 FOREGROUND MESSAGE RECEIVED (FCM)');
+    debugPrint('📬 ========================================');
+    
+    final notification = message.notification;
+    if (notification == null) {
+      debugPrint('⚠️ Notification payload is null');
+      return;
+    }
+
+    // ✅ Generate unique ID for this notification
+    final notificationId = message.data['notificationId'] ?? 
+                          '${notification.title}_${notification.body}_${message.data['type']}_${DateTime.now().millisecondsSinceEpoch ~/ 5000}';
+    
+    debugPrint('   Notification ID: $notificationId');
+    debugPrint('   Title: ${notification.title}');
+    debugPrint('   Body: ${notification.body}');
+    debugPrint('   Type: ${message.data['type']}');
+    debugPrint('   Priority: ${message.data['priority']}');
+
+    // ✅ Check if already processed (within last 5 seconds)
+    if (_processedNotificationIds.contains(notificationId)) {
+      debugPrint('⏭️  SKIPPING: Notification already processed (duplicate from FCM)');
+      return;
+    }
+
+    // ✅ Mark as processed
+    _processedNotificationIds.add(notificationId);
+    
+    // ✅ Cleanup old IDs if set gets too large
+    if (_processedNotificationIds.length > _maxProcessedIds) {
+      final idsToRemove = _processedNotificationIds.take(_processedNotificationIds.length - _maxProcessedIds).toList();
+      _processedNotificationIds.removeAll(idsToRemove);
+    }
+
+    // ✅ Get context and show floating notification
+    final context = navigatorKey?.currentContext;
+    
+    if (context != null && context.mounted) {
+      debugPrint('✅ Showing floating notification (app in foreground via FCM)');
+      
+      // Use post frame callback to ensure UI is ready
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (context.mounted) {
+          _showFloatingNotification(
+            context: context,
+            title: notification.title ?? 'Notification',
+            body: notification.body ?? '',
+            type: message.data['type'] ?? 'system',
+            priority: message.data['priority'] ?? 'normal',
+            data: message.data,
+          );
+        }
+      });
+    } else {
+      debugPrint('⚠️ No context available, showing local notification');
+      await _showLocalNotification({
+        'title': notification.title,
+        'body': notification.body,
+        'type': message.data['type'] ?? 'system',
+        'priority': message.data['priority'] ?? 'normal',
+        'data': message.data,
+      });
+    }
+    
+    // Play custom sound for leave request notifications when app is in foreground
+    final notificationType = message.data['type'] ?? 'system';
+    if (_shouldPlayCustomSound(notificationType)) {
+      await _playCustomNotificationSound();
+    }
+    
+    // Emit to stream
+    _newNotificationController.add({
+      'id': notificationId,
+      'title': notification.title ?? 'Notification',
+      'body': notification.body ?? '',
+      'data': message.data,
+      'type': message.data['type'] ?? 'system',
+      'priority': message.data['priority'] ?? 'normal',
+      'createdAt': DateTime.now().toIso8601String(),
+    });
+  }
+
+  Future<void> _handleBackgroundMessage(RemoteMessage message) async {
+    debugPrint('📬 Background message received: ${message.notification?.title}');
+    
+    final data = message.data;
+    if (data['rosterId'] != null) {
+      debugPrint('Navigate to roster: ${data['rosterId']}');
+    }
+  }
+
+  void _onNotificationTapped(NotificationResponse response) {
+    debugPrint('📬 Notification tapped: ${response.payload}');
+    
+    if (response.payload != null) {
+      try {
+        final data = json.decode(response.payload!);
+        if (data['rosterId'] != null) {
+          debugPrint('Navigate to roster: ${data['rosterId']}');
+        }
+      } catch (e) {
+        debugPrint('❌ Error parsing notification payload: $e');
+      }
+    }
+  }
+
+  Future<void> _getTokenAndSave() async {
+    try {
+      final user = _auth.currentUser;
+      if (user == null) {
+        debugPrint('⚠️ No user logged in, skipping FCM token save');
+        return;
+      }
+
+      final token = await _firebaseMessaging.getToken();
+      if (token == null) {
+        debugPrint('⚠️ FCM token is null');
+        return;
+      }
+
+      debugPrint('📱 FCM Token: ${token.substring(0, 20)}...');
+
+      final userRef = _database.ref('customers/${user.uid}');
+      await userRef.update({
+        'fcmToken': token,
+        'fcmTokenUpdatedAt': DateTime.now().toIso8601String(),
+      });
+      
+      debugPrint('✅ FCM token saved to database');
+      
+      await _saveFCMTokenToBackend(token);
+    } catch (e) {
+      debugPrint('❌ Error getting/saving FCM token: $e');
+    }
+  }
+
+  Future<void> _saveFCMTokenToBackend(String token) async {
+    try {
+      final uri = Uri.parse('${ApiConfig.baseUrl}/api/notifications/register-token');
+      final response = await http.post(
+        uri,
+        headers: await _getHeaders(),
+        body: json.encode({
+          'fcmToken': token,
+          'platform': 'mobile',
+          'deviceName': 'Android Device',
+        }),
+      );
+      
+      if (response.statusCode == 200) {
+        debugPrint('✅ FCM token registered with backend');
+      } else {
+        debugPrint('⚠️ Failed to register FCM token: ${response.statusCode}');
+        debugPrint('   Response: ${response.body}');
+      }
+    } catch (e) {
+      debugPrint('❌ Error registering FCM token: $e');
+    }
+  }
+
+  // ========== REALTIME DATABASE LISTENER ==========
+
+  // ✅ UPDATED: Improved realtime listener with duplicate prevention
+  void _startRealtimeListener() {
+    final user = _auth.currentUser;
+    if (user == null) {
+      debugPrint('❌ Cannot start realtime listener: User not logged in');
+      return;
+    }
+
+    // Stop any existing listener first
+    stopListening();
+
+    final notificationsRef = _database.ref('notifications/${user.uid}');
+    
+    debugPrint('🎯 Starting realtime listener for: notifications/${user.uid}');
+    
+    // ✅ Use onChildAdded to get ALL new notifications
+    _notificationSubscription = notificationsRef
+        .orderByChild('createdAt')
+        .onChildAdded
+        .listen((event) {
+      try {
+        final data = event.snapshot.value;
+        if (data is Map) {
+          final notification = Map<String, dynamic>.from(data);
+          notification['id'] = event.snapshot.key;
+          
+          debugPrint('📬 ========================================');
+          debugPrint('📬 REALTIME NOTIFICATION FROM DATABASE');
+          debugPrint('📬 ========================================');
+          debugPrint('   Title: ${notification['title']}');
+          debugPrint('   Body: ${notification['body']}');
+          debugPrint('   Type: ${notification['type']}');
+          debugPrint('   Priority: ${notification['priority']}');
+          debugPrint('   ID: ${notification['id']}');
+          
+          // ✅ Generate unique ID for duplicate prevention
+          final notificationId = notification['id'] ?? 
+                                '${notification['title']}_${notification['body']}_${notification['type']}_${DateTime.now().millisecondsSinceEpoch ~/ 5000}';
+          
+          debugPrint('   Notification ID: $notificationId');
+          
+          // ✅ Check if already processed (prevents duplicate from FCM)
+          if (_processedNotificationIds.contains(notificationId)) {
+            debugPrint('⏭️  SKIPPING: Notification already processed (duplicate from RTDB)');
+            return;
+          }
+          
+          // ✅ Mark as processed
+          _processedNotificationIds.add(notificationId);
+          
+          // ✅ Cleanup old IDs if set gets too large
+          if (_processedNotificationIds.length > _maxProcessedIds) {
+            final idsToRemove = _processedNotificationIds.take(_processedNotificationIds.length - _maxProcessedIds).toList();
+            _processedNotificationIds.removeAll(idsToRemove);
+          }
+          
+          // ✅ Get context for floating notification
+          final context = navigatorKey?.currentContext;
+          
+          if (context != null && context.mounted) {
+            debugPrint('✅ Showing floating notification from database');
+            
+            // Delay slightly to ensure UI is ready
+            Future.delayed(const Duration(milliseconds: 200), () {
+              if (context.mounted) {
+                // Convert data to proper Map<String, dynamic>
+                Map<String, dynamic>? notificationData;
+                if (notification['data'] != null) {
+                  try {
+                    notificationData = Map<String, dynamic>.from(notification['data'] as Map);
+                  } catch (e) {
+                    debugPrint('⚠️  Error converting notification data: $e');
+                    notificationData = null;
+                  }
+                }
+                
+                _showFloatingNotification(
+                  context: context,
+                  title: notification['title'] ?? 'Notification',
+                  body: notification['body'] ?? '',
+                  type: notification['type'] ?? 'system',
+                  priority: notification['priority'] ?? 'normal',
+                  data: notificationData,
+                );
+              }
+            });
+          } else {
+            debugPrint('⚠️ No context for floating notification, showing local');
+            _showLocalNotification(notification);
+          }
+          
+          // Emit to stream
+          _newNotificationController.add(notification);
+        }
+      } catch (e) {
+        debugPrint('❌ Error processing realtime notification: $e');
+      }
+    }, onError: (error) {
+      debugPrint('❌ Realtime listener error: $error');
+    });
+
+    debugPrint('✅ Realtime notification listener started');
+  }
+
+  // ✅ Floating notification with detailed logging
+  void _showFloatingNotification({
+    required BuildContext context,
+    required String title,
+    required String body,
+    required String type,
+    required String priority,
+    Map<String, dynamic>? data,
+  }) {
+    debugPrint('🎨 ========================================');
+    debugPrint('🎨 SHOWING FLOATING NOTIFICATION');
+    debugPrint('🎨 ========================================');
+    debugPrint('   Title: $title');
+    debugPrint('   Body: $body');
+    debugPrint('   Type: $type');
+    debugPrint('   Priority: $priority');
+    debugPrint('   Icon: ${getNotificationIcon(type)}');
+    debugPrint('   Color: 0x${getNotificationColor(priority).toRadixString(16)}');
+    
+    try {
+      _floatingNotificationService.showFloatingNotification(
+        context: context,
+        title: title,
+        body: body,
+        icon: getNotificationIcon(type),
+        type: type,
+        priority: priority,
+        backgroundColor: Color(getNotificationColor(priority)),
+        duration: const Duration(seconds: 5),
+        onTap: () {
+          debugPrint('👆 Floating notification tapped');
+          _handleNotificationTap(data);
+        },
+        onDismiss: () {
+          debugPrint('❌ Floating notification dismissed');
+        },
+      );
+      
+      debugPrint('✅ Floating notification shown successfully');
+    } catch (e) {
+      debugPrint('❌ Error showing floating notification: $e');
+    }
+  }
+
+  void _handleNotificationTap(Map<String, dynamic>? data) {
+    if (data == null) return;
+    debugPrint('Handling notification tap with data: $data');
+    // TODO: Add navigation logic based on notification type
+  }
+
+  // ✅ UPDATED: Improved local notification with custom sounds
+  Future<void> _showLocalNotification(Map<String, dynamic> notification) async {
+    try {
+      final notificationId = notification['id']?.hashCode ?? 
+                            DateTime.now().millisecondsSinceEpoch;
+      
+      final priority = notification['priority'] ?? 'normal';
+      final type = notification['type'] ?? 'system';
+      
+      debugPrint('📱 Showing local notification: ${notification['title']}');
+      
+      // Determine channel and sound based on notification type
+      final isLeaveNotification = _shouldPlayCustomSound(type);
+      final channelId = isLeaveNotification ? 'leave_notifications' : 'fleet_notifications';
+      final channelName = isLeaveNotification ? 'Leave Request Notifications' : 'Fleet Notifications';
+      final soundFile = _getNotificationSound(type);
+      
+      await _localNotifications.show(
+        notificationId,
+        notification['title'] ?? 'Fleet Notification',
+        notification['body'] ?? '',
+        NotificationDetails(
+          android: AndroidNotificationDetails(
+            channelId,
+            channelName,
+            channelDescription: isLeaveNotification 
+                ? 'Leave request related notifications'
+                : 'Real-time fleet management notifications',
+            importance: priority == 'high' ? Importance.max : Importance.high,
+            priority: priority == 'high' ? Priority.max : Priority.high,
+            icon: '@mipmap/ic_launcher',
+            color: Color(getNotificationColor(priority)),
+            playSound: true,
+            sound: soundFile != null ? RawResourceAndroidNotificationSound(soundFile) : null,
+            enableVibration: true,
+            showWhen: true,
+          ),
+          iOS: DarwinNotificationDetails(
+            presentAlert: true,
+            presentBadge: true,
+            presentSound: true,
+            sound: soundFile != null ? '$soundFile.mp3' : null,
+          ),
+        ),
+        payload: json.encode(notification),
+      );
+      
+      debugPrint('✅ Local notification shown successfully with sound: $soundFile');
+    } catch (e) {
+      debugPrint('❌ Error showing local notification: $e');
+    }
+  }
+
+  void stopListening() {
+    _notificationSubscription?.cancel();
+    _notificationSubscription = null;
+    debugPrint('🛑 Realtime notification listener stopped');
+  }
+
+  // ========== API METHODS ==========
+
+  Future<String?> _getAuthToken() async {
+    final user = _auth.currentUser;
+    if (user == null) return null;
+    return await user.getIdToken();
+  }
+
+  Future<Map<String, String>> _getHeaders() async {
+    final token = await _getAuthToken();
+    return {
+      'Content-Type': 'application/json',
+      if (token != null) 'Authorization': 'Bearer $token',
+    };
+  }
+
+  Future<Map<String, dynamic>> getNotifications({
+    int page = 1,
+    int limit = 50,
+    bool? isRead,
+    String? type,
+    String? category,
+  }) async {
+    debugPrint('📡 ========================================');
+    debugPrint('📡 FETCHING NOTIFICATIONS FROM BACKEND');
+    debugPrint('📡 ========================================');
+    debugPrint('   Page: $page');
+    debugPrint('   Limit: $limit');
+    debugPrint('   IsRead filter: $isRead');
+    debugPrint('   Type filter: $type');
+    debugPrint('   Category filter: $category');
+    
+    try {
+      final user = _auth.currentUser;
+      if (user == null) {
+        debugPrint('❌ No user logged in');
+        return {
+          'success': false,
+          'message': 'User not logged in',
+        };
+      }
+
+      final queryParams = {
+        'page': page.toString(),
+        'limit': limit.toString(),
+        'userId': user.uid, // ✅ Filter by user ID
+        if (isRead != null) 'isRead': isRead.toString(),
+        if (type != null) 'type': type,
+        if (category != null) 'category': category,
+      };
+
+      final uri = Uri.parse('${ApiConfig.baseUrl}/api/notifications')
+          .replace(queryParameters: queryParams);
+      
+      debugPrint('   URL: $uri');
+
+      final response = await http.get(uri, headers: await _getHeaders());
+      
+      debugPrint('   Response Status: ${response.statusCode}');
+      debugPrint('   Response Body Length: ${response.body.length} chars');
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        final notifications = data['data']['notifications'] ?? [];
+        final pagination = data['data']['pagination'] ?? {};
+        
+        debugPrint('✅ Successfully fetched notifications');
+        debugPrint('   Total notifications: ${notifications.length}');
+        debugPrint('   User: ${user.email}');
+        
+        // Log first few notifications for debugging
+        if (notifications.isNotEmpty) {
+          debugPrint('   First notification:');
+          final first = notifications[0];
+          debugPrint('     - Title: ${first['title']}');
+          debugPrint('     - Type: ${first['type']}');
+          debugPrint('     - Read: ${first['isRead'] ?? first['read']}');
+          debugPrint('     - Created: ${first['createdAt']}');
+        }
+        
+        return {
+          'success': true,
+          'notifications': notifications,
+          'pagination': pagination,
+        };
+      } else {
+        final error = json.decode(response.body);
+        debugPrint('❌ Backend returned error: ${response.statusCode}');
+        debugPrint('   Error message: ${error['message']}');
+        return {
+          'success': false,
+          'message': error['message'] ?? 'Failed to fetch notifications',
+        };
+      }
+    } catch (e, stackTrace) {
+      debugPrint('❌ Error fetching notifications: $e');
+      debugPrint('   Stack trace: $stackTrace');
+      return {
+        'success': false,
+        'message': 'Network error: $e',
+      };
+    }
+  }
+
+  Future<int> getUnreadCount({bool adminOnly = false}) async {
+    try {
+      final uri = Uri.parse('${ApiConfig.baseUrl}/api/notifications/unread-count${adminOnly ? '?adminOnly=true' : ''}');
+      final response = await http.get(uri, headers: await _getHeaders());
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        return data['data']['unreadCount'] ?? 0;
+      }
+      return 0;
+    } catch (e) {
+      debugPrint('❌ Error fetching unread count: $e');
+      return 0;
+    }
+  }
+
+  Future<Map<String, dynamic>?> getStats() async {
+    try {
+      final uri = Uri.parse('${ApiConfig.baseUrl}/api/notifications/stats');
+      final response = await http.get(uri, headers: await _getHeaders());
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        return data['data'];
+      }
+      return null;
+    } catch (e) {
+      debugPrint('❌ Error fetching notification stats: $e');
+      return null;
+    }
+  }
+
+  Future<bool> markAsRead(String notificationId) async {
+    try {
+      final uri = Uri.parse('${ApiConfig.baseUrl}/api/notifications/$notificationId/read');
+      final response = await http.put(uri, headers: await _getHeaders());
+      return response.statusCode == 200;
+    } catch (e) {
+      debugPrint('❌ Error marking notification as read: $e');
+      return false;
+    }
+  }
+
+  Future<bool> markAllAsRead() async {
+    try {
+      final uri = Uri.parse('${ApiConfig.baseUrl}/api/notifications/read-all');
+      final response = await http.put(uri, headers: await _getHeaders());
+      return response.statusCode == 200;
+    } catch (e) {
+      debugPrint('❌ Error marking all notifications as read: $e');
+      return false;
+    }
+  }
+
+  Future<bool> markMultipleAsRead(List<String> notificationIds) async {
+    try {
+      final uri = Uri.parse('${ApiConfig.baseUrl}/api/notifications/read-multiple');
+      final response = await http.put(
+        uri,
+        headers: await _getHeaders(),
+        body: json.encode({'notificationIds': notificationIds}),
+      );
+      return response.statusCode == 200;
+    } catch (e) {
+      debugPrint('❌ Error marking notifications as read: $e');
+      return false;
+    }
+  }
+
+  Future<bool> deleteNotification(String notificationId) async {
+    try {
+      final uri = Uri.parse('${ApiConfig.baseUrl}/api/notifications/$notificationId');
+      final response = await http.delete(uri, headers: await _getHeaders());
+      return response.statusCode == 200;
+    } catch (e) {
+      debugPrint('❌ Error deleting notification: $e');
+      return false;
+    }
+  }
+
+  Future<bool> deleteAllNotifications() async {
+    try {
+      final uri = Uri.parse('${ApiConfig.baseUrl}/api/notifications/delete-all');
+      final response = await http.delete(uri, headers: await _getHeaders());
+      return response.statusCode == 200;
+    } catch (e) {
+      debugPrint('❌ Error deleting all notifications: $e');
+      return false;
+    }
+  }
+
+  // ========== HELPER METHODS ==========
+
+  /// Get custom notification sound based on notification type
+  String? _getNotificationSound(String type) {
+    // Only return custom sound if user has it enabled
+    if (!_customSoundEnabled) return null;
+    
+    switch (type) {
+      // Leave request notifications for all roles
+      case 'leave_request':           // Customer submits leave request
+      case 'leave_approved':          // Customer gets approval notification
+      case 'leave_rejected':          // Customer gets rejection notification
+      case 'leave_approved_admin':    // Admin gets notification to cancel trips
+      case 'trip_cancelled':          // Driver gets trip cancellation notification
+      // Additional leave-related notifications
+      case 'leave_cancelled':         // Customer cancels leave request
+      case 'leave_processed':         // Admin completes trip cancellation
+        return 'notification'; // This will use notification.mp3
+      default:
+        return null; // Use default system sound
+    }
+  }
+
+  /// Check if custom sound should be played for this notification type
+  bool _shouldPlayCustomSound(String type) {
+    // Only play custom sound if user has it enabled
+    if (!_customSoundEnabled) return false;
+    
+    // Play custom sound for ALL notification types
+    return true;
+  }
+
+  /// Play custom notification sound for all notifications
+  Future<void> _playCustomNotificationSound() async {
+    try {
+      debugPrint('🔊 Playing custom notification sound');
+      
+      // Use audioplayers to play the notification sound
+      final AudioPlayer audioPlayer = AudioPlayer();
+      await audioPlayer.play(AssetSource('Notification.mp3'));
+      
+      debugPrint('✅ Notification sound played successfully');
+    } catch (e) {
+      debugPrint('❌ Error playing custom notification sound: $e');
+    }
+  }
+
+  static String getNotificationIcon(String type) {
+    switch (type) {
+      case 'roster_assigned':
+        return '🚗';
+      case 'vehicle_assigned':
+        return '🚗';
+      case 'roster_updated':
+        return '🔄';
+      case 'roster_cancelled':
+        return '❌';
+      // Leave request workflow icons for all roles
+      case 'leave_request':
+        return '🏖️';  // Customer submits leave request
+      case 'leave_approved':
+        return '✅';   // Customer gets approval
+      case 'leave_rejected':
+        return '❌';   // Customer gets rejection
+      case 'leave_approved_admin':
+        return '📋';   // Admin needs to cancel trips
+      case 'trip_cancelled':
+        return '🚫';   // Driver gets trip cancellation
+      case 'leave_cancelled':
+        return '🗑️';   // Customer cancels leave request
+      case 'leave_processed':
+        return '✔️';   // Admin completes processing
+      case 'system':
+        return '🔔';
+      case 'alert':
+        return '⚠️';
+      default:
+        return '📬';
+    }
+  }
+
+  static int getNotificationColor(String priority) {
+    switch (priority) {
+      case 'high':
+        return 0xFFFF5252;
+      case 'normal':
+        return 0xFF2196F3;
+      case 'low':
+        return 0xFF9E9E9E;
+      default:
+        return 0xFF2196F3;
+    }
+  }
+
+  // ✅ UPDATED: Dispose method with observer removal
+  void dispose() {
+    stopListening();
+    _newNotificationController.close();
+    _floatingNotificationService.dispose();
+    WidgetsBinding.instance.removeObserver(this);
+  }
+}

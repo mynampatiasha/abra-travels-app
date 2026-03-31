@@ -1,0 +1,2424 @@
+// routes/route_optimization_router.js - Route Optimization Endpoints
+// ✅ COMPLETE VERSION - All 1200+ lines with proper response structure
+const express = require('express');
+const router = express.Router();
+const { ObjectId } = require('mongodb');
+const { verifyToken } = require('../middleware/auth');
+const { createNotification } = require('../models/notification_model');
+// Note: FCM is handled automatically by notification_model.js when channels: ['fcm', 'database'] is set
+// Note: Using native fetch (Node.js 18+) for OSRM API calls
+
+// ========== ROUTE OPTIMIZATION ENDPOINTS ==========
+
+// @route   POST api/roster/optimize
+// @desc    Optimize route assignments for multiple rosters
+// @access  Private (Admin/Manager)
+router.post('/optimize', verifyToken, async (req, res) => {
+  try {
+    console.log('🚀 Route optimization request received');
+    console.log('Request body:', JSON.stringify(req.body, null, 2));
+    
+    const { rosterIds, count } = req.body;
+    
+    if (!rosterIds || !Array.isArray(rosterIds) || rosterIds.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'rosterIds array is required'
+      });
+    }
+    
+    // Fetch rosters
+    const rosters = await req.db.collection('rosters')
+      .find({
+        _id: { $in: rosterIds.map(id => new ObjectId(id)) },
+        status: 'pending_assignment'
+      })
+      .toArray();
+    
+    if (rosters.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: 'No pending rosters found'
+      });
+    }
+    
+    console.log(`📋 Found ${rosters.length} rosters to optimize`);
+    
+    // Fetch available drivers
+    const drivers = await req.db.collection('users')
+      .find({
+        role: 'driver',
+        status: 'active',
+        isAvailable: { $ne: false }
+      })
+      .toArray();
+    
+    if (drivers.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: 'No available drivers found'
+      });
+    }
+    
+    console.log(`🚗 Found ${drivers.length} available drivers`);
+    
+    // Group rosters by office location
+    const rostersByOffice = {};
+    rosters.forEach(roster => {
+      const office = roster.officeLocation || 'Unknown';
+      if (!rostersByOffice[office]) {
+        rostersByOffice[office] = [];
+      }
+      rostersByOffice[office].push(roster);
+    });
+    
+    console.log(`🏢 Grouped into ${Object.keys(rostersByOffice).length} office locations`);
+    
+    // Optimize assignments
+    const assignments = [];
+    const usedDriverIds = new Set();
+    
+    for (const [office, officeRosters] of Object.entries(rostersByOffice)) {
+      console.log(`\n🏢 Processing office: ${office} (${officeRosters.length} rosters)`);
+      
+      // Sort by distance (would need actual coordinates in production)
+      // For now, just process in order
+      
+      for (let i = 0; i < officeRosters.length; i++) {
+        const roster = officeRosters[i];
+        
+        // Find nearest available driver (simplified - in production use actual coordinates)
+        const availableDriver = drivers.find(d => !usedDriverIds.has(d._id.toString()));
+        
+        if (!availableDriver) {
+          console.log(`⚠️  No more drivers available for roster ${roster._id}`);
+          continue;
+        }
+        
+        // Calculate timing (simplified)
+        const officeTime = roster.startTime || '09:00';
+        const distance = 10 + (i * 2); // Mock distance
+        const travelTime = Math.round(distance * 3); // 3 min per km
+        const bufferMinutes = 15 + (i * 2); // Staggered buffer
+        
+        // Calculate pickup time
+        const [hours, minutes] = officeTime.split(':').map(Number);
+        const officeDateTime = new Date();
+        officeDateTime.setHours(hours, minutes, 0, 0);
+        
+        const pickupDateTime = new Date(officeDateTime.getTime() - (travelTime + bufferMinutes) * 60000);
+        const pickupTime = `${String(pickupDateTime.getHours()).padStart(2, '0')}:${String(pickupDateTime.getMinutes()).padStart(2, '0')}`;
+        
+        const assignment = {
+          rosterId: roster._id.toString(),
+          customerName: roster.customerName || roster.employeeDetails?.name || 'Unknown',
+          customerEmail: roster.customerEmail || roster.employeeDetails?.email || '',
+          driverId: availableDriver._id.toString(),
+          driverName: availableDriver.name || 'Unknown Driver',
+          driverEmail: availableDriver.email || '',
+          distance: distance,
+          travelTime: travelTime,
+          officeLocation: office,
+          officeTime: officeTime,
+          pickupTime: pickupTime,
+          bufferMinutes: bufferMinutes,
+          rosterType: roster.rosterType || 'both'
+        };
+        
+        assignments.push(assignment);
+        usedDriverIds.add(availableDriver._id.toString());
+        
+        console.log(`✅ Assigned ${availableDriver.name} to ${assignment.customerName}`);
+        console.log(`   📍 Distance: ${distance}km, Travel: ${travelTime}min`);
+        console.log(`   ⏰ Pickup: ${pickupTime}, Office: ${officeTime}, Buffer: ${bufferMinutes}min`);
+      }
+    }
+    
+    console.log(`\n✅ Optimization complete: ${assignments.length} assignments created`);
+    
+    res.json({
+      success: true,
+      message: `Successfully optimized ${assignments.length} route assignments`,
+      data: {
+        assignments,
+        totalRosters: rosters.length,
+        assignedCount: assignments.length,
+        availableDrivers: drivers.length
+      }
+    });
+    
+  } catch (error) {
+    console.error('❌ Route optimization error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Route optimization failed',
+      error: error.message
+    });
+  }
+});
+
+// @route   POST api/roster/assign-bulk
+// @desc    Bulk assign drivers to rosters with notifications
+// @access  Private (Admin/Manager)
+router.post('/assign-bulk', verifyToken, async (req, res) => {
+  try {
+    console.log('📦 Bulk assignment request received');
+    console.log('Request body:', JSON.stringify(req.body, null, 2));
+    
+    const { assignments } = req.body;
+    
+    if (!assignments || !Array.isArray(assignments) || assignments.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'assignments array is required'
+      });
+    }
+    
+    const results = [];
+    const errors = [];
+    
+    for (const assignment of assignments) {
+      try {
+        const { rosterId, driverId, pickupTime, officeTime, distance, travelTime, bufferMinutes } = assignment;
+        
+        if (!rosterId || !driverId) {
+          errors.push({
+            rosterId,
+            error: 'Missing rosterId or driverId'
+          });
+          continue;
+        }
+        
+        // Update roster with assignment
+        const updateResult = await req.db.collection('rosters').findOneAndUpdate(
+          { _id: new ObjectId(rosterId), status: 'pending_assignment' },
+          {
+            $set: {
+              driverId: driverId,
+              status: 'assigned',
+              assignedAt: new Date(),
+              assignedBy: req.user?.uid || req.user?.id || 'system',
+              optimizedPickupTime: pickupTime,
+              optimizedOfficeTime: officeTime,
+              estimatedDistance: distance,
+              estimatedTravelTime: travelTime,
+              bufferMinutes: bufferMinutes,
+              updatedAt: new Date()
+            }
+          },
+          { returnDocument: 'after' }
+        );
+        
+        if (!updateResult.value) {
+          errors.push({
+            rosterId,
+            error: 'Roster not found or already assigned'
+          });
+          continue;
+        }
+        
+        const roster = updateResult.value;
+        
+        // Get driver details
+        const driver = await req.db.collection('users').findOne({
+          _id: new ObjectId(driverId)
+        });
+        
+        if (!driver) {
+          errors.push({
+            rosterId,
+            error: 'Driver not found'
+          });
+          continue;
+        }
+        
+        // Send notification to customer
+        try {
+          const customerNotification = await createNotification(req.db, {
+            userId: roster.customerId || roster.customerEmail,
+            title: 'Driver Assigned',
+            message: `Driver ${driver.name} has been assigned to your trip. Pickup time: ${pickupTime}`,
+            type: 'roster_assignment',
+            data: {
+              rosterId: roster._id.toString(),
+              driverId: driver._id.toString(),
+              driverName: driver.name,
+              pickupTime: pickupTime,
+              officeTime: officeTime,
+              distance: distance,
+              travelTime: travelTime
+            },
+            priority: 'high',
+            category: 'roster'
+          });
+          
+          console.log(`✅ Customer notification sent for roster ${rosterId}`);
+        } catch (notifError) {
+          console.log(`⚠️  Customer notification failed for roster ${rosterId}:`, notifError.message);
+        }
+        
+        // Send notification to driver
+        try {
+          const driverNotification = await createNotification(req.db, {
+            userId: driver.email || driver._id.toString(),
+            title: 'New Assignment',
+            message: `You have been assigned to pick up ${roster.customerName || 'customer'} at ${pickupTime}`,
+            type: 'driver_assignment',
+            data: {
+              rosterId: roster._id.toString(),
+              customerName: roster.customerName,
+              pickupTime: pickupTime,
+              officeLocation: roster.officeLocation,
+              distance: distance,
+              travelTime: travelTime
+            },
+            priority: 'high',
+            category: 'roster'
+          });
+          
+          console.log(`✅ Driver notification sent to ${driver.name}`);
+        } catch (notifError) {
+          console.log(`⚠️  Driver notification failed for driver ${driverId}:`, notifError.message);
+        }
+        
+        results.push({
+          rosterId: roster._id.toString(),
+          status: 'success',
+          driverName: driver.name,
+          customerName: roster.customerName
+        });
+        
+        console.log(`✅ Successfully assigned roster ${rosterId} to driver ${driver.name}`);
+        
+      } catch (assignError) {
+        console.error(`❌ Error assigning roster ${assignment.rosterId}:`, assignError);
+        errors.push({
+          rosterId: assignment.rosterId,
+          error: assignError.message
+        });
+      }
+    }
+    
+    console.log(`\n✅ Bulk assignment complete: ${results.length} successful, ${errors.length} failed`);
+    
+    res.json({
+      success: true,
+      message: `Bulk assignment completed: ${results.length} successful, ${errors.length} failed`,
+      data: {
+        successful: results,
+        failed: errors,
+        totalProcessed: assignments.length,
+        successCount: results.length,
+        errorCount: errors.length
+      }
+    });
+    
+  } catch (error) {
+    console.error('❌ Bulk assignment error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Bulk assignment failed',
+      error: error.message
+    });
+  }
+});
+
+// @route   GET api/roster/drivers/available
+// @desc    Get list of available drivers for route optimization
+// @access  Private (Admin/Manager)
+router.get('/drivers/available', verifyToken, async (req, res) => {
+  try {
+    console.log('🚗 Fetching available drivers...');
+    
+    const drivers = await req.db.collection('users')
+      .find({
+        role: 'driver',
+        status: 'active',
+        isAvailable: { $ne: false }
+      })
+      .project({
+        _id: 1,
+        name: 1,
+        email: 1,
+        phone: 1,
+        currentLocation: 1,
+        isAvailable: 1
+      })
+      .toArray();
+    
+    console.log(`✅ Found ${drivers.length} available drivers`);
+    
+    res.json({
+      success: true,
+      message: 'Available drivers retrieved successfully',
+      data: drivers,
+      count: drivers.length
+    });
+    
+  } catch (error) {
+    console.error('❌ Error fetching available drivers:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch available drivers',
+      error: error.message
+    });
+  }
+});
+
+// @route   POST api/roster/compatible-vehicles
+// @desc    Get list of compatible vehicles for given customers (filters by email domain, timing, capacity)
+// @access  Private (Admin/Manager)
+// ============================================================================
+// ✅ FIXED VERSION - Consecutive Trip Validation with Travel Time
+// ============================================================================
+// NEW FEATURES:
+// ✅ Calculates travel time between consecutive trips
+// ✅ Adds 30-minute buffer between trips
+// ✅ Validates office → first pickup distance
+// ✅ Filters out physically impossible schedules
+// ✅ Shows detailed incompatibility reasons
+// ============================================================================
+
+router.post('/compatible-vehicles', verifyToken, async (req, res) => {
+  try {
+    console.log('\n' + '='.repeat(80));
+    console.log('🔍 FINDING COMPATIBLE VEHICLES WITH CONSECUTIVE TRIP VALIDATION');
+    console.log('='.repeat(80));
+    
+    const { rosterIds } = req.body;
+    
+    if (!rosterIds || !Array.isArray(rosterIds) || rosterIds.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'rosterIds array is required'
+      });
+    }
+    
+    console.log(`📋 Checking compatibility for ${rosterIds.length} customers`);
+    
+    // ========================================================================
+    // STEP 1: Fetch the rosters to check
+    // ========================================================================
+    const rosters = await req.db.collection('rosters')
+      .find({
+        _id: { $in: rosterIds.map(id => new ObjectId(id)) }
+      })
+      .toArray();
+    
+    if (rosters.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: 'No rosters found'
+      });
+    }
+    
+    // ========================================================================
+    // STEP 2: Extract compatibility criteria from customers
+    // ========================================================================
+    const customerEmails = new Set();
+    const customerCompanies = new Set();
+    const customerShifts = new Set();
+    const customerLoginTimes = new Set();
+    const customerLogoutTimes = new Set();
+    const customerRosterTypes = new Set();
+    
+    // 🆕 NEW: Extract timing information for new trip
+    let newTripStartTime = null; // Earliest pickup time
+    let newTripEndTime = null;   // Latest office arrival time
+    const newTripLocations = [];
+    
+    console.log('\n📊 Customer Details:');
+    rosters.forEach((roster, idx) => {
+      const email = roster.customerEmail || roster.employeeDetails?.email || '';
+      const emailDomain = email.includes('@') ? email.split('@')[1].toLowerCase() : 'unknown';
+      const company = emailDomain.split('.')[0];
+      
+      customerEmails.add(email);
+      customerCompanies.add(company);
+      customerShifts.add(roster.shift || roster.shiftType || 'Unknown');
+      customerLoginTimes.add(roster.startTime || roster.officeTime || roster.loginTime || 'Unknown');
+      customerLogoutTimes.add(roster.endTime || roster.officeEndTime || roster.logoutTime || 'Unknown');
+      customerRosterTypes.add(roster.rosterType || 'both');
+      
+      // 🆕 Track timing for this trip
+      const pickupTime = roster.startTime || roster.officeTime || roster.loginTime;
+      if (pickupTime) {
+        if (!newTripStartTime || pickupTime < newTripStartTime) {
+          newTripStartTime = pickupTime;
+        }
+        if (!newTripEndTime || pickupTime > newTripEndTime) {
+          newTripEndTime = pickupTime;
+        }
+      }
+      
+      // 🆕 Track locations
+      newTripLocations.push({
+        pickup: roster.loginPickupAddress || roster.pickupLocation,
+        office: roster.officeLocation,
+        pickupCoords: roster.locations?.pickup?.coordinates || null,
+        officeCoords: roster.officeLocationCoordinates || null
+      });
+      
+      console.log(`   ${idx + 1}. ${roster.customerName || 'Unknown'}`);
+      console.log(`      📧 Email: ${email}`);
+      console.log(`      🏢 Company: ${company}`);
+      console.log(`      🌅 Shift: ${roster.shift || 'Unknown'}`);
+      console.log(`      🕐 Office Time: ${pickupTime || 'Unknown'}`);
+    });
+    
+    console.log(`\n📊 New Trip Requirements:`);
+    console.log(`   🏢 Companies: ${Array.from(customerCompanies).join(', ')}`);
+    console.log(`   🕐 Earliest Pickup: ${newTripStartTime || 'Unknown'}`);
+    console.log(`   🕐 Latest Office Arrival: ${newTripEndTime || 'Unknown'}`);
+    
+    // ========================================================================
+    // STEP 3: Fetch all active vehicles with drivers
+    // ========================================================================
+    const allVehicles = await req.db.collection('vehicles')
+      .find({
+        status: { $regex: /^active$/i },
+        assignedDriver: { $exists: true, $ne: null }
+      })
+      .toArray();
+    
+    console.log(`\n🚗 Found ${allVehicles.length} active vehicles with drivers`);
+    
+   // ========================================================================
+    // STEP 4: Populate driver information for each vehicle
+    // ========================================================================
+    console.log('📋 Populating driver information...');
+    for (const vehicle of allVehicles) {
+      if (vehicle.assignedDriver) {
+        try {
+          if (typeof vehicle.assignedDriver === 'string' || vehicle.assignedDriver instanceof ObjectId) {
+            const driverId = vehicle.assignedDriver.toString();
+            
+            let driver = null;
+            
+            // Try drivers collection
+            if (ObjectId.isValid(driverId) && driverId.length === 24) {
+              driver = await req.db.collection('drivers').findOne({
+                _id: new ObjectId(driverId)
+              });
+            }
+            
+            if (!driver) {
+              driver = await req.db.collection('drivers').findOne({
+                driverId: driverId
+              });
+            }
+            
+            // Try admin_users collection
+            if (!driver && ObjectId.isValid(driverId) && driverId.length === 24) {
+              driver = await req.db.collection('admin_users').findOne({
+                _id: new ObjectId(driverId)
+              });
+            }
+            
+            if (driver) {
+              const driverName = driver.name || 
+                                (driver.personalInfo?.firstName && driver.personalInfo?.lastName 
+                                  ? `${driver.personalInfo.firstName} ${driver.personalInfo.lastName}`.trim()
+                                  : 'Unknown Driver');
+              const driverPhone = driver.phone || driver.phoneNumber || driver.personalInfo?.phone || '';
+              const driverEmail = driver.email || '';
+              
+              vehicle.assignedDriver = {
+                _id: driver._id,
+                name: driverName,
+                phone: driverPhone,
+                email: driverEmail
+              };
+              
+              vehicle.driverName = driverName;
+              vehicle.driverPhone = driverPhone;
+              vehicle.driverEmail = driverEmail;
+            } else {
+              const fallbackName = vehicle.driverName || vehicle.assignedDriverName || 'Driver Assigned';
+              const fallbackPhone = vehicle.driverPhone || '';
+              const fallbackEmail = vehicle.driverEmail || vehicle.assignedDriverEmail || '';
+              
+              vehicle.assignedDriver = {
+                _id: driverId,
+                name: fallbackName,
+                phone: fallbackPhone,
+                email: fallbackEmail
+              };
+              vehicle.driverName = fallbackName;
+              vehicle.driverPhone = fallbackPhone;
+              vehicle.driverEmail = fallbackEmail;
+            }
+          }
+        } catch (driverError) {
+          console.error(`   ❌ Error populating driver for vehicle ${vehicle._id}:`, driverError.message);
+          vehicle.assignedDriver = {
+            _id: vehicle.assignedDriver,
+            name: 'Driver Assigned',
+            phone: '',
+            email: ''
+          };
+          vehicle.driverName = 'Driver Assigned';
+          vehicle.driverPhone = '';
+          vehicle.driverEmail = '';
+        }
+      }
+    }
+    
+    console.log('\n🔍 Checking compatibility with consecutive trip validation...\n');
+    
+    const compatibleVehicles = [];
+    const incompatibleVehicles = [];
+    
+    // ========================================================================
+    // STEP 5: Check each vehicle for compatibility WITH CONSECUTIVE TRIP VALIDATION
+    // ========================================================================
+    
+    // Helper function to parse time (HH:mm format)
+    const parseTime = (timeStr) => {
+      if (!timeStr || typeof timeStr !== 'string') return 0;
+      if (timeStr.includes(':')) {
+        const [hours, minutes] = timeStr.split(':').map(Number);
+        return hours * 60 + minutes;
+      }
+      const numValue = parseInt(timeStr);
+      return !isNaN(numValue) ? numValue * 60 : 0;
+    };
+    
+    // Helper function to calculate distance (Haversine formula)
+    const calculateDistance = (coord1, coord2) => {
+      if (!coord1 || !coord2 || !coord1.length || !coord2.length) {
+        return null;
+      }
+      
+      const [lon1, lat1] = coord1;
+      const [lon2, lat2] = coord2;
+      
+      const R = 6371; // Earth's radius in km
+      const dLat = (lat2 - lat1) * Math.PI / 180;
+      const dLon = (lon2 - lon1) * Math.PI / 180;
+      const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+                Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+                Math.sin(dLon/2) * Math.sin(dLon/2);
+      const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+      return R * c;
+    };
+    
+    for (const vehicle of allVehicles) {
+      const vehicleName = vehicle.name || vehicle.vehicleNumber || 'Unknown';
+      const vehicleId = vehicle._id.toString();
+      
+      console.log(`🚗 Checking: ${vehicleName}`);
+      
+      // ====================================================================
+      // SUB-STEP 5.1: Check existing assignments (from roster-assigned-trips)
+      // ====================================================================
+      const existingAssignments = await req.db.collection('roster-assigned-trips').find({
+        vehicleId: new ObjectId(vehicleId),
+        status: { $in: ['assigned', 'started', 'in_progress'] },
+        scheduledDate: new Date().toISOString().split('T')[0]
+      }).toArray();
+      
+      if (existingAssignments.length === 0) {
+        // No existing assignments - vehicle is compatible
+        console.log(`   ✅ COMPATIBLE - No existing assignments`);
+        compatibleVehicles.push({
+          ...vehicle,
+          assignedCustomers: [],
+          compatibilityReason: 'No existing assignments',
+          isCompatible: true
+        });
+        continue;
+      }
+      
+      console.log(`   📋 Has ${existingAssignments.length} existing assignments`);
+      
+      // ====================================================================
+      // SUB-STEP 5.2: Check company compatibility
+      // ====================================================================
+      const existingCompanies = new Set();
+      
+      existingAssignments.forEach(trip => {
+        const email = trip.customerEmail || '';
+        const emailDomain = email.includes('@') ? email.split('@')[1].toLowerCase() : 'unknown';
+        const company = emailDomain.split('.')[0];
+        existingCompanies.add(company);
+      });
+      
+      console.log(`   🏢 Existing companies: ${Array.from(existingCompanies).join(', ')}`);
+      
+      const companiesMatch = Array.from(customerCompanies).every(company => 
+        existingCompanies.has(company)
+      );
+      
+      if (!companiesMatch) {
+        console.log(`   ❌ INCOMPATIBLE - Company mismatch`);
+        incompatibleVehicles.push({
+          ...vehicle,
+          assignedCustomers: existingAssignments.map(r => r._id.toString()),
+          compatibilityReason: `Company mismatch: Vehicle has ${Array.from(existingCompanies).join(', ')}, but customers are from ${Array.from(customerCompanies).join(', ')}`,
+          isCompatible: false
+        });
+        continue;
+      }
+      
+      // ====================================================================
+      // SUB-STEP 5.3: Check capacity
+      // ====================================================================
+      const totalSeats = vehicle.capacity?.passengers || 
+                         vehicle.seatCapacity || 
+                         vehicle.seatingCapacity || 
+                         4;
+      const assignedSeats = existingAssignments.length;
+      const availableSeats = totalSeats - 1 - assignedSeats;
+      
+      if (availableSeats <= 0) {
+        console.log(`   ❌ INCOMPATIBLE - Vehicle is full`);
+        incompatibleVehicles.push({
+          ...vehicle,
+          assignedCustomers: existingAssignments.map(r => r._id.toString()),
+          compatibilityReason: `Vehicle is full: ${assignedSeats} customers already assigned to ${totalSeats - 1} available seats`,
+          isCompatible: false
+        });
+        continue;
+      }
+      
+      if (availableSeats < rosters.length) {
+        console.log(`   ❌ INCOMPATIBLE - Insufficient capacity`);
+        incompatibleVehicles.push({
+          ...vehicle,
+          assignedCustomers: existingAssignments.map(r => r._id.toString()),
+          compatibilityReason: `Insufficient capacity: ${availableSeats} seats available, ${rosters.length} needed`,
+          isCompatible: false
+        });
+        continue;
+      }
+      
+      // ====================================================================
+      // 🆕 SUB-STEP 5.4: CONSECUTIVE TRIP VALIDATION WITH TRAVEL TIME
+      // ====================================================================
+      console.log(`   ⏰ Checking consecutive trip feasibility...`);
+      
+      // Sort existing trips by time
+      const sortedExistingTrips = existingAssignments.sort((a, b) => {
+        const aTime = parseTime(a.startTime || a.estimatedPickupTime || '00:00');
+        const bTime = parseTime(b.startTime || b.estimatedPickupTime || '00:00');
+        return aTime - bTime;
+      });
+      
+      // Get the latest existing trip (last office drop-off)
+      const latestTrip = sortedExistingTrips[sortedExistingTrips.length - 1];
+      const latestTripEndTime = parseTime(latestTrip.endTime || latestTrip.startTime || '00:00');
+      
+      // Get office location of latest trip
+      const latestTripOfficeCoords = latestTrip.dropLocation?.coordinates || null;
+      
+      console.log(`   📍 Latest existing trip ends at: ${Math.floor(latestTripEndTime / 60)}:${String(latestTripEndTime % 60).padStart(2, '0')}`);
+      console.log(`   📍 Latest trip office: ${latestTrip.dropLocation?.address || 'Unknown'}`);
+      
+      // Calculate new trip start time (earliest pickup)
+      const newTripStartMinutes = parseTime(newTripStartTime);
+      
+      console.log(`   📍 New trip needs to start at: ${Math.floor(newTripStartMinutes / 60)}:${String(newTripStartMinutes % 60).padStart(2, '0')}`);
+      
+      // ====================================================================
+      // 🔥 CRITICAL CHECK: Can vehicle reach new trip's first pickup on time?
+      // ====================================================================
+      
+      // Find first pickup location of new trip
+      const firstPickupLocation = newTripLocations[0];
+      const firstPickupCoords = firstPickupLocation?.pickupCoords;
+      
+      console.log(`   📍 New trip first pickup: ${firstPickupLocation?.pickup || 'Unknown'}`);
+      
+      // Calculate distance from latest trip office → new trip first pickup
+      let travelDistance = null;
+      let travelTimeMinutes = 30; // Default 30 minutes if we can't calculate
+      
+      if (latestTripOfficeCoords && firstPickupCoords) {
+        travelDistance = calculateDistance(latestTripOfficeCoords, firstPickupCoords);
+        if (travelDistance !== null) {
+          // Calculate travel time: assume 20 km/h average in city traffic
+          travelTimeMinutes = Math.ceil((travelDistance / 20) * 60);
+          console.log(`   🚗 Calculated distance: ${travelDistance.toFixed(2)} km`);
+          console.log(`   ⏱️  Calculated travel time: ${travelTimeMinutes} mins`);
+        }
+      } else {
+        console.log(`   ⚠️  No coordinates available - using default 30 min buffer`);
+      }
+      
+      // Add 30-minute buffer (driver break, parking, etc.)
+      const bufferMinutes = 30;
+      const totalBufferNeeded = travelTimeMinutes + bufferMinutes;
+      
+      console.log(`   ⏱️  Travel time needed: ${travelTimeMinutes} mins`);
+      console.log(`   ⏱️  Buffer time: ${bufferMinutes} mins`);
+      console.log(`   ⏱️  Total time needed: ${totalBufferNeeded} mins`);
+      
+      // Calculate required free time
+      const requiredFreeTimeStart = latestTripEndTime;
+      const requiredFreeTimeEnd = newTripStartMinutes;
+      const actualFreeTime = requiredFreeTimeEnd - requiredFreeTimeStart;
+      
+      console.log(`   ⏰ Time available between trips: ${actualFreeTime} mins`);
+      console.log(`   ⏰ Time needed (travel + buffer): ${totalBufferNeeded} mins`);
+      
+      // ====================================================================
+      // 🔥 VERDICT: Is this schedule physically possible?
+      // ====================================================================
+      if (actualFreeTime < totalBufferNeeded) {
+        const shortfall = totalBufferNeeded - actualFreeTime;
+        console.log(`   ❌ INCOMPATIBLE - Insufficient time between trips`);
+        console.log(`   ❌ Shortfall: ${shortfall} minutes`);
+        
+        const latestEndTimeStr = `${Math.floor(latestTripEndTime / 60)}:${String(latestTripEndTime % 60).padStart(2, '0')}`;
+        const newStartTimeStr = `${Math.floor(newTripStartMinutes / 60)}:${String(newTripStartMinutes % 60).padStart(2, '0')}`;
+        
+        incompatibleVehicles.push({
+          ...vehicle,
+          assignedCustomers: existingAssignments.map(r => r._id.toString()),
+          compatibilityReason: `Impossible schedule: Vehicle finishes previous trip at ${latestEndTimeStr}, ` +
+                             `needs ${totalBufferNeeded} mins (${travelTimeMinutes} mins travel + ${bufferMinutes} mins buffer) ` +
+                             `to reach new trip by ${newStartTimeStr}. Short by ${shortfall} minutes.`,
+          isCompatible: false,
+          timeConflict: {
+            existingTripEnd: latestEndTimeStr,
+            newTripStart: newStartTimeStr,
+            travelTimeNeeded: travelTimeMinutes,
+            bufferNeeded: bufferMinutes,
+            totalTimeNeeded: totalBufferNeeded,
+            actualTimeAvailable: actualFreeTime,
+            shortfall: shortfall,
+            distance: travelDistance ? `${travelDistance.toFixed(2)} km` : 'Unknown'
+          }
+        });
+        continue;
+      }
+      
+      // ====================================================================
+      // ✅ ALL CHECKS PASSED - Vehicle is compatible
+      // ====================================================================
+      console.log(`   ✅ COMPATIBLE - All checks passed including consecutive trip validation`);
+      compatibleVehicles.push({
+        ...vehicle,
+        assignedCustomers: existingAssignments.map(r => r._id.toString()),
+        compatibilityReason: `Same company, ${availableSeats} seats available, sufficient time between trips (${actualFreeTime} mins available, ${totalBufferNeeded} mins needed)`,
+        isCompatible: true,
+        consecutiveTripInfo: {
+          existingTripEnd: `${Math.floor(latestTripEndTime / 60)}:${String(latestTripEndTime % 60).padStart(2, '0')}`,
+          newTripStart: `${Math.floor(newTripStartMinutes / 60)}:${String(newTripStartMinutes % 60).padStart(2, '0')}`,
+          travelTime: travelTimeMinutes,
+          buffer: bufferMinutes,
+          totalTimeNeeded: totalBufferNeeded,
+          timeAvailable: actualFreeTime,
+          margin: actualFreeTime - totalBufferNeeded,
+          distance: travelDistance ? `${travelDistance.toFixed(2)} km` : 'Unknown'
+        }
+      });
+    }
+    
+    console.log('\n' + '='.repeat(80));
+    console.log('📊 COMPATIBILITY CHECK RESULTS WITH CONSECUTIVE TRIP VALIDATION');
+    console.log('='.repeat(80));
+    console.log(`✅ Compatible vehicles: ${compatibleVehicles.length}`);
+    console.log(`❌ Incompatible vehicles: ${incompatibleVehicles.length}`);
+    console.log('='.repeat(80) + '\n');
+    // STEP 5: Check each vehicle for compatibility
+    // ========================================================================
+    for (const vehicle of allVehicles) {
+      const vehicleName = vehicle.name || vehicle.vehicleNumber || 'Unknown';
+      const vehicleId = vehicle._id.toString();
+      
+      console.log(`🚗 Checking: ${vehicleName}`);
+      
+      // ====================================================================
+      // SUB-STEP 5.1: Check existing assignments (from roster-assigned-trips)
+      // ====================================================================
+      const existingAssignments = await req.db.collection('roster-assigned-trips').find({
+        vehicleId: new ObjectId(vehicleId),
+        status: { $in: ['assigned', 'started', 'in_progress'] },
+        scheduledDate: new Date().toISOString().split('T')[0]
+      }).toArray();
+      
+      if (existingAssignments.length === 0) {
+        // No existing assignments - vehicle is compatible
+        console.log(`   ✅ COMPATIBLE - No existing assignments`);
+        compatibleVehicles.push({
+          ...vehicle,
+          assignedCustomers: [],
+          compatibilityReason: 'No existing assignments',
+          isCompatible: true
+        });
+        continue;
+      }
+      
+      console.log(`   📋 Has ${existingAssignments.length} existing assignments`);
+      
+      // ====================================================================
+      // SUB-STEP 5.2: Check company compatibility
+      // ====================================================================
+      const existingCompanies = new Set();
+      
+      existingAssignments.forEach(trip => {
+        const email = trip.customerEmail || '';
+        const emailDomain = email.includes('@') ? email.split('@')[1].toLowerCase() : 'unknown';
+        const company = emailDomain.split('.')[0];
+        existingCompanies.add(company);
+      });
+      
+      console.log(`   🏢 Existing companies: ${Array.from(existingCompanies).join(', ')}`);
+      
+      const companiesMatch = Array.from(customerCompanies).every(company => 
+        existingCompanies.has(company)
+      );
+      
+      if (!companiesMatch) {
+        console.log(`   ❌ INCOMPATIBLE - Company mismatch`);
+        incompatibleVehicles.push({
+          ...vehicle,
+          assignedCustomers: existingAssignments.map(r => r._id.toString()),
+          compatibilityReason: `Company mismatch: Vehicle has ${Array.from(existingCompanies).join(', ')}, but customers are from ${Array.from(customerCompanies).join(', ')}`,
+          isCompatible: false
+        });
+        continue;
+      }
+      
+      // ====================================================================
+      // SUB-STEP 5.3: Check capacity
+      // ====================================================================
+      const totalSeats = vehicle.capacity?.passengers || 
+                         vehicle.seatCapacity || 
+                         vehicle.seatingCapacity || 
+                         4;
+      const assignedSeats = existingAssignments.length;
+      const availableSeats = totalSeats - 1 - assignedSeats;
+      
+      if (availableSeats <= 0) {
+        console.log(`   ❌ INCOMPATIBLE - Vehicle is full`);
+        incompatibleVehicles.push({
+          ...vehicle,
+          assignedCustomers: existingAssignments.map(r => r._id.toString()),
+          compatibilityReason: `Vehicle is full: ${assignedSeats} customers already assigned to ${totalSeats - 1} available seats`,
+          isCompatible: false
+        });
+        continue;
+      }
+      
+      if (availableSeats < rosters.length) {
+        console.log(`   ❌ INCOMPATIBLE - Insufficient capacity`);
+        incompatibleVehicles.push({
+          ...vehicle,
+          assignedCustomers: existingAssignments.map(r => r._id.toString()),
+          compatibilityReason: `Insufficient capacity: ${availableSeats} seats available, ${rosters.length} needed`,
+          isCompatible: false
+        });
+        continue;
+      }
+      
+      // ====================================================================
+      // 🆕 SUB-STEP 5.4: CONSECUTIVE TRIP VALIDATION WITH TRAVEL TIME
+      // ====================================================================
+      console.log(`   ⏰ Checking consecutive trip feasibility...`);
+      
+      // Helper function to parse time
+      const parseTime = (timeStr) => {
+        if (!timeStr || typeof timeStr !== 'string') return 0;
+        if (timeStr.includes(':')) {
+          const [hours, minutes] = timeStr.split(':').map(Number);
+          return hours * 60 + minutes;
+        }
+        const numValue = parseInt(timeStr);
+        return !isNaN(numValue) ? numValue * 60 : 0;
+      };
+      
+      // Helper function to calculate distance between two points (Haversine formula)
+      const calculateDistance = (coord1, coord2) => {
+        if (!coord1 || !coord2 || !coord1.length || !coord2.length) {
+          return null; // Can't calculate without coordinates
+        }
+        
+        const [lon1, lat1] = coord1;
+        const [lon2, lat2] = coord2;
+        
+        const R = 6371; // Earth's radius in km
+        const dLat = (lat2 - lat1) * Math.PI / 180;
+        const dLon = (lon2 - lon1) * Math.PI / 180;
+        const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+                  Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+                  Math.sin(dLon/2) * Math.sin(dLon/2);
+        const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+        return R * c;
+      };
+      
+      // Sort existing trips by time
+      const sortedExistingTrips = existingAssignments.sort((a, b) => {
+        const aTime = parseTime(a.startTime || a.estimatedPickupTime || '00:00');
+        const bTime = parseTime(b.startTime || b.estimatedPickupTime || '00:00');
+        return aTime - bTime;
+      });
+      
+      // Get the latest existing trip (last office drop-off)
+      const latestTrip = sortedExistingTrips[sortedExistingTrips.length - 1];
+      const latestTripEndTime = parseTime(latestTrip.endTime || latestTrip.startTime || '00:00');
+      
+      // Get office location of latest trip
+      const latestTripOfficeCoords = latestTrip.dropLocation?.coordinates || null;
+      
+      console.log(`   📍 Latest existing trip ends at: ${Math.floor(latestTripEndTime / 60)}:${String(latestTripEndTime % 60).padStart(2, '0')}`);
+      console.log(`   📍 Latest trip office: ${latestTrip.dropLocation?.address || 'Unknown'}`);
+      
+      // Calculate new trip start time (earliest pickup)
+      const newTripStartMinutes = parseTime(newTripStartTime);
+      
+      console.log(`   📍 New trip needs to start at: ${Math.floor(newTripStartMinutes / 60)}:${String(newTripStartMinutes % 60).padStart(2, '0')}`);
+      
+      // ====================================================================
+      // 🔥 CRITICAL CHECK: Can vehicle reach new trip's first pickup on time?
+      // ====================================================================
+      
+      // Find first pickup location of new trip
+      const firstPickupLocation = newTripLocations[0];
+      const firstPickupCoords = firstPickupLocation?.pickupCoords;
+      
+      console.log(`   📍 New trip first pickup: ${firstPickupLocation?.pickup || 'Unknown'}`);
+      
+      // Calculate distance from latest trip office → new trip first pickup
+      let travelDistance = null;
+      let travelTimeMinutes = 30; // Default 30 minutes if we can't calculate
+      
+      if (latestTripOfficeCoords && firstPickupCoords) {
+        travelDistance = calculateDistance(latestTripOfficeCoords, firstPickupCoords);
+        if (travelDistance !== null) {
+          // Calculate travel time: assume 20 km/h average in city traffic
+          travelTimeMinutes = Math.ceil((travelDistance / 20) * 60);
+          console.log(`   🚗 Calculated distance: ${travelDistance.toFixed(2)} km`);
+          console.log(`   ⏱️  Calculated travel time: ${travelTimeMinutes} mins`);
+        }
+      } else {
+        console.log(`   ⚠️  No coordinates available - using default 30 min buffer`);
+      }
+      
+      // Add 30-minute buffer (driver break, parking, etc.)
+      const bufferMinutes = 30;
+      const totalBufferNeeded = travelTimeMinutes + bufferMinutes;
+      
+      console.log(`   ⏱️  Travel time needed: ${travelTimeMinutes} mins`);
+      console.log(`   ⏱️  Buffer time: ${bufferMinutes} mins`);
+      console.log(`   ⏱️  Total time needed: ${totalBufferNeeded} mins`);
+      
+      // Calculate required free time
+      const requiredFreeTimeStart = latestTripEndTime;
+      const requiredFreeTimeEnd = newTripStartMinutes;
+      const actualFreeTime = requiredFreeTimeEnd - requiredFreeTimeStart;
+      
+      console.log(`   ⏰ Time available between trips: ${actualFreeTime} mins`);
+      console.log(`   ⏰ Time needed (travel + buffer): ${totalBufferNeeded} mins`);
+      
+      // ====================================================================
+      // 🔥 VERDICT: Is this schedule physically possible?
+      // ====================================================================
+      if (actualFreeTime < totalBufferNeeded) {
+        const shortfall = totalBufferNeeded - actualFreeTime;
+        console.log(`   ❌ INCOMPATIBLE - Insufficient time between trips`);
+        console.log(`   ❌ Shortfall: ${shortfall} minutes`);
+        
+        const latestEndTimeStr = `${Math.floor(latestTripEndTime / 60)}:${String(latestTripEndTime % 60).padStart(2, '0')}`;
+        const newStartTimeStr = `${Math.floor(newTripStartMinutes / 60)}:${String(newTripStartMinutes % 60).padStart(2, '0')}`;
+        
+        incompatibleVehicles.push({
+          ...vehicle,
+          assignedCustomers: existingAssignments.map(r => r._id.toString()),
+          compatibilityReason: `Impossible schedule: Vehicle finishes previous trip at ${latestEndTimeStr}, ` +
+                             `needs ${totalBufferNeeded} mins (${travelTimeMinutes} mins travel + ${bufferMinutes} mins buffer) ` +
+                             `to reach new trip by ${newStartTimeStr}. Short by ${shortfall} minutes.`,
+          isCompatible: false,
+          timeConflict: {
+            existingTripEnd: latestEndTimeStr,
+            newTripStart: newStartTimeStr,
+            travelTimeNeeded: travelTimeMinutes,
+            bufferNeeded: bufferMinutes,
+            totalTimeNeeded: totalBufferNeeded,
+            actualTimeAvailable: actualFreeTime,
+            shortfall: shortfall,
+            distance: travelDistance ? `${travelDistance.toFixed(2)} km` : 'Unknown'
+          }
+        });
+        continue;
+      }
+      
+      // ====================================================================
+      // ✅ ALL CHECKS PASSED - Vehicle is compatible
+      // ====================================================================
+      console.log(`   ✅ COMPATIBLE - All checks passed including consecutive trip validation`);
+      compatibleVehicles.push({
+        ...vehicle,
+        assignedCustomers: existingAssignments.map(r => r._id.toString()),
+        compatibilityReason: `Same company, ${availableSeats} seats available, sufficient time between trips (${actualFreeTime} mins available, ${totalBufferNeeded} mins needed)`,
+        isCompatible: true,
+        consecutiveTripInfo: {
+          existingTripEnd: `${Math.floor(latestTripEndTime / 60)}:${String(latestTripEndTime % 60).padStart(2, '0')}`,
+          newTripStart: `${Math.floor(newTripStartMinutes / 60)}:${String(newTripStartMinutes % 60).padStart(2, '0')}`,
+          travelTime: travelTimeMinutes,
+          buffer: bufferMinutes,
+          totalTimeNeeded: totalBufferNeeded,
+          timeAvailable: actualFreeTime,
+          margin: actualFreeTime - totalBufferNeeded,
+          distance: travelDistance ? `${travelDistance.toFixed(2)} km` : 'Unknown'
+        }
+      });
+    }
+    
+    console.log('\n' + '='.repeat(80));
+    console.log('📊 COMPATIBILITY CHECK RESULTS WITH CONSECUTIVE TRIP VALIDATION');
+    console.log('='.repeat(80));
+    console.log(`✅ Compatible vehicles: ${compatibleVehicles.length}`);
+    console.log(`❌ Incompatible vehicles: ${incompatibleVehicles.length}`);
+    console.log('='.repeat(80) + '\n');
+    
+    // ========================================================================
+    // STEP 6: Smart vehicle sizing (prefer best fit)
+    // ========================================================================
+    const customersCount = rosters.length;
+    
+    compatibleVehicles.sort((a, b) => {
+      const aCapacity = a.capacity?.passengers || a.seatCapacity || a.seatingCapacity || 4;
+      const bCapacity = b.capacity?.passengers || b.seatCapacity || b.seatingCapacity || 4;
+      
+      const aAvailable = aCapacity - 1;
+      const bAvailable = bCapacity - 1;
+      
+      const aWaste = aAvailable - customersCount;
+      const bWaste = bAvailable - customersCount;
+      
+      if (aWaste >= 0 && bWaste >= 0) {
+        return aWaste - bWaste;
+      }
+      
+      if (aWaste >= 0) return -1;
+      if (bWaste >= 0) return 1;
+      
+      return bCapacity - aCapacity;
+    });
+    
+    console.log('🎯 SMART VEHICLE SIZING APPLIED');
+    console.log(`   Customers to assign: ${customersCount}`);
+    if (compatibleVehicles.length > 0) {
+      console.log('   Top 3 best-fit vehicles:');
+      compatibleVehicles.slice(0, 3).forEach((v, i) => {
+        const capacity = v.capacity?.passengers || v.seatCapacity || v.seatingCapacity || 4;
+        const available = capacity - 1;
+        const waste = available - customersCount;
+        console.log(`   ${i + 1}. ${v.name || v.vehicleNumber}: ${capacity} seats (${waste} unused after assignment)`);
+      });
+    }
+    console.log('');
+    
+    res.json({
+      success: true,
+      message: `Found ${compatibleVehicles.length} compatible vehicles (with consecutive trip validation)`,
+      data: {
+        compatible: compatibleVehicles,
+        incompatible: incompatibleVehicles,
+        customerCriteria: {
+          companies: Array.from(customerCompanies),
+          shifts: Array.from(customerShifts),
+          loginTimes: Array.from(customerLoginTimes),
+          logoutTimes: Array.from(customerLogoutTimes),
+          rosterTypes: Array.from(customerRosterTypes),
+          count: rosters.length
+        }
+      },
+      count: compatibleVehicles.length
+    });
+    
+  } catch (error) {
+    console.error('❌ Error finding compatible vehicles:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to find compatible vehicles',
+      error: error.message
+    });
+  }
+});
+// @route   POST api/roster/assign-optimized-route
+// @desc    Assign optimized route to NEW roster-assigned-trips collection
+// @access  Private (Admin/Manager)
+// ============================================================================
+// FEATURES:
+// ✅ Stores in NEW collection: roster-assigned-trips
+// ✅ Uses MongoDB ObjectId for driver/vehicle (NOT custom strings)
+// ✅ Distance-based sequencing (farthest → nearest)
+// ✅ 24-hour time format (07:25 not 07:25 AM)
+// ✅ 20-minute ready buffer (readyByTime)
+
+
+
+// @route   POST api/roster/assign-optimized-route
+// @desc    Assign optimized route with NEW roster-assigned-trips collection
+// @access  Private (Admin/Manager)
+// ============================================================================
+// COMPLETE VERSION - ALL FEATURES PRESERVED + NEW REQUIREMENTS
+// ✅ Stores in NEW collection: roster-assigned-trips
+// ✅ Uses MongoDB ObjectId for driver/vehicle (NOT custom strings)
+// ✅ Distance-based sequencing (farthest → nearest)
+// ✅ 24-hour time format (07:25 not 07:25 AM)
+// ✅ 20-minute ready buffer (readyByTime)
+// ✅ Enhanced notifications with sequence, distance, ready time
+// ✅ Consecutive trip validation (time-based, not date-based)
+// ✅ Multi-trip tracking
+// ✅ Transaction safety with rollback
+// ✅ Comprehensive error handling
+// ✅ Verification step
+// ============================================================================
+router.post('/assign-optimized-route', verifyToken, async (req, res) => {
+  const session = req.mongoClient.startSession();
+  
+  try {
+    console.log('\n' + '='.repeat(80));
+    console.log('🚀 OPTIMIZED ROUTE ASSIGNMENT - NEW COLLECTION WITH ALL FEATURES');
+    console.log('🔧 CODE VERSION: 2026-01-28-FIX-DRIVER-ID-EXTRACTION');
+    console.log('='.repeat(80));
+    
+    const { vehicleId, route, totalDistance, totalTime, startTime } = req.body;
+    
+    // ========================================================================
+    // VALIDATION
+    // ========================================================================
+    if (!vehicleId || !route || !Array.isArray(route) || route.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'vehicleId and route array are required'
+      });
+    }
+    
+    console.log(`📋 Processing ${route.length} customer assignments`);
+    console.log(`🚗 Vehicle ID: ${vehicleId}`);
+    console.log(`📏 Total Distance: ${totalDistance} km`);
+    console.log(`⏱️  Total Time: ${totalTime} mins`);
+    console.log('-'.repeat(80));
+    
+    // Start transaction
+    await session.startTransaction();
+    
+    // ========================================================================
+    // STEP 1: Get vehicle details
+    // ========================================================================
+    // 🔧 FIX #1: Remove session from vehicle lookup (read-only operation)
+    const vehicle = await req.db.collection('vehicles').findOne(
+      { _id: new ObjectId(vehicleId) }
+      // ✅ NO SESSION - avoid transaction isolation for read-only operations
+    );
+    
+    if (!vehicle) {
+      await session.abortTransaction();
+      console.log('❌ Vehicle not found');
+      return res.status(404).json({
+        success: false,
+        message: 'Vehicle not found'
+      });
+    }
+    
+    console.log(`✅ Vehicle found: ${vehicle.name || vehicle.vehicleNumber}`);
+    
+    // ========================================================================
+    // STEP 2: DRIVER LOOKUP - ENHANCED WITH NESTED STRUCTURE SUPPORT
+    // ========================================================================
+    let driver = null;
+
+    console.log('🔍 Looking up driver for vehicle...');
+    console.log('   Vehicle:', vehicle.name || vehicle.vehicleNumber);
+    console.log('   assignedDriverEmail:', vehicle.assignedDriverEmail);
+    console.log('   assignedDriverName:', vehicle.assignedDriverName || vehicle.driverName);
+    console.log('   assignedDriver:', vehicle.assignedDriver);
+    console.log('   assignedDriverId:', vehicle.assignedDriverId);
+
+    // ✅ Extract driver identifiers from vehicle
+    const driverEmail = vehicle.assignedDriverEmail || vehicle.driverEmail;
+    const driverCustomId = vehicle.assignedDriver || vehicle.driverId || vehicle.assignedDriverId;
+    const driverName = vehicle.assignedDriverName || vehicle.driverName;
+
+    // ========================================================================
+    // LOOKUP DRIVER BY EMAIL (Primary method - handles nested structure)
+    // ========================================================================
+    if (!driver && driverEmail) {
+      console.log('   🔍 Searching by email:', driverEmail);
+      
+      try {
+        const driverDoc = await req.db.collection('drivers').findOne({
+          $or: [
+            { email: driverEmail },
+            { 'personalInfo.email': driverEmail },
+            { 'contactInfo.email': driverEmail }
+          ]
+        });
+        
+        if (driverDoc) {
+          console.log('   ✅ Found driver by email in drivers collection');
+          
+          // Normalize nested structure
+          driver = {
+            _id: driverDoc._id,
+            driverId: driverDoc.driverId || driverDoc._id.toString(),
+            name: driverDoc.personalInfo?.name || driverDoc.name || driverName || 'Unknown Driver',
+            email: driverDoc.personalInfo?.email || driverDoc.contactInfo?.email || driverDoc.email || driverEmail,
+            phone: driverDoc.personalInfo?.phone || driverDoc.contactInfo?.phone || driverDoc.phone || 'N/A'
+          };
+          
+          console.log('   ✅ Driver normalized:', driver.name);
+        }
+      } catch (e) {
+        console.log('   ⚠️  Email search in drivers collection failed:', e.message);
+      }
+    }
+
+    // ========================================================================
+    // LOOKUP DRIVER BY CUSTOM ID (e.g., "DRV-100014")
+    // ========================================================================
+    if (!driver && driverCustomId) {
+      console.log('   🔍 Searching by custom driver ID:', driverCustomId);
+      
+      try {
+        const driverDoc = await req.db.collection('drivers').findOne({
+          $or: [
+            { driverId: driverCustomId },
+            { _id: ObjectId.isValid(driverCustomId) ? new ObjectId(driverCustomId) : null }
+          ]
+        });
+        
+        if (driverDoc) {
+          console.log('   ✅ Found driver by custom ID in drivers collection');
+          
+          // Normalize nested structure
+          driver = {
+            _id: driverDoc._id,
+            driverId: driverDoc.driverId || driverDoc._id.toString(),
+            name: driverDoc.personalInfo?.name || driverDoc.name || driverName || 'Unknown Driver',
+            email: driverDoc.personalInfo?.email || driverDoc.contactInfo?.email || driverDoc.email || driverEmail || 'N/A',
+            phone: driverDoc.personalInfo?.phone || driverDoc.contactInfo?.phone || driverDoc.phone || 'N/A'
+          };
+          
+          console.log('   ✅ Driver normalized:', driver.name);
+        }
+      } catch (e) {
+        console.log('   ⚠️  Custom ID search in drivers collection failed:', e.message);
+      }
+    }
+
+    // ========================================================================
+    // LOOKUP DRIVER BY NAME (Fallback)
+    // ========================================================================
+    if (!driver && driverName) {
+      console.log('   🔍 Fallback: Searching by name:', driverName);
+      
+      try {
+        const driverDoc = await req.db.collection('drivers').findOne({
+          $or: [
+            { name: driverName },
+            { 'personalInfo.name': driverName }
+          ]
+        });
+        
+        if (driverDoc) {
+          console.log('   ✅ Found driver by name in drivers collection');
+          
+          // Normalize nested structure
+          driver = {
+            _id: driverDoc._id,
+            driverId: driverDoc.driverId || driverDoc._id.toString(),
+            name: driverDoc.personalInfo?.name || driverDoc.name || driverName,
+            email: driverDoc.personalInfo?.email || driverDoc.contactInfo?.email || driverDoc.email || driverEmail || 'N/A',
+            phone: driverDoc.personalInfo?.phone || driverDoc.contactInfo?.phone || driverDoc.phone || 'N/A'
+          };
+          
+          console.log('   ✅ Driver normalized:', driver.name);
+        }
+      } catch (e) {
+        console.log('   ⚠️  Name search in drivers collection failed:', e.message);
+      }
+    }
+    
+    // ========================================================================
+    // FINAL VALIDATION
+    // ========================================================================
+    if (!driver) {
+      await session.abortTransaction();
+      await session.endSession();
+      
+      console.log('❌ DRIVER NOT FOUND - ABORTING');
+      console.log('   Searched by:');
+      console.log('   - Email:', driverEmail || 'N/A');
+      console.log('   - Custom ID:', driverCustomId || 'N/A');
+      console.log('   - Name:', driverName || 'N/A');
+      
+      return res.status(400).json({
+        success: false,
+        message: `Vehicle ${vehicle.registrationNumber || vehicle.vehicleNumber} does not have a valid assigned driver`,
+        error: 'DRIVER_NOT_FOUND',
+        details: {
+          vehicleId: vehicleId,
+          vehicleName: vehicle.name || vehicle.vehicleNumber,
+          searchedBy: {
+            email: driverEmail || null,
+            customId: driverCustomId || null,
+            name: driverName || null
+          },
+          actionRequired: 'Please assign a driver to this vehicle before creating assignments'
+        }
+      });
+    }
+    
+    console.log('✅ Driver found and normalized:');
+    console.log('   _id:', driver?._id);
+    console.log('   driverId:', driver?.driverId);
+    console.log('   Name:', driver?.name);
+    console.log('   Email:', driver?.email);
+    console.log('   Phone:', driver?.phone);
+    console.log('-'.repeat(80));
+
+    // ========================================================================
+    // STEP 3: Check vehicle capacity BEFORE assignment
+    // ========================================================================
+    console.log('\n💺 CHECKING VEHICLE CAPACITY...');
+    
+    // 🔧 FIX #3: Remove session from existing assignments check (read-only)
+    const existingAssignments = await req.db.collection('roster-assigned-trips').find({
+      vehicleId: new ObjectId(vehicleId),
+      status: { $in: ['assigned', 'started', 'in_progress'] },
+      scheduledDate: new Date().toISOString().split('T')[0]
+    }).toArray(); // ✅ NO SESSION
+    
+    const totalSeats = vehicle.capacity?.passengers || 
+                       vehicle.seatCapacity || 
+                       vehicle.seatingCapacity || 
+                       4;
+    const currentAssignedCount = existingAssignments.length;
+    const newCustomersCount = route.length;
+    const availableSeats = totalSeats - 1 - currentAssignedCount; // -1 for driver
+    
+    console.log(`   🚗 Vehicle: ${vehicle.name || vehicle.vehicleNumber}`);
+    console.log(`   💺 Total Seats: ${totalSeats}`);
+    console.log(`   👥 Currently Assigned: ${currentAssignedCount}`);
+    console.log(`   ✅ Available Seats: ${availableSeats}`);
+    console.log(`   📋 New Customers: ${newCustomersCount}`);
+    
+    if (availableSeats <= 0 || newCustomersCount > availableSeats) {
+      await session.abortTransaction();
+      console.log(`\n❌ CAPACITY CHECK FAILED`);
+      return res.status(400).json({
+        success: false,
+        message: `Vehicle capacity exceeded: ${availableSeats} seats available but ${newCustomersCount} customers need assignment`,
+        error: 'INSUFFICIENT_CAPACITY'
+      });
+    }
+    
+    console.log(`   ✅ Capacity check passed`);
+    
+    // ========================================================================
+    // SAFETY CHECK: Ensure driver object exists before proceeding
+    // ========================================================================
+    if (!driver || !driver._id) {
+      await session.abortTransaction();
+      await session.endSession();
+      console.log(`❌ Driver object is invalid or missing _id`);
+      return res.status(400).json({
+        success: false,
+        message: 'Driver object is invalid',
+        error: 'INVALID_DRIVER_OBJECT',
+        details: {
+          vehicleId: vehicleId,
+          vehicleName: vehicle.name || vehicle.vehicleNumber,
+          driverObject: driver,
+          actionRequired: 'Driver lookup failed. Please check vehicle-driver assignment.'
+        }
+      });
+    }
+    
+    // ========================================================================
+    // STEP 4: Check TIME SLOT conflicts for consecutive trip validation
+    // ========================================================================
+    console.log('\n⏰ CHECKING TIME SLOT CONFLICTS (CONSECUTIVE TRIPS SUPPORT)...');
+    const scheduledDate = new Date().toISOString().split('T')[0];
+    
+    // Helper to parse time in 24-hour format
+    const parseTime = (timeStr) => {
+      // Handle null, undefined, or non-string values
+      if (!timeStr || typeof timeStr !== 'string') return 0;
+      
+      // Handle if it's already in HH:MM format
+      if (timeStr.includes(':')) {
+        const [hours, minutes] = timeStr.split(':').map(Number);
+        return hours * 60 + minutes; // Convert to minutes since midnight
+      }
+      
+      // If it's just a number string, treat as hours
+      const numValue = parseInt(timeStr);
+      if (!isNaN(numValue)) {
+        return numValue * 60;
+      }
+      
+      return 0; // Default fallback
+    };
+    
+    for (const stop of route) {
+      const stopStartMinutes = parseTime(stop.pickupTime || '00:00');
+      const stopEndMinutes = parseTime(stop.estimatedTime || stop.pickupTime || '00:00');
+      
+      // 🔧 FIX #4: Remove session from conflict check (read-only)
+      const conflicts = await req.db.collection('roster-assigned-trips').find({
+        vehicleId: new ObjectId(vehicleId),
+        scheduledDate: scheduledDate,
+        status: { $in: ['assigned', 'started', 'in_progress'] }
+      }).toArray(); // ✅ NO SESSION
+      
+      // Check each existing trip for time overlap
+      for (const existingTrip of conflicts) {
+        const existingStartMinutes = parseTime(existingTrip.startTime);
+        const existingEndMinutes = parseTime(existingTrip.endTime);
+        
+        // Check if times overlap
+        const hasOverlap = (stopStartMinutes < existingEndMinutes) && (stopEndMinutes > existingStartMinutes);
+        
+        if (hasOverlap) {
+          await session.abortTransaction();
+          console.log(`\n❌ TIME SLOT CONFLICT DETECTED`);
+          console.log(`   Stop #${stop.sequence}: ${stop.customerName}`);
+          console.log(`   Conflicting with: ${existingTrip.tripNumber}`);
+          return res.status(409).json({
+            success: false,
+            message: `Time slot conflict detected for ${stop.customerName}`,
+            error: 'TIME_SLOT_CONFLICT',
+            conflictingTrip: existingTrip
+          });
+        }
+      }
+    }
+    
+    console.log(`   ✅ No time slot conflicts found - consecutive trips allowed`);
+    
+    const results = [];
+    const errors = [];
+    const tripIds = [];
+    const notificationResults = {
+      customers: 0,
+      driver: 0,
+      failed: 0
+    };
+    
+    // ✅ Extract driver ID once for use throughout
+    let driverIdString;
+    try {
+      driverIdString = driver._id.toString();
+      console.log(`✅ Driver ID extracted for all operations: ${driverIdString}`);
+    } catch (idError) {
+      await session.abortTransaction();
+      await session.endSession();
+      console.log(`❌ Failed to extract driver ID:`, idError.message);
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid driver ID',
+        error: 'INVALID_DRIVER_ID',
+        details: {
+          vehicleId: vehicleId,
+          vehicleName: vehicle.name || vehicle.vehicleNumber,
+          driverObject: driver,
+          actionRequired: 'Driver object is malformed. Please check driver assignment.'
+        }
+      });
+    }
+    
+    // ========================================================================
+    // STEP 5: Process each customer stop in the route
+    // ========================================================================
+    for (const stop of route) {
+      try {
+        const { 
+          rosterId, 
+          customerId, 
+          customerName, 
+          customerEmail, 
+          customerPhone, 
+          sequence, 
+          pickupTime, 
+          readyByTime, // 🆕 20 min before pickup
+          distanceToOffice, // 🆕 Distance from pickup to office
+          distanceFromPrevious,
+          eta, 
+          location,
+          pickupLocation, // 🆕 Handle new format from test script
+          pickupCoordinates, // 🆕 Handle new format from test script
+          estimatedTime
+        } = stop;
+        
+        console.log(`\n📍 Processing Stop #${sequence}: ${customerName}`);
+        console.log(`   🔍 DEBUG: Stop object keys:`, Object.keys(stop));
+        console.log(`   🔍 DEBUG: rosterId:`, rosterId);
+        console.log(`   🔍 DEBUG: location:`, location);
+        console.log(`   🔍 DEBUG: pickupLocation:`, pickupLocation);
+        console.log(`   🔍 DEBUG: pickupCoordinates:`, pickupCoordinates);
+        
+        if (!rosterId) {
+          errors.push({ sequence, customerName, error: 'Missing rosterId' });
+          continue;
+        }
+        
+        // 🐛 DEBUG: Log roster lookup details
+        console.log(`\n🔍 DEBUG: Looking up roster for ${customerName}`);
+        console.log(`   rosterId type: ${typeof rosterId}`);
+        console.log(`   rosterId value: "${rosterId}"`);
+        console.log(`   rosterId length: ${rosterId ? rosterId.length : 0}`);
+        
+        // Validate ObjectId format
+        if (!ObjectId.isValid(rosterId)) {
+          console.log(`   ❌ Invalid ObjectId format`);
+          errors.push({
+            customerName,
+            error: 'Invalid ObjectId format',
+            friendlyMessage: `❌ ${customerName}: Invalid roster ID format (${rosterId})`
+          });
+          continue;
+        }
+        
+        console.log(`   ✅ Valid ObjectId, querying database...`);
+        
+        // ====================================================================
+        // 🔧 FIX #5: CRITICAL - Look up roster WITHOUT session first
+        // ====================================================================
+        // SUB-STEP 5.1: Check roster exists (WITHOUT SESSION to avoid isolation issues)
+        let existingRoster = await req.db.collection('rosters').findOne(
+          { _id: new ObjectId(rosterId) }
+          // ✅ NO SESSION - This is the KEY FIX for "roster not found" issue
+        );
+        
+        console.log(`   Roster found: ${existingRoster ? 'YES ✅' : 'NO ❌'}`);
+        
+        if (existingRoster) {
+          console.log(`   ✅ Roster details:`);
+          console.log(`      Status: ${existingRoster.status}`);
+          console.log(`      Customer: ${existingRoster.customerName}`);
+          console.log(`      Vehicle: ${existingRoster.vehicleNumber || 'Not assigned'}`);
+          console.log(`      Has Trip ID: ${existingRoster.tripId ? 'YES' : 'NO'}`);
+        }
+        
+        if (!existingRoster) {
+          console.log(`   ❌ Roster truly doesn't exist in database`);
+          errors.push({
+            customerName,
+            error: 'Roster not found',
+            friendlyMessage: `❌ ${customerName}: Roster not found or deleted`
+          });
+          continue;
+        }
+        
+        // SUB-STEP 5.3: Check if already assigned - UPDATE EXISTING TRIP
+        const isReassignment = existingRoster.status === 'assigned' && existingRoster.tripId;
+        if (isReassignment) {
+          console.log(`   🔄 ${customerName} already assigned - will UPDATE existing trip`);
+        }
+        
+        // ====================================================================
+        // 🔧 SAFETY CHECK: Verify driver exists before accessing properties
+        // ====================================================================
+        if (!driver || !driver._id) {
+          console.log(`   ❌ Driver not found for vehicle ${vehicleId}`);
+          console.log(`   ❌ Driver object:`, driver);
+          errors.push({
+            customerName,
+            error: 'Driver not found',
+            friendlyMessage: `❌ ${customerName}: No driver assigned to vehicle`,
+            actionRequired: 'Please assign a driver to the vehicle first'
+          });
+          continue;
+        }
+        
+        console.log(`   ✅ Driver verified: ${driver.name} (${driverIdString})`);
+        
+        // SUB-STEP 5.4: UPDATE ROSTER (ALWAYS - no status filter)
+        // ✅ FIX: Use updateOne + findOne instead of findOneAndUpdate to avoid transaction isolation issues
+        const updateResult = await req.db.collection('rosters').updateOne(
+          { 
+            _id: new ObjectId(rosterId)
+            // ✅ NO STATUS FILTER - Allow updating any roster
+          },
+          {
+            $set: {
+              vehicleId: new ObjectId(vehicleId),
+              vehicleNumber: vehicle.registrationNumber || vehicle.vehicleNumber,
+              driverId: driverIdString, // ✅ Safe now - extracted before loop
+              driverName: driver.name || 'Unknown Driver',
+              driverPhone: driver.phone || 'N/A',
+              status: 'assigned',
+              assignedAt: new Date(),
+              assignedBy: req.user?.uid || req.user?.id || 'system',
+              pickupSequence: sequence,
+              optimizedPickupTime: pickupTime,
+              estimatedArrival: new Date(eta || Date.now()),
+              pickupLocation: location,
+              routeDetails: {
+                totalDistance,
+                totalTime,
+                sequence,
+                distanceFromPrevious: distanceFromPrevious,
+                estimatedTime: estimatedTime
+              },
+              updatedAt: new Date()
+            }
+          },
+          { session } // ✅ WITH SESSION for transactional write
+        );
+        
+        // ✅ CHECK: Verify roster was found and updated
+        if (updateResult.matchedCount === 0) {
+          console.log('   ❌ Roster not found in database');
+          errors.push({
+            customerName,
+            error: 'Roster not found',
+            friendlyMessage: `❌ ${customerName}: Roster not found in database`,
+            actionRequired: 'Roster may have been deleted. Please refresh the list.'
+          });
+          continue;
+        }
+        
+        if (updateResult.modifiedCount === 0) {
+          console.log('   ℹ️  Roster not modified (already has same values)');
+          // Don't treat as error - roster might already be assigned with same values
+        }
+        
+        // ✅ Fetch the updated roster (WITH session to read uncommitted changes)
+        const roster = await req.db.collection('rosters').findOne(
+          { _id: new ObjectId(rosterId) },
+          { session } // ✅ WITH SESSION - reads the document we just updated in the transaction
+        );
+        
+        if (!roster) {
+          console.log('   ❌ Roster disappeared after update (should never happen)');
+          errors.push({
+            customerName,
+            error: 'Roster not found after update',
+            friendlyMessage: `❌ ${customerName}: Roster not found after update`,
+            actionRequired: 'This is a critical error. Please contact support.'
+          });
+          continue;
+        }
+        
+        console.log('   ✅ Roster updated successfully');
+        console.log(`      matchedCount: ${updateResult.matchedCount}`);
+        console.log(`      modifiedCount: ${updateResult.modifiedCount}`);
+        
+        // ====================================================================
+        // SUB-STEP 5.5: 🔧 FIX #6: UPSERT TRIP (create or update in one operation)
+        // ====================================================================
+        
+        // Check if trip already exists for this roster (WITHOUT SESSION)
+        const existingTrip = roster.tripId ? 
+          await req.db.collection('roster-assigned-trips').findOne(
+            { _id: new ObjectId(roster.tripId) }
+            // ✅ NO SESSION for read
+          ) : null;
+        
+        if (existingTrip) {
+          console.log(`   🔄 Existing trip found: ${existingTrip.tripNumber}`);
+        } else {
+          console.log('   🎫 Creating new trip in roster-assigned-trips collection...');
+        }
+        
+        const tripNumber = existingTrip ? existingTrip.tripNumber : `TRIP-${Date.now().toString().slice(-6)}-${sequence.toString().padStart(2, '0')}`;
+        
+        console.log('   🔍 DEBUG: Creating trip data object...');
+        console.log(`      rosterId: ${rosterId}`);
+        console.log(`      driverIdString: ${driverIdString}`);
+        console.log(`      vehicleId: ${vehicleId}`);
+        console.log(`      roster exists: ${!!roster}`);
+        console.log(`      roster.rosterType: ${roster?.rosterType}`);
+        console.log(`      stop object:`, JSON.stringify(stop, null, 2));
+        console.log(`      location object:`, JSON.stringify(location, null, 2));
+        
+        let tripData;
+        try {
+          tripData = {
+          // Trip Info
+          tripNumber,
+          tripType: roster?.rosterType || 'login',
+          
+          // 🆕 Original Roster Reference
+          rosterId: new ObjectId(rosterId),
+          
+          // Customer Info
+          customerName: customerName,
+          customerEmail: customerEmail,
+          customerPhone: customerPhone || roster.customerPhone || '',
+          
+          // 🆕 Driver & Vehicle (USING OBJECTID) - ✅ SAFE: driverIdString already validated
+          driverId: new ObjectId(driverIdString), // ✅ Use pre-validated string
+          vehicleId: new ObjectId(vehicleId), // MongoDB ObjectId
+          
+          // 🆕 Pickup Sequence & Timing (24-hour format)
+          pickupSequence: sequence,
+          estimatedPickupTime: pickupTime, // "07:25"
+          readyByTime: readyByTime || pickupTime, // "07:05"
+          
+          // 🆕 Distance Calculations
+          distanceToOffice: distanceToOffice || 0,
+          distanceFromPrevious: distanceFromPrevious || 0,
+          estimatedTravelTime: estimatedTime || 30,
+          
+          // Locations - Handle both formats (location.address and stop.pickupLocation)
+          pickupLocation: {
+            address: stop?.pickupLocation || location?.address || roster?.loginPickupAddress || 'Pickup location',
+            coordinates: stop?.pickupCoordinates || location?.coordinates || roster?.locations?.pickup?.coordinates || null
+          },
+          dropLocation: {
+            address: roster?.officeLocation || roster?.dropLocation || 'Office',
+            coordinates: roster?.officeLocationCoordinates || roster?.locations?.office?.coordinates || null
+          },
+          
+          // Schedule
+          scheduledDate: scheduledDate,
+          startTime: pickupTime,
+          endTime: estimatedTime || pickupTime,
+          estimatedDuration: estimatedTime || 30,
+          distance: distanceFromPrevious || 0,
+          
+          // Trip Details
+          sequence: sequence,
+          
+          // Organization
+          organizationId: roster?.organizationId || null,
+          organizationName: roster?.organizationName || roster?.organization || null,
+          
+          // Status
+          status: 'assigned',
+          
+          // Timestamps
+          assignedAt: new Date(),
+          actualStartTime: null,
+          actualEndTime: null,
+          
+          // Tracking
+          currentLocation: null,
+          locationHistory: [],
+          
+          // Metrics
+          actualDistance: null,
+          actualDuration: null,
+          
+          // Audit
+          updatedAt: new Date(),
+          updatedBy: req.user?.uid || req.user?.id || 'system'
+        };
+        } catch (tripDataError) {
+          console.log('   ❌ Error creating tripData object:', tripDataError.message);
+          console.log('   ❌ Stack:', tripDataError.stack);
+          errors.push({
+            customerName,
+            error: tripDataError.message,
+            friendlyMessage: `❌ ${customerName}: ${tripDataError.message}`
+          });
+          continue;
+        }
+        
+        let tripId;
+        
+        // 🔧 FIX #6: Use simple insert/update pattern (more reliable with sessions)
+        // Check if trip exists, then insert or update
+        const existingTripDoc = await req.db.collection('roster-assigned-trips').findOne(
+          { rosterId: new ObjectId(rosterId) },
+          { session }
+        );
+        
+        let tripDoc;
+        if (existingTripDoc) {
+          // Update existing trip
+          const updateResult = await req.db.collection('roster-assigned-trips').updateOne(
+            { _id: existingTripDoc._id },
+            { $set: tripData },
+            { session }
+          );
+          
+          if (updateResult.modifiedCount === 0 && updateResult.matchedCount === 0) {
+            console.log('   ❌ Trip update failed');
+            errors.push({
+              customerName,
+              error: 'Trip update failed',
+              friendlyMessage: `❌ ${customerName}: Failed to update trip in database`
+            });
+            continue;
+          }
+          
+          tripDoc = { ...existingTripDoc, ...tripData };
+          tripId = existingTripDoc._id.toString();
+          console.log(`   ✅ Trip updated in roster-assigned-trips: ${tripNumber} (ID: ${tripId})`);
+        } else {
+          // Insert new trip
+          const insertData = {
+            ...tripData,
+            createdAt: new Date(),
+            createdBy: req.user?.uid || req.user?.id || 'system'
+          };
+          
+          const insertResult = await req.db.collection('roster-assigned-trips').insertOne(
+            insertData,
+            { session }
+          );
+          
+          if (!insertResult.insertedId) {
+            console.log('   ❌ Trip insert failed');
+            errors.push({
+              customerName,
+              error: 'Trip creation failed',
+              friendlyMessage: `❌ ${customerName}: Failed to create trip in database`
+            });
+            continue;
+          }
+          
+          tripDoc = { ...insertData, _id: insertResult.insertedId };
+          tripId = insertResult.insertedId.toString();
+          console.log(`   ✅ Trip created in roster-assigned-trips: ${tripNumber} (ID: ${tripId})`);
+        }
+        
+        // Link trip to roster (if not already linked)
+        if (!roster.tripId || roster.tripId !== tripId) {
+          await req.db.collection('rosters').updateOne(
+            { _id: new ObjectId(rosterId) },
+            { $set: { tripId: tripId } },
+            { session }
+          );
+          console.log('   🔗 Trip linked to roster');
+        }
+        
+        tripIds.push(tripId);
+        
+        // ====================================================================
+// 📌 COMPLETE FIXED VERSION - CUSTOMER & DRIVER NOTIFICATION SECTION
+// ====================================================================
+// 🔍 Location: route_optimization_router.js
+// 📍 Line: ~1090-1200 (inside the "for (const stop of route)" loop)
+// 🎯 Purpose: Send notifications with CORRECT userId lookup
+// ====================================================================
+
+// ====================================================================
+// SUB-STEP 5.7: 🆕 SEND ENHANCED CUSTOMER NOTIFICATION WITH FCM
+// ====================================================================
+try {
+  // ✅ CRITICAL FIX: Look up customer's USER ACCOUNT ID by email
+  const customerEmailId = customerEmail || (roster ? roster.customerEmail : null);
+  let customerObjectId = customerId; // Try from stop object first
+
+  console.log(`\n📧 Preparing customer notification...`);
+  console.log(`   Customer email: ${customerEmailId}`);
+  console.log(`   Customer ID from stop: ${customerId || 'Not provided'}`);
+
+  // ====================================================================
+  // 🔍 LOOKUP CUSTOMER IN USERS COLLECTION BY EMAIL
+  // ====================================================================
+  if (!customerObjectId && customerEmailId) {
+    try {
+      console.log(`   🔍 Looking up customer in 'users' collection by email...`);
+      
+      const customerUser = await req.db.collection('users').findOne({
+        email: customerEmailId,
+        role: 'customer'
+      });
+      
+      if (customerUser) {
+        customerObjectId = customerUser._id.toString();
+        console.log(`   ✅ Found customer user ID: ${customerObjectId}`);
+      } else {
+        console.log(`   ⚠️  No customer found in 'users' collection for email: ${customerEmailId}`);
+        console.log(`   ⚠️  Customer notification will be SKIPPED`);
+      }
+    } catch (lookupError) {
+      console.error(`   ❌ Customer lookup failed: ${lookupError.message}`);
+    }
+  }
+
+  // ====================================================================
+  // ✅ CREATE CUSTOMER NOTIFICATION (only if we have valid user ID)
+  // ====================================================================
+  if (!customerObjectId && !customerEmailId) {
+    console.log(`   ⚠️  Cannot send customer notification - no customer ID or email`);
+    notificationResults.failed++;
+  } else {
+    console.log(`   📧 Creating notification for customer: ${customerEmailId} (ID: ${customerObjectId})`);
+    
+    const notificationTitle = 'Driver Assigned - Be Ready!';
+    const notificationBody = `Driver ${driver?.name || 'Unknown'} assigned\n\n` +
+          `Vehicle: ${vehicle?.registrationNumber || vehicle?.vehicleNumber || 'Unknown'}\n` +
+          `Pickup Sequence: #${sequence} ${sequence === 1 ? '(First pickup)' : sequence === route.length ? '(Last pickup)' : ''}\n\n` +
+          `Pickup Time: ${pickupTime}\n` +
+          `BE READY BY: ${readyByTime || pickupTime}\n\n` +
+          `Distance to office: ${(distanceToOffice || 0).toFixed(1)} km\n` +
+          `Travel time: ~${estimatedTime || 30} mins\n\n` +
+          `Track your driver in real-time through the app.`;
+    
+    const notificationData = {
+      rosterId: rosterId,
+      tripId: tripId,
+      tripNumber: tripNumber,
+      vehicleId: vehicleId,
+      driverId: driverIdString,
+      sequence: sequence,
+      pickupTime: pickupTime,
+      readyByTime: readyByTime,
+      distanceToOffice: distanceToOffice,
+      trackingEnabled: true,
+      collection: 'roster-assigned-trips',
+      type: 'route_assignment'
+    };
+    
+    // ✅ SAVE NOTIFICATION (matching start_trip_router.js pattern)
+    await createNotification(req.db, {
+      userId: customerObjectId || customerEmailId, // ObjectId as string (primary)
+      userEmail: customerEmailId, // Email as backup
+      userRole: 'customer',
+      title: notificationTitle,
+      body: notificationBody,
+      type: 'route_assignment',
+      data: notificationData,
+      priority: 'high',
+      category: 'roster',
+      channels: ['fcm', 'database'] // ✅ This triggers FCM push in notification_model.js
+    });
+    
+    console.log(`   ✅ Customer notification created successfully`);
+    console.log(`      - userId: ${customerObjectId}`);
+    console.log(`      - userEmail: ${customerEmailId}`);
+    console.log(`      - FCM will be sent automatically via notification_model.js`);
+    notificationResults.customers++;
+  }
+} catch (notifError) {
+  console.log(`   ⚠️  Customer notification failed: ${notifError.message}`);
+  console.log(`   ⚠️  Stack trace:`, notifError.stack);
+  notificationResults.failed++;
+  // 🔧 FIX: Don't fail assignment if notification fails
+}
+
+results.push({
+  rosterId: rosterId,
+  tripId: tripId,
+  tripNumber: tripNumber,
+  sequence: sequence,
+  customerName: customerName,
+  status: 'success',
+  friendlyMessage: `✅ ${customerName} assigned successfully`
+});
+
+// Continue with next stop...
+        
+      } catch (stopError) {
+        console.error(`   ❌ Error processing stop: ${stopError.message}`);
+        console.error(`   ❌ Error stack:`, stopError.stack);
+        console.error(`   ❌ Stop data:`, JSON.stringify(stop, null, 2));
+        errors.push({
+          sequence: stop.sequence,
+          customerName: stop.customerName,
+          error: stopError.message
+        });
+      }
+    }
+    
+   // ====================================================================
+// 📌 COMPLETE FIXED VERSION - DRIVER NOTIFICATION SECTION
+// ====================================================================
+// 🔍 Location: route_optimization_router.js
+// 📍 Line: ~1200-1280 (after all customer stops are processed)
+// 🎯 Purpose: Send route summary notification to driver with CORRECT userId
+// ====================================================================
+
+// ========================================================================
+// STEP 6: 🆕 SEND ENHANCED DRIVER NOTIFICATION (24-hour format, full route)
+// ========================================================================
+if (results.length > 0) {
+  try {
+    console.log(`\n👨‍✈️ Preparing driver notification...`);
+    console.log(`   Driver name: ${driver?.name || 'Unknown'}`);
+    console.log(`   Driver email: ${driver?.email || driver?.personalInfo?.email || 'Unknown'}`);
+    console.log(`   Driver _id: ${driver?._id || 'Unknown'}`);
+    
+    // ====================================================================
+    // 🔍 LOOKUP DRIVER IN DRIVERS COLLECTION
+    // ====================================================================
+    const driverEmailId = driver?.email || driver?.personalInfo?.email || driver?.contactInfo?.email;
+    let driverObjectId = driver?._id?.toString(); // Try _id first
+    
+    // If we don't have driver._id, look up by email
+    if (!driverObjectId && driverEmailId) {
+      try {
+        console.log(`   🔍 Looking up driver in 'drivers' collection by email...`);
+        
+        const driverDoc = await req.db.collection('drivers').findOne({
+          $or: [
+            { email: driverEmailId },
+            { 'personalInfo.email': driverEmailId },
+            { 'contactInfo.email': driverEmailId }
+          ]
+        });
+        
+        if (driverDoc) {
+          // ✅ Get the userId field (linking to users collection)
+          driverObjectId = driverDoc.userId ? driverDoc.userId.toString() : driverDoc._id.toString();
+          console.log(`   ✅ Found driver document ID: ${driverDoc._id}`);
+          console.log(`   ✅ Using user ID for notification: ${driverObjectId}`);
+        } else {
+          console.log(`   ⚠️  No driver found in 'drivers' collection for email: ${driverEmailId}`);
+        }
+      } catch (lookupError) {
+        console.error(`   ❌ Driver lookup failed: ${lookupError.message}`);
+      }
+    }
+    
+    // ====================================================================
+    // ✅ CREATE DRIVER NOTIFICATION (only if we have valid ID)
+    // ====================================================================
+    if (!driverObjectId && !driverEmailId) {
+      console.log(`   ⚠️  Cannot send driver notification - no driver ID or email`);
+      notificationResults.failed++;
+    } else {
+      console.log(`   📧 Creating notification for driver: ${driverEmailId} (ID: ${driverObjectId})`);
+      
+      // Build detailed route for driver
+      let routeDetails = '';
+      route.forEach((stop) => {
+        routeDetails += `${stop.sequence}. ${stop.pickupTime} - ${stop.customerName}`;
+        if (stop.distanceToOffice) {
+          routeDetails += ` (${stop.distanceToOffice.toFixed(1)} km)`;
+        }
+        routeDetails += '\n';
+      });
+      
+      const firstStop = route[0];
+      const officeTime = route[0]?.officeTime || startTime || '09:00';
+      
+      const notificationTitle = `New Route - ${route.length} Pickups Assigned`;
+      const notificationBody = `You have ${route.length} customers on your route.\n\n` +
+            `Vehicle: ${vehicle?.registrationNumber || vehicle?.name || 'Vehicle'}\n\n` +
+            `START BY: ${firstStop?.readyByTime || firstStop?.pickupTime}\n\n` +
+            `PICKUP SEQUENCE:\n${routeDetails}\n` +
+            `Office Arrival: ${officeTime}\n` +
+            `Total Distance: ${totalDistance} km\n` +
+            `Total Time: ${totalTime} mins\n\n` +
+            `Check the app for detailed route information.`;
+      
+      const notificationData = {
+        vehicleId: vehicleId,
+        totalCustomers: route.length,
+        totalDistance: totalDistance,
+        totalTime: totalTime,
+        tripIds: tripIds,
+        trackingRequired: true,
+        startByTime: firstStop.readyByTime,
+        officeArrivalTime: officeTime,
+        collection: 'roster-assigned-trips',
+        type: 'driver_route_assignment'
+      };
+      
+      // ✅ SAVE NOTIFICATION (matching start_trip_router.js pattern)
+      await createNotification(req.db, {
+        userId: driverObjectId || driverEmailId, // ObjectId as string (primary)
+        userEmail: driverEmailId, // Email as backup
+        userRole: 'driver',
+        title: notificationTitle,
+        body: notificationBody,
+        type: 'driver_route_assignment',
+        data: notificationData,
+        priority: 'high',
+        category: 'roster',
+        channels: ['fcm', 'database'] // ✅ This triggers FCM push in notification_model.js
+      });
+      
+      console.log(`   ✅ Driver notification created successfully`);
+      console.log(`      - userId: ${driverObjectId}`);
+      console.log(`      - userEmail: ${driverEmailId}`);
+      console.log(`      - FCM will be sent automatically via notification_model.js`);
+      notificationResults.driver++;
+    }
+  } catch (notifError) {
+    console.log(`   ⚠️  Driver notification failed: ${notifError.message}`);
+    console.log(`   ⚠️  Stack trace:`, notifError.stack);
+    notificationResults.failed++;
+    // 🔧 FIX: Don't fail assignment if notification fails
+  }
+}
+    
+    // ====================================================================
+// 📌 COMPLETE FIXED VERSION - ADMIN NOTIFICATION SECTION
+// ====================================================================
+// 🔍 Location: route_optimization_router.js
+// 📍 Line: ~1260-1340 (after driver notification)
+// 🎯 Purpose: Send route summary notification to all admins with CORRECT userId
+// ====================================================================
+
+// ========================================================================
+// STEP 6.5: 🆕 SEND ADMIN NOTIFICATION (Route Assignment Summary)
+// ========================================================================
+if (results.length > 0) {
+  try {
+    console.log(`\n👨‍💼 Preparing admin notifications...`);
+    
+    const notificationTitle = `Route Assigned - ${route.length} Customers`;
+    const notificationBody = `Route assignment completed successfully.\n\n` +
+          `Driver: ${driver?.name || 'Unknown'}\n` +
+          `Vehicle: ${vehicle?.registrationNumber || vehicle?.vehicleNumber || 'Unknown'}\n` +
+          `Total Customers: ${route.length}\n` +
+          `Total Distance: ${totalDistance} km\n` +
+          `Total Time: ${totalTime} mins\n` +
+          `First Pickup: ${route[0]?.pickupTime}\n\n` +
+          `All customers and driver have been notified.`;
+    
+    const notificationData = {
+      vehicleId: vehicleId,
+      driverId: driverIdString,
+      driverName: driver?.name,
+      totalCustomers: route.length,
+      totalDistance: totalDistance,
+      totalTime: totalTime,
+      tripIds: tripIds,
+      collection: 'roster-assigned-trips',
+      type: 'admin_route_assignment'
+    };
+    
+    // ====================================================================
+    // 🔍 GET ALL ACTIVE ADMINS FROM EMPLOYEE_ADMINS COLLECTION
+    // ====================================================================
+    let adminUsers = [];
+    
+    try {
+      console.log(`   🔍 Looking up admins in 'employee_admins' collection...`);
+      
+      adminUsers = await req.db.collection('employee_admins').find({
+        status: 'active',
+        role: { $in: ['admin', 'super_admin', 'manager'] }
+      }).toArray();
+      
+      if (adminUsers.length > 0) {
+        console.log(`   ✅ Found ${adminUsers.length} active admin(s) in employee_admins collection`);
+      } else {
+        console.log(`   ⚠️  No active admins found in employee_admins collection`);
+      }
+    } catch (adminLookupError) {
+      console.error(`   ❌ Admin lookup in employee_admins failed: ${adminLookupError.message}`);
+    }
+    
+    // ====================================================================
+    // 🔍 FALLBACK: Also check 'users' collection if no admins found
+    // ====================================================================
+    if (adminUsers.length === 0) {
+      try {
+        console.log(`   🔍 Fallback: Looking up admins in 'users' collection...`);
+        
+        const usersAdmins = await req.db.collection('users').find({
+          role: { $in: ['admin', 'super_admin', 'manager'] },
+          status: 'active'
+        }).toArray();
+        
+        if (usersAdmins.length > 0) {
+          console.log(`   ✅ Found ${usersAdmins.length} active admin(s) in users collection`);
+          adminUsers = usersAdmins;
+        } else {
+          console.log(`   ⚠️  No active admins found in users collection either`);
+        }
+      } catch (usersLookupError) {
+        console.error(`   ❌ Admin lookup in users failed: ${usersLookupError.message}`);
+      }
+    }
+    
+    // ====================================================================
+    // ✅ SEND NOTIFICATION TO EACH ADMIN
+    // ====================================================================
+    if (adminUsers.length > 0) {
+      console.log(`   📱 Sending notifications to ${adminUsers.length} admin(s)...`);
+      
+      let adminNotificationCount = 0;
+      
+      for (const admin of adminUsers) {
+        try {
+          // Extract admin details (handle both collection formats)
+          const adminObjectId = admin._id.toString();
+          const adminEmailId = admin.email;
+          const adminRole = admin.role || 'admin';
+          const adminName = admin.name || admin.firstName || 'Admin';
+          
+          if (!adminObjectId && !adminEmailId) {
+            console.log(`   ⚠️  Skipping admin without ID or email: ${adminName}`);
+            continue;
+          }
+          
+          console.log(`   📧 Creating notification for: ${adminName} (${adminEmailId})`);
+          
+          // ✅ SAVE NOTIFICATION (matching start_trip_router.js pattern)
+          await createNotification(req.db, {
+            userId: adminObjectId || adminEmailId, // ObjectId as string (primary)
+            userEmail: adminEmailId, // Email as backup
+            userRole: adminRole, // Use actual admin role
+            title: notificationTitle,
+            body: notificationBody,
+            type: 'admin_route_assignment',
+            data: notificationData,
+            priority: 'normal',
+            category: 'roster',
+            channels: ['fcm', 'database'] // ✅ This triggers FCM push in notification_model.js
+          });
+          
+          console.log(`   ✅ Admin notification created for ${adminName}`);
+          console.log(`      - userId: ${adminObjectId}`);
+          console.log(`      - userEmail: ${adminEmailId}`);
+          console.log(`      - role: ${adminRole}`);
+          adminNotificationCount++;
+          
+        } catch (adminNotifError) {
+          console.log(`   ⚠️  Admin notification failed for ${admin.email || 'unknown'}: ${adminNotifError.message}`);
+        }
+      }
+      
+      notificationResults.admin = adminNotificationCount;
+      console.log(`   ✅ Sent ${adminNotificationCount} admin notification(s) successfully`);
+      
+    } else {
+      console.log(`   ⚠️  No admin users found - skipping admin notifications`);
+      notificationResults.admin = 0;
+    }
+    
+  } catch (adminError) {
+    console.log(`   ⚠️  Admin notification process failed: ${adminError.message}`);
+    console.log(`   ⚠️  Stack trace:`, adminError.stack);
+    notificationResults.admin = 0;
+    // Don't fail assignment if admin notification fails
+  }
+}
+    
+    // ========================================================================
+    // STEP 7: Update vehicle's assigned customers list
+    // ========================================================================
+    await req.db.collection('vehicles').updateOne(
+      { _id: new ObjectId(vehicleId) },
+      {
+        $push: {
+          assignedCustomers: {
+            $each: route.map(stop => ({
+              rosterId: stop.rosterId,
+              tripId: results.find(r => r.rosterId === stop.rosterId)?.tripId,
+              customerId: stop.customerId,
+              customerName: stop.customerName,
+              sequence: stop.sequence,
+              pickupTime: stop.pickupTime,
+              readyByTime: stop.readyByTime, // 🆕
+              distanceToOffice: stop.distanceToOffice, // 🆕
+              assignedAt: new Date()
+            }))
+          }
+        },
+        $set: {
+          lastRouteAssignment: new Date(),
+          currentRouteDistance: totalDistance,
+          currentRouteTime: totalTime,
+          updatedAt: new Date()
+        }
+      },
+      { session }
+    );
+    
+    // ========================================================================
+    // STEP 8: COMMIT TRANSACTION
+    // ========================================================================
+    await session.commitTransaction();
+    
+    // ========================================================================
+    // STEP 9: VERIFICATION (ensure assignments were successful)
+    // ========================================================================
+    const verificationResults = [];
+    for (const result of results) {
+      if (result.rosterId) {
+        const verifiedRoster = await req.db.collection('rosters').findOne({
+          _id: new ObjectId(result.rosterId)
+        });
+        
+        const verifiedTrip = await req.db.collection('roster-assigned-trips').findOne({
+          _id: new ObjectId(result.tripId)
+        });
+        
+        verificationResults.push({
+          rosterId: result.rosterId,
+          customerName: result.customerName,
+          rosterVerified: verifiedRoster?.status === 'assigned' && verifiedRoster?.vehicleId !== null,
+          tripVerified: verifiedTrip?.status === 'assigned' && verifiedTrip?.vehicleId !== null
+        });
+      }
+    }
+    
+    console.log('\n' + '='.repeat(80));
+    console.log('✅ OPTIMIZED ROUTE ASSIGNMENT COMPLETED');
+    console.log('='.repeat(80));
+    console.log(`📊 Summary:`);
+    console.log(`   - Collection: roster-assigned-trips (NEW)`);
+    console.log(`   - Total customers: ${route.length}`);
+    console.log(`   - Successfully assigned: ${results.length}`);
+    console.log(`   - Trips created: ${tripIds.length}`);
+    console.log(`   - Failed: ${errors.length}`);
+    console.log(`   - Customer notifications: ${notificationResults.customers}`);
+    console.log(`   - Driver notifications: ${notificationResults.driver}`);
+    console.log(`   - Verification: ${verificationResults.filter(v => v.rosterVerified && v.tripVerified).length}/${verificationResults.length} verified`);
+    console.log('='.repeat(80) + '\n');
+    
+    // ========================================================================
+    // RESPONSE (TOP LEVEL fields for frontend compatibility)
+    // ========================================================================
+    // ✅ FIX: Consider it success if ANY trips were created, even if there were errors
+    const hasSuccessfulTrips = tripIds.length > 0 || results.length > 0;
+    
+    res.json({
+      success: hasSuccessfulTrips, // ✅ TRUE if any trips created
+      message: hasSuccessfulTrips 
+        ? `✅ Success! ${results.length} customer(s) assigned. Trip${tripIds.length > 1 ? 's' : ''} created: ${tripIds.map(id => id.toString().slice(-6)).join(', ')}`
+        : `❌ Assignment failed. ${errors.length} error(s) occurred.`,
+      successCount: results.length,        // ← TOP LEVEL for frontend
+      errorCount: errors.length,           // ← TOP LEVEL for frontend
+      notifications: {                     // ← TOP LEVEL for frontend
+        customers: notificationResults.customers,
+        driver: notificationResults.driver,
+        failed: notificationResults.failed
+      },
+      trackingEnabled: true,               // ← TOP LEVEL for frontend
+      collection: 'roster-assigned-trips', // ← Indicate new collection
+      data: {
+        vehicleId: vehicleId,
+        vehicleName: vehicle.name || vehicle.vehicleNumber,
+        driverId: driverIdString, // ✅ Use pre-validated string
+        driverName: driver?.name || 'Unknown',
+        assignmentId: new ObjectId().toString(),
+        successful: results,
+        failed: errors,
+        tripIds: tripIds,
+        successCount: results.length,      // Also keep in data for backward compatibility
+        errorCount: errors.length,
+        notifications: notificationResults,
+        trackingEnabled: true,
+        verification: verificationResults,
+        routeSummary: {
+          totalDistance: totalDistance,
+          totalTime: totalTime,
+          customerCount: route.length,
+          startTime: startTime,
+          firstPickupTime: route[0]?.pickupTime,
+          readyByTime: route[0]?.readyByTime
+        }
+      }
+    });
+    
+  } catch (error) {
+    await session.abortTransaction();
+    console.error('\n' + '❌'.repeat(40));
+    console.error('OPTIMIZED ROUTE ASSIGNMENT FAILED');
+    console.error('❌'.repeat(40));
+    console.error('Error:', error);
+    console.error('Stack:', error.stack);
+    console.error('❌'.repeat(40) + '\n');
+    
+    res.status(500).json({
+      success: false,
+      message: 'Optimized route assignment failed',
+      error: error.message
+    });
+  } finally {
+    await session.endSession();
+  }
+});
+
+module.exports = router;

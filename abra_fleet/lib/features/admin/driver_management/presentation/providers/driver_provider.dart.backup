@@ -1,0 +1,334 @@
+// File: lib/features/admin/driver_management/presentation/providers/driver_provider.dart
+// Provider for managing driver state using Firebase Auth and Firestore.
+
+import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:abra_fleet/features/admin/driver_management/domain/entities/driver_entity.dart';
+
+// Enum to represent different states of data fetching
+enum DataState { initial, loading, loaded, error }
+
+class DriverProvider extends ChangeNotifier {
+  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  final FirebaseAuth _auth = FirebaseAuth.instance;
+
+  List<Driver> _drivers = [];
+  DataState _state = DataState.initial;
+  String? _errorMessage;
+
+  // Admin credentials for session restoration
+  static const String _adminEmail = 'admin@abrafleet.com';
+  static const String _adminPassword = 'admin123';
+
+  // Getters for UI to access state
+  List<Driver> get drivers => _drivers;
+  DataState get state => _state;
+  String? get errorMessage => _errorMessage;
+  bool get isLoading => _state == DataState.loading;
+
+  // Fetch all drivers from Firestore
+  Future<void> fetchDrivers() async {
+    _state = DataState.loading;
+    _errorMessage = null;
+    notifyListeners();
+
+    try {
+      await _ensureAdminAuthenticated();
+      
+      final snapshot = await _firestore
+          .collection('users')
+          .where('role', isEqualTo: 'driver')
+          .get();
+
+      _drivers = snapshot.docs
+          .map((doc) => Driver.fromMap(
+                Map<String, dynamic>.from(doc.data() as Map),
+                doc.id,
+              ))
+          .toList();
+
+      _state = DataState.loaded;
+    } catch (e) {
+      _errorMessage = 'Failed to fetch drivers: $e';
+      _state = DataState.error;
+      debugPrint('Error fetching drivers: $e');
+    }
+    notifyListeners();
+  }
+
+  // Create a new driver with proper session management
+  Future<bool> createDriver({
+    required String name,
+    required String email,
+    required String phone,
+    String? licenseNumber,
+    String? address,
+    required String password,
+  }) async {
+    _state = DataState.loading;
+    _errorMessage = null;
+    notifyListeners();
+
+    try {
+      // Verify admin authentication first
+      await _ensureAdminAuthenticated();
+
+      // Create Firebase Auth account
+      final userCredential = await _auth.createUserWithEmailAndPassword(
+        email: email.trim(),
+        password: password.trim(),
+      );
+
+      final newUser = userCredential.user;
+      if (newUser == null) {
+        throw Exception('Failed to create user account');
+      }
+
+      // Update display name
+      await newUser.updateDisplayName(name.trim());
+
+      // Prepare driver data
+      final now = DateTime.now();
+      final driverData = {
+        'name': name.trim(),
+        'email': email.trim(),
+        'phoneNumber': phone.trim(),
+        'licenseNumber': licenseNumber?.trim(),
+        'address': address?.trim(),
+        'role': 'driver',
+        'authProvider': 'email_password',
+        'createdBy': _adminEmail,
+        'status': 'Active', // Add default status
+        'createdAt': Timestamp.fromDate(now),
+        'updatedAt': FieldValue.serverTimestamp(),
+      };
+
+      // Save to Firestore
+      await _firestore.collection('users').doc(newUser.uid).set(driverData);
+
+      // CRITICAL: Restore admin session
+      await _restoreAdminSession();
+
+      // Update local state with complete data including ID
+      final newDriver = Driver.fromMap(
+        {
+          'name': name.trim(),
+          'email': email.trim(),
+          'phoneNumber': phone.trim(),
+          'licenseNumber': licenseNumber?.trim(),
+          'address': address?.trim(),
+          'role': 'driver',
+          'status': 'Active',
+          'createdAt': Timestamp.fromDate(now),
+        },
+        newUser.uid,
+      );
+      _drivers.add(newDriver);
+      
+      _state = DataState.loaded;
+      notifyListeners();
+      
+      debugPrint('Driver created successfully: ${newDriver.email}');
+      return true;
+      
+    } on FirebaseAuthException catch (e) {
+      await _handleAuthError(e);
+      return false;
+    } catch (e) {
+      _errorMessage = 'Failed to create driver: $e';
+      _state = DataState.error;
+      debugPrint('Error creating driver: $e');
+      
+      await _ensureAdminAuthenticated();
+      notifyListeners();
+      return false;
+    }
+  }
+
+  // Update an existing driver
+  Future<bool> updateDriver(Driver driver) async {
+    _state = DataState.loading;
+    _errorMessage = null;
+    notifyListeners();
+
+    try {
+      await _ensureAdminAuthenticated();
+      
+      final driverData = driver.toMap();
+      driverData['updatedAt'] = FieldValue.serverTimestamp();
+      driverData.remove('createdAt'); // Don't update creation time
+      
+      await _firestore.collection('users').doc(driver.id).update(driverData);
+      
+      // Update local state
+      final index = _drivers.indexWhere((d) => d.id == driver.id);
+      if (index != -1) {
+        _drivers[index] = driver;
+      }
+      
+      _state = DataState.loaded;
+      notifyListeners();
+      
+      debugPrint('Driver updated successfully: ${driver.email}');
+      return true;
+      
+    } catch (e) {
+      _errorMessage = 'Failed to update driver: $e';
+      _state = DataState.error;
+      debugPrint('Error updating driver: $e');
+      notifyListeners();
+      return false;
+    }
+  }
+
+  // Delete a driver
+  Future<bool> deleteDriver(String driverId) async {
+    _state = DataState.loading;
+    _errorMessage = null;
+    notifyListeners();
+
+    try {
+      await _ensureAdminAuthenticated();
+      
+      // Delete from Firestore
+      await _firestore.collection('users').doc(driverId).delete();
+      
+      // Update local state
+      _drivers.removeWhere((d) => d.id == driverId);
+      
+      _state = DataState.loaded;
+      notifyListeners();
+      
+      debugPrint('Driver deleted successfully: $driverId');
+      return true;
+      
+    } catch (e) {
+      _errorMessage = 'Failed to delete driver: $e';
+      _state = DataState.error;
+      debugPrint('Error deleting driver: $e');
+      notifyListeners();
+      return false;
+    }
+  }
+
+  // Get driver by ID from local list
+  Driver? getDriverFromListById(String id) {
+    try {
+      return _drivers.firstWhere((driver) => driver.id == id);
+    } catch (e) {
+      debugPrint('Driver not found: $id');
+      return null;
+    }
+  }
+
+  // Legacy method for backward compatibility
+  Future<bool> addDriver(Driver driver) async {
+    // This method is kept for backward compatibility with existing screens
+    // In practice, you should use createDriver() for new drivers with auth
+    _state = DataState.loading;
+    _errorMessage = null;
+    notifyListeners();
+
+    try {
+      final driverData = driver.toMap();
+      driverData['role'] = 'driver';
+      driverData['createdAt'] = FieldValue.serverTimestamp();
+      driverData['updatedAt'] = FieldValue.serverTimestamp();
+      
+      await _firestore.collection('users').doc(driver.id).set(driverData);
+      _drivers.add(driver);
+      _state = DataState.loaded;
+      notifyListeners();
+      return true;
+    } catch (e) {
+      _errorMessage = 'Failed to add driver: $e';
+      _state = DataState.error;
+      notifyListeners();
+      return false;
+    }
+  }
+
+  // CRITICAL: Ensure admin is authenticated
+  Future<void> _ensureAdminAuthenticated() async {
+    final currentUser = _auth.currentUser;
+    
+    if (currentUser == null || currentUser.email != _adminEmail) {
+      await _restoreAdminSession();
+    }
+  }
+
+  // CRITICAL: Restore admin session
+  Future<void> _restoreAdminSession() async {
+    try {
+      debugPrint('Restoring admin session...');
+      
+      // Sign out current user
+      await _auth.signOut();
+      
+      // Wait for sign out to complete
+      await Future.delayed(const Duration(milliseconds: 800));
+      
+      // Sign in as admin
+      await _auth.signInWithEmailAndPassword(
+        email: _adminEmail,
+        password: _adminPassword,
+      );
+      
+      // Wait for sign in to complete
+      await Future.delayed(const Duration(milliseconds: 800));
+      
+      debugPrint('Admin session restored successfully');
+    } catch (e) {
+      debugPrint('Error restoring admin session: $e');
+      throw Exception('Failed to authenticate admin: $e');
+    }
+  }
+
+  // Handle Firebase Auth errors
+  Future<void> _handleAuthError(FirebaseAuthException e) async {
+    String errorMessage;
+    switch (e.code) {
+      case 'email-already-in-use':
+        errorMessage = 'Email already exists';
+        break;
+      case 'weak-password':
+        errorMessage = 'Password too weak (minimum 6 characters)';
+        break;
+      case 'invalid-email':
+        errorMessage = 'Invalid email format';
+        break;
+      case 'network-request-failed':
+        errorMessage = 'Network error. Please check your connection.';
+        break;
+      case 'operation-not-allowed':
+        errorMessage = 'Email/password accounts are not enabled';
+        break;
+      default:
+        errorMessage = 'Authentication error: ${e.message}';
+    }
+    
+    _errorMessage = errorMessage;
+    _state = DataState.error;
+    
+    debugPrint('Firebase Auth Error: ${e.code} - $errorMessage');
+    
+    // Ensure admin session is restored
+    await _ensureAdminAuthenticated();
+    notifyListeners();
+  }
+
+  // Clear error state
+  void clearError() {
+    _errorMessage = null;
+    if (_state == DataState.error) {
+      _state = DataState.loaded;
+      notifyListeners();
+    }
+  }
+
+  // Refresh drivers data
+  Future<void> refreshDrivers() async {
+    await fetchDrivers();
+  }
+}

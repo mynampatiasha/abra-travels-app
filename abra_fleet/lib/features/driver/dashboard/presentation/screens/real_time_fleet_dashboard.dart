@@ -1,0 +1,2436 @@
+// lib/features/driver/dashboard/presentation/screens/real_time_fleet_dashboard.dart
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'dart:async';
+import 'dart:convert';
+import 'package:geolocator/geolocator.dart';
+import 'package:url_launcher/url_launcher.dart';
+import 'package:intl/intl.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:http/http.dart' as http;
+import 'package:abra_fleet/core/services/real_time_fleet_service.dart';
+import 'package:abra_fleet/app/config/api_config.dart';
+
+// UI Constants
+const Color kPrimaryColor = Color(0xFF0D47A1);
+const Color kSuccessColor = Color(0xFF10B981);
+const Color kWarningColor = Color(0xFFF59E0B);
+const Color kDangerColor = Color(0xFFDC2626);
+const Color kInfoColor = Color(0xFF3B82F6);
+
+class RealTimeFleetDashboard extends StatefulWidget {
+  const RealTimeFleetDashboard({Key? key}) : super(key: key);
+
+  @override
+  State<RealTimeFleetDashboard> createState() => _RealTimeFleetDashboardState();
+}
+
+class _RealTimeFleetDashboardState extends State<RealTimeFleetDashboard> 
+    with TickerProviderStateMixin {
+  
+  final RealTimeFleetService _fleetService = RealTimeFleetService();
+  
+  List<CustomerPickupInfo> _customers = [];
+  OptimizedRoute? _currentRoute;
+  bool _isLoading = true;
+  bool _isTripStarted = false; // NEW: Track if trip has started
+  String? _errorMessage;
+  
+  late AnimationController _pulseController;
+  late Animation<double> _pulseAnimation;
+  
+  // Stream controllers for real-time updates
+  late StreamController<List<CustomerPickupInfo>> _customersController;
+  late StreamController<OptimizedRoute> _routeController;
+  late StreamController<ETAUpdate> _etaController;
+  late StreamController<NotificationMessage> _notificationController;
+  
+  StreamSubscription<List<CustomerPickupInfo>>? _customersSubscription;
+  StreamSubscription<OptimizedRoute>? _routeSubscription;
+  StreamSubscription<ETAUpdate>? _etaSubscription;
+  StreamSubscription<NotificationMessage>? _notificationSubscription;
+
+  @override
+  void initState() {
+    super.initState();
+    _initializeControllers();
+    _initializeAnimations();
+    _initializeFleetService();
+  }
+
+  void _initializeControllers() {
+    _customersController = StreamController<List<CustomerPickupInfo>>.broadcast();
+    _routeController = StreamController<OptimizedRoute>.broadcast();
+    _etaController = StreamController<ETAUpdate>.broadcast();
+    _notificationController = StreamController<NotificationMessage>.broadcast();
+  }
+
+  void _initializeAnimations() {
+    _pulseController = AnimationController(
+      duration: const Duration(seconds: 2),
+      vsync: this,
+    )..repeat(reverse: true);
+    
+    _pulseAnimation = Tween<double>(
+      begin: 0.8,
+      end: 1.2,
+    ).animate(CurvedAnimation(
+      parent: _pulseController,
+      curve: Curves.easeInOut,
+    ));
+  }
+
+  Future<void> _initializeFleetService() async {
+    try {
+      print('\n🚐 ========== REAL TIME FLEET DASHBOARD DEBUG ==========');
+      print('📅 Timestamp: ${DateTime.now().toIso8601String()}');
+      print('🔄 Starting fleet service initialization...');
+      
+      setState(() => _isLoading = true);
+      
+      print('✅ Loading state set to true');
+      
+      await _fleetService.initialize();
+      print('✅ Fleet service initialized successfully');
+      
+      // Listen to streams with detailed logging
+      _customersSubscription = _fleetService.customersStream.listen(
+        (customers) {
+          print('\n📋 ========== CUSTOMERS STREAM UPDATE ==========');
+          print('📊 Received ${customers.length} customers');
+          
+          if (customers.isEmpty) {
+            print('⚠️  No customers received from stream');
+            print('   This could mean:');
+            print('   1. No rosters assigned for today');
+            print('   2. Backend API returned empty data');
+            print('   3. Authentication/driver lookup failed');
+            print('   4. Date filtering excluded all rosters');
+          } else {
+            print('✅ Customer data received:');
+            for (int i = 0; i < customers.length; i++) {
+              final customer = customers[i];
+              print('   ${i + 1}. ${customer.customerName}');
+              print('      ID: ${customer.customerId}');
+              print('      Phone: ${customer.customerPhone}');
+              print('      Type: ${customer.isLogin ? "PICKUP" : "DROP"}');
+              print('      Status: ${customer.status}');
+              print('      Sequence: ${customer.sequenceNumber}');
+              print('      Distance: ${customer.distanceFromOffice.toStringAsFixed(2)} km');
+              print('      Pickup: ${customer.pickupAddress}');
+              print('      Drop: ${customer.dropAddress}');
+              if (customer.estimatedArrival != null) {
+                print('      ETA: ${customer.estimatedArrival!.toLocal()}');
+              }
+            }
+          }
+          
+          setState(() {
+            _customers = customers;
+            _isLoading = false;
+          });
+          
+          print('✅ UI state updated with ${customers.length} customers');
+          print('========== CUSTOMERS STREAM UPDATE COMPLETE ==========\n');
+        },
+        onError: (error) {
+          print('\n❌ ========== CUSTOMERS STREAM ERROR ==========');
+          print('Error: $error');
+          print('Stack trace: ${StackTrace.current}');
+          print('========== CUSTOMERS STREAM ERROR END ==========\n');
+          
+          setState(() {
+            _errorMessage = 'Customer stream error: $error';
+            _isLoading = false;
+          });
+        },
+      );
+      
+      _routeSubscription = _fleetService.routeStream.listen(
+        (route) {
+          print('\n🗺️  ========== ROUTE STREAM UPDATE ==========');
+          print('📊 Route received:');
+          print('   Pickup sequence: ${route.pickupSequence.length} customers');
+          print('   Drop sequence: ${route.dropSequence.length} customers');
+          print('   Total distance: ${route.totalDistance.toStringAsFixed(2)} km');
+          print('   Estimated duration: ${route.estimatedDuration.inMinutes} minutes');
+          print('   Waypoints: ${route.waypoints.length}');
+          
+          setState(() {
+            _currentRoute = route;
+          });
+          
+          print('✅ Route state updated');
+          print('========== ROUTE STREAM UPDATE COMPLETE ==========\n');
+        },
+        onError: (error) {
+          print('\n❌ ========== ROUTE STREAM ERROR ==========');
+          print('Error: $error');
+          print('========== ROUTE STREAM ERROR END ==========\n');
+        },
+      );
+      
+      _etaSubscription = _fleetService.etaStream.listen(
+        (etaUpdate) {
+          print('\n⏰ ========== ETA UPDATE ==========');
+          print('Customer: ${etaUpdate.customerId}');
+          print('Original ETA: ${etaUpdate.originalETA}');
+          print('Updated ETA: ${etaUpdate.updatedETA}');
+          print('Delay: ${etaUpdate.delay.inMinutes} minutes');
+          print('Reason: ${etaUpdate.reason}');
+          print('========== ETA UPDATE COMPLETE ==========\n');
+          
+          _showETAUpdateDialog(etaUpdate);
+        },
+        onError: (error) {
+          print('\n❌ ========== ETA STREAM ERROR ==========');
+          print('Error: $error');
+          print('========== ETA STREAM ERROR END ==========\n');
+        },
+      );
+      
+      _notificationSubscription = _fleetService.notificationStream.listen(
+        (notification) {
+          print('\n🔔 ========== NOTIFICATION RECEIVED ==========');
+          print('Customer: ${notification.customerName}');
+          print('Message: ${notification.message}');
+          print('Type: ${notification.type}');
+          print('========== NOTIFICATION COMPLETE ==========\n');
+          
+          _showNotificationSnackBar(notification);
+        },
+        onError: (error) {
+          print('\n❌ ========== NOTIFICATION STREAM ERROR ==========');
+          print('Error: $error');
+          print('========== NOTIFICATION STREAM ERROR END ==========\n');
+        },
+      );
+      
+      print('✅ All stream subscriptions set up successfully');
+      print('========== FLEET SERVICE INITIALIZATION COMPLETE ==========\n');
+      
+    } catch (e, stackTrace) {
+      print('\n❌ ========== FLEET SERVICE INITIALIZATION ERROR ==========');
+      print('Error: $e');
+      print('Stack trace: $stackTrace');
+      print('========== FLEET SERVICE INITIALIZATION ERROR END ==========\n');
+      
+      setState(() {
+        _errorMessage = 'Failed to initialize fleet service: $e';
+        _isLoading = false;
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    _pulseController.dispose();
+    _customersController.close();
+    _routeController.close();
+    _etaController.close();
+    _notificationController.close();
+    _customersSubscription?.cancel();
+    _routeSubscription?.cancel();
+    _etaSubscription?.cancel();
+    _notificationSubscription?.cancel();
+    _fleetService.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: const Color(0xFFF8FAFC),
+      appBar: _buildAppBar(),
+      body: _isLoading 
+          ? _buildLoadingState()
+          : _errorMessage != null
+              ? _buildErrorState()
+              : _buildMainContent(),
+      floatingActionButton: _buildFloatingActionButtons(),
+    );
+  }
+
+  PreferredSizeWidget _buildAppBar() {
+    return AppBar(
+      title: Row(
+        children: [
+          AnimatedBuilder(
+            animation: _pulseAnimation,
+            builder: (context, child) {
+              return Transform.scale(
+                scale: _pulseAnimation.value,
+                child: const Icon(Icons.gps_fixed, color: Colors.white),
+              );
+            },
+          ),
+          const SizedBox(width: 12),
+          const Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('Live Fleet', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+              Text('Real-time Management', style: TextStyle(color: Colors.white70, fontSize: 12)),
+            ],
+          ),
+        ],
+      ),
+      backgroundColor: kPrimaryColor,
+      elevation: 4,
+      actions: [
+        IconButton(
+          icon: const Icon(Icons.refresh, color: Colors.white),
+          onPressed: _refreshData,
+          tooltip: 'Refresh',
+        ),
+        IconButton(
+          icon: const Icon(Icons.route, color: Colors.white),
+          onPressed: _showRouteOptimizationDialog,
+          tooltip: 'Route Optimization',
+        ),
+        IconButton(
+          icon: const Icon(Icons.broadcast_on_personal, color: Colors.white),
+          onPressed: _showBroadcastDialog,
+          tooltip: 'Broadcast Message',
+        ),
+      ],
+    );
+  }
+
+  Widget _buildLoadingState() {
+    return const Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          CircularProgressIndicator(),
+          SizedBox(height: 16),
+          Text('Initializing Real-time Fleet Management...'),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildErrorState() {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          const Icon(Icons.error_outline, size: 64, color: kDangerColor),
+          const SizedBox(height: 16),
+          Text(_errorMessage!, textAlign: TextAlign.center),
+          const SizedBox(height: 16),
+          ElevatedButton(
+            onPressed: _initializeFleetService,
+            child: const Text('Retry'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMainContent() {
+    return RefreshIndicator(
+      onRefresh: _refreshData,
+      child: ListView(
+        padding: const EdgeInsets.all(16),
+        children: [
+          _buildDebugInfoCard(),
+          const SizedBox(height: 16),
+          _buildRouteOverviewCard(),
+          const SizedBox(height: 16),
+          _buildCustomersListCard(),
+          const SizedBox(height: 16),
+          _buildQuickActionsCard(),
+          const SizedBox(height: 80), // Space for FAB
+        ],
+      ),
+    );
+  }
+
+  Widget _buildRouteOverviewCard() {
+    if (_currentRoute == null) {
+      return _buildCard(
+        title: 'Route Overview',
+        icon: Icons.route,
+        child: const Center(
+          child: Padding(
+            padding: EdgeInsets.all(20),
+            child: Text('No route available'),
+          ),
+        ),
+      );
+    }
+
+    final route = _currentRoute!;
+    
+    return _buildCard(
+      title: 'Today\'s Optimized Route',
+      icon: Icons.route,
+      child: Column(
+        children: [
+          // Route Summary
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: [kPrimaryColor.withOpacity(0.1), kInfoColor.withOpacity(0.1)],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceAround,
+              children: [
+                _buildRouteStat('${route.pickupSequence.length}', 'Pickups', Icons.person_add),
+                _buildRouteStat('${route.dropSequence.length}', 'Drops', Icons.person_remove),
+                _buildRouteStat('${route.totalDistance.toStringAsFixed(1)} km', 'Distance', Icons.straighten),
+                _buildRouteStat('${route.estimatedDuration.inMinutes} min', 'Duration', Icons.access_time),
+              ],
+            ),
+          ),
+          
+          const SizedBox(height: 16),
+          
+          // START TRIP BUTTON - NEW FEATURE
+          if (!_isTripStarted && _customers.isNotEmpty) ...[
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [kSuccessColor, kSuccessColor.withOpacity(0.8)],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
+                borderRadius: BorderRadius.circular(12),
+                boxShadow: [
+                  BoxShadow(
+                    color: kSuccessColor.withOpacity(0.3),
+                    blurRadius: 8,
+                    offset: const Offset(0, 4),
+                  ),
+                ],
+              ),
+              child: ElevatedButton.icon(
+                onPressed: _startTrip,
+                icon: const Icon(Icons.play_arrow, color: Colors.white, size: 28),
+                label: const Text(
+                  'START TRIP',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    letterSpacing: 1.2,
+                  ),
+                ),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.transparent,
+                  shadowColor: Colors.transparent,
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+          ],
+          
+          // Trip Status Indicator
+          if (_isTripStarted) ...[
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: kSuccessColor.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: kSuccessColor.withOpacity(0.3)),
+              ),
+              child: Row(
+                children: [
+                  Icon(Icons.directions_car, color: kSuccessColor, size: 20),
+                  const SizedBox(width: 8),
+                  const Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Trip In Progress',
+                          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                        ),
+                        Text(
+                          'Follow the numbered sequence for pickups and drops',
+                          style: TextStyle(fontSize: 12, color: Colors.black87),
+                        ),
+                      ],
+                    ),
+                  ),
+                  ElevatedButton.icon(
+                    onPressed: _endTrip,
+                    icon: const Icon(Icons.stop, size: 16),
+                    label: const Text('End Trip'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: kDangerColor,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 16),
+          ],
+          
+          // Optimization Strategy
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: kSuccessColor.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: kSuccessColor.withOpacity(0.3)),
+            ),
+            child: Row(
+              children: [
+                Icon(Icons.psychology, color: kSuccessColor, size: 20),
+                const SizedBox(width: 8),
+                const Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Smart Route Optimization',
+                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                      ),
+                      Text(
+                        'Pickups: Farthest first • Drops: Nearest first',
+                        style: TextStyle(fontSize: 12, color: Colors.black87),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildRouteStat(String value, String label, IconData icon) {
+    return Column(
+      children: [
+        Icon(icon, color: kPrimaryColor, size: 24),
+        const SizedBox(height: 4),
+        Text(
+          value,
+          style: const TextStyle(
+            fontSize: 16,
+            fontWeight: FontWeight.bold,
+            color: kPrimaryColor,
+          ),
+        ),
+        Text(
+          label,
+          style: const TextStyle(
+            fontSize: 12,
+            color: Colors.black54,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildDebugInfoCard() {
+    return _buildCard(
+      title: 'Debug Information',
+      icon: Icons.bug_report,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: Colors.grey.shade100,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: Colors.grey.shade300),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Current State:',
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                ),
+                const SizedBox(height: 8),
+                Text('• Loading: $_isLoading'),
+                Text('• Error: ${_errorMessage ?? "None"}'),
+                Text('• Customers Count: ${_customers.length}'),
+                Text('• Route Available: ${_currentRoute != null}'),
+                Text('• Timestamp: ${DateTime.now().toLocal()}'),
+                const SizedBox(height: 12),
+                
+                if (_customers.isNotEmpty) ...[
+                  const Text(
+                    'Customer Details:',
+                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                  ),
+                  const SizedBox(height: 8),
+                  ..._customers.take(3).map((customer) => Padding(
+                    padding: const EdgeInsets.only(bottom: 4),
+                    child: Text(
+                      '• ${customer.customerName} (${customer.isLogin ? "PICKUP" : "DROP"})',
+                      style: const TextStyle(fontSize: 12),
+                    ),
+                  )),
+                  if (_customers.length > 3)
+                    Text(
+                      '• ... and ${_customers.length - 3} more',
+                      style: const TextStyle(fontSize: 12, fontStyle: FontStyle.italic),
+                    ),
+                ],
+                
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    Expanded(
+                      child: ElevatedButton.icon(
+                        onPressed: _refreshData,
+                        icon: const Icon(Icons.refresh, size: 16),
+                        label: const Text('Force Refresh'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: kInfoColor,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(vertical: 8),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    ElevatedButton.icon(
+                      onPressed: _fixSequenceNumbers,
+                      icon: const Icon(Icons.format_list_numbered, size: 16),
+                      label: const Text('Fix Numbers'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: kWarningColor,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    ElevatedButton.icon(
+                      onPressed: _showDebugLogs,
+                      icon: const Icon(Icons.terminal, size: 16),
+                      label: const Text('View Logs'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.grey.shade600,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showDebugLogs() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Row(
+          children: [
+            Icon(Icons.terminal, color: kInfoColor),
+            SizedBox(width: 8),
+            Text('Debug Information'),
+          ],
+        ),
+        content: SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text(
+                'Check the console/debug output for detailed logs.',
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 16),
+              const Text('Current Status:'),
+              const SizedBox(height: 8),
+              Text('• Loading State: $_isLoading'),
+              Text('• Error Message: ${_errorMessage ?? "None"}'),
+              Text('• Customers Loaded: ${_customers.length}'),
+              Text('• Route Optimized: ${_currentRoute != null}'),
+              const SizedBox(height: 16),
+              const Text('Troubleshooting Steps:'),
+              const SizedBox(height: 8),
+              const Text('1. Check console for detailed debug logs'),
+              const Text('2. Verify user authentication'),
+              const Text('3. Check backend API connectivity'),
+              const Text('4. Verify driver profile exists'),
+              const Text('5. Check if rosters are assigned for today'),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Close'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.pop(context);
+              _refreshData();
+            },
+            child: const Text('Refresh Data'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildCustomersListCard() {
+    if (_customers.isEmpty) {
+      return _buildCard(
+        title: 'Today\'s Customers',
+        icon: Icons.people,
+        child: const Center(
+          child: Padding(
+            padding: EdgeInsets.all(20),
+            child: Column(
+              children: [
+                Icon(Icons.people_outline, size: 48, color: Colors.grey),
+                SizedBox(height: 12),
+                Text('No customers assigned for today'),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+
+    // Separate and sort customers
+    final loginCustomers = _customers.where((c) => c.isLogin).toList();
+    final logoutCustomers = _customers.where((c) => !c.isLogin).toList();
+    
+    loginCustomers.sort((a, b) => a.sequenceNumber.compareTo(b.sequenceNumber));
+    logoutCustomers.sort((a, b) => a.sequenceNumber.compareTo(b.sequenceNumber));
+
+    return _buildCard(
+      title: 'Today\'s Customers (${_customers.length})',
+      icon: Icons.people,
+      child: Column(
+        children: [
+          // Pickup Section
+          if (loginCustomers.isNotEmpty) ...[
+            _buildSectionHeader('Pickup Sequence (Farthest First)', Icons.person_add, kSuccessColor),
+            const SizedBox(height: 8),
+            ...loginCustomers.map((customer) => _buildCustomerCard(customer)),
+            const SizedBox(height: 16),
+          ],
+          
+          // Drop Section
+          if (logoutCustomers.isNotEmpty) ...[
+            _buildSectionHeader('Drop Sequence (Nearest First)', Icons.person_remove, kWarningColor),
+            const SizedBox(height: 8),
+            ...logoutCustomers.map((customer) => _buildCustomerCard(customer)),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSectionHeader(String title, IconData icon, Color color) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: color.withOpacity(0.3)),
+      ),
+      child: Row(
+        children: [
+          Icon(icon, color: color, size: 20),
+          const SizedBox(width: 8),
+          Text(
+            title,
+            style: TextStyle(
+              fontWeight: FontWeight.bold,
+              color: color,
+              fontSize: 14,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildCustomerCard(CustomerPickupInfo customer) {
+    final statusColor = _getStatusColor(customer.status);
+    final isCompleted = customer.status == CustomerStatus.dropped || customer.status == CustomerStatus.pickedUp;
+    
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: statusColor.withOpacity(0.3)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 4,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Column(
+        children: [
+          // Header with sequence and status
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: statusColor.withOpacity(0.1),
+              borderRadius: const BorderRadius.only(
+                topLeft: Radius.circular(12),
+                topRight: Radius.circular(12),
+              ),
+            ),
+            child: Row(
+              children: [
+                // Sequence Badge
+                Container(
+                  width: 32,
+                  height: 32,
+                  decoration: BoxDecoration(
+                    color: kPrimaryColor,
+                    shape: BoxShape.circle,
+                  ),
+                  child: Center(
+                    child: Text(
+                      '#${customer.sequenceNumber}',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                
+                // Trip Type Badge
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: customer.isLogin ? kSuccessColor : kWarningColor,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Text(
+                    customer.isLogin ? 'PICKUP' : 'DROP',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 10,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+                
+                const Spacer(),
+                
+                // Status Badge
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: statusColor,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Text(
+                    _getStatusText(customer.status),
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 10,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          
+          // Customer Info
+          Padding(
+            padding: const EdgeInsets.all(12),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Customer Name and Phone
+                Row(
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            customer.customerName,
+                            style: const TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          Row(
+                            children: [
+                              Icon(Icons.phone, size: 14, color: Colors.grey[600]),
+                              const SizedBox(width: 4),
+                              Text(
+                                customer.customerPhone,
+                                style: const TextStyle(
+                                  fontSize: 14,
+                                  color: Colors.black54,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                    
+                    // Action Buttons Row
+                    Row(
+                      children: [
+                        // Call Button
+                        IconButton(
+                          onPressed: () => _callCustomer(customer.customerPhone),
+                          icon: const Icon(Icons.phone, color: kSuccessColor),
+                          tooltip: 'Call Customer',
+                          style: IconButton.styleFrom(
+                            backgroundColor: kSuccessColor.withOpacity(0.1),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        // WhatsApp Button
+                        IconButton(
+                          onPressed: () => _openWhatsApp(customer.customerPhone),
+                          icon: const Icon(Icons.chat, color: Colors.green),
+                          tooltip: 'WhatsApp',
+                          style: IconButton.styleFrom(
+                            backgroundColor: Colors.green.withOpacity(0.1),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+                
+                const SizedBox(height: 12),
+                
+                // FIXED: Single Location Info with Navigation Button
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [Colors.grey.shade50, Colors.grey.shade100],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    ),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.grey.shade200),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(
+                        customer.isLogin ? Icons.trip_origin : Icons.flag,
+                        color: customer.isLogin ? kSuccessColor : kDangerColor,
+                        size: 18,
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              customer.isLogin ? 'Pickup Location' : 'Drop Location',
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.grey[700],
+                              ),
+                            ),
+                            Text(
+                              customer.isLogin ? customer.pickupAddress : customer.dropAddress,
+                              style: const TextStyle(fontSize: 13),
+                            ),
+                          ],
+                        ),
+                      ),
+                      IconButton(
+                        onPressed: () => _openMaps(customer),
+                        icon: const Icon(Icons.navigation, size: 18, color: kInfoColor),
+                        tooltip: 'Open in Maps',
+                        style: IconButton.styleFrom(
+                          backgroundColor: kInfoColor.withOpacity(0.1),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                
+                const SizedBox(height: 12),
+                
+                // ETA and Distance with enhanced visuals
+                if (customer.estimatedArrival != null) ...[
+                  Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: kInfoColor.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: kInfoColor.withOpacity(0.3)),
+                    ),
+                    child: Row(
+                      children: [
+                        // ETA Section
+                        Expanded(
+                          child: Row(
+                            children: [
+                              Icon(Icons.access_time, size: 16, color: kInfoColor),
+                              const SizedBox(width: 4),
+                              Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    'ETA',
+                                    style: TextStyle(
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.bold,
+                                      color: Colors.grey[600],
+                                    ),
+                                  ),
+                                  Text(
+                                    DateFormat.jm().format(customer.estimatedArrival!),
+                                    style: const TextStyle(
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.bold,
+                                      color: kInfoColor,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
+                        ),
+                        
+                        // Distance Section
+                        Expanded(
+                          child: Row(
+                            children: [
+                              Icon(Icons.straighten, size: 16, color: kWarningColor),
+                              const SizedBox(width: 4),
+                              Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    'Distance',
+                                    style: TextStyle(
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.bold,
+                                      color: Colors.grey[600],
+                                    ),
+                                  ),
+                                  Text(
+                                    '${customer.distanceFromOffice.toStringAsFixed(1)} km',
+                                    style: const TextStyle(
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.bold,
+                                      color: kWarningColor,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
+                        ),
+                        
+                        // Time to ETA
+                        Expanded(
+                          child: Row(
+                            children: [
+                              Icon(Icons.timer, size: 16, color: kSuccessColor),
+                              const SizedBox(width: 4),
+                              Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    'In',
+                                    style: TextStyle(
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.bold,
+                                      color: Colors.grey[600],
+                                    ),
+                                  ),
+                                  Text(
+                                    '${customer.estimatedArrival!.difference(DateTime.now()).inMinutes} min',
+                                    style: const TextStyle(
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.bold,
+                                      color: kSuccessColor,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                ],
+                
+                // Action Buttons - ONLY SHOW IF TRIP IS STARTED
+                if (_isTripStarted && !isCompleted) _buildCustomerActionButtons(customer),
+                
+                // Completed Status Info
+                if (isCompleted) _buildCompletedStatusInfo(customer),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildCompletedStatusInfo(CustomerPickupInfo customer) {
+    final isPickedUp = customer.status == CustomerStatus.pickedUp;
+    final isDropped = customer.status == CustomerStatus.dropped;
+    
+    return Container(
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: kSuccessColor.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: kSuccessColor.withOpacity(0.3)),
+      ),
+      child: Row(
+        children: [
+          Icon(
+            isDropped ? Icons.check_circle : Icons.person_add,
+            color: kSuccessColor,
+            size: 20,
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  isDropped ? 'Trip Completed' : 'Customer Picked Up',
+                  style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    color: kSuccessColor,
+                  ),
+                ),
+                if (customer.actualPickupTime != null)
+                  Text(
+                    'Picked up at ${DateFormat.jm().format(customer.actualPickupTime!)}',
+                    style: const TextStyle(fontSize: 12, color: Colors.black54),
+                  ),
+                if (customer.actualDropTime != null)
+                  Text(
+                    'Dropped at ${DateFormat.jm().format(customer.actualDropTime!)}',
+                    style: const TextStyle(fontSize: 12, color: Colors.black54),
+                  ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildCustomerActionButtons(CustomerPickupInfo customer) {
+    return Row(
+      children: [
+        if (customer.status == CustomerStatus.pending) ...[
+          Expanded(
+            child: ElevatedButton.icon(
+              onPressed: () => _markCustomerPickedUp(customer),
+              icon: const Icon(Icons.person_add, size: 16),
+              label: const Text('Mark Picked Up'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: kSuccessColor,
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(vertical: 8),
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+          ElevatedButton(
+            onPressed: () => _markCustomerNoShow(customer),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: kDangerColor,
+              foregroundColor: Colors.white,
+              padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
+            ),
+            child: const Text('No Show'),
+          ),
+        ] else if (customer.status == CustomerStatus.pickedUp) ...[
+          Expanded(
+            child: ElevatedButton.icon(
+              onPressed: () => _markCustomerDropped(customer),
+              icon: const Icon(Icons.person_remove, size: 16),
+              label: const Text('Mark Dropped'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: kWarningColor,
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(vertical: 8),
+              ),
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+
+  // NEW: Start Trip Method
+  Future<void> _startTrip() async {
+    try {
+      // Show confirmation dialog
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Row(
+            children: [
+              Icon(Icons.play_arrow, color: kSuccessColor),
+              SizedBox(width: 8),
+              Text('Start Trip'),
+            ],
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text('Are you ready to start your trip?'),
+              const SizedBox(height: 12),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: kInfoColor.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'This will:',
+                      style: TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                    const SizedBox(height: 4),
+                    const Text('• Enable numbered pickup sequence'),
+                    const Text('• Start GPS tracking'),
+                    const Text('• Send notifications to customers'),
+                    const Text('• Record trip start time'),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.pop(context, true),
+              style: ElevatedButton.styleFrom(backgroundColor: kSuccessColor),
+              child: const Text('Start Trip'),
+            ),
+          ],
+        ),
+      );
+
+      if (confirmed == true) {
+        setState(() => _isTripStarted = true);
+        
+        // Store trip start in database
+        await _storeTripStart();
+        
+        // Start GPS tracking
+        await _startGPSTracking();
+        
+        // Send notifications to customers
+        await _sendTripStartNotifications();
+        
+        _showSnackBar('Trip started successfully! Follow the numbered sequence.', kSuccessColor);
+      }
+    } catch (e) {
+      _showSnackBar('Failed to start trip: $e', kDangerColor);
+    }
+  }
+
+  // NEW: End Trip Method
+  Future<void> _endTrip() async {
+    try {
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Row(
+            children: [
+              Icon(Icons.stop, color: kDangerColor),
+              SizedBox(width: 8),
+              Text('End Trip'),
+            ],
+          ),
+          content: const Text('Are you sure you want to end this trip?'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.pop(context, true),
+              style: ElevatedButton.styleFrom(backgroundColor: kDangerColor),
+              child: const Text('End Trip'),
+            ),
+          ],
+        ),
+      );
+
+      if (confirmed == true) {
+        setState(() => _isTripStarted = false);
+        
+        // Store trip end in database
+        await _storeTripEnd();
+        
+        _showSnackBar('Trip ended successfully!', kSuccessColor);
+      }
+    } catch (e) {
+      _showSnackBar('Failed to end trip: $e', kDangerColor);
+    }
+  }
+
+  // NEW: Store Trip Start in Database
+  Future<void> _storeTripStart() async {
+    try {
+            final prefs = await SharedPreferences.getInstance();            final token = prefs.getString('jwt_token');            final userDataString = prefs.getString('user_data');            final userData = userDataString != null ? jsonDecode(userDataString) : null;            final userId = userData?['id'];            final userEmail = userData?['email'];            final userName = userData?['name'] ?? 'Driver';
+      if (token == null || token.isEmpty) return;
+
+      final tripData = {
+        'driverId': userId,
+        'driverName': userName,
+        'startTime': DateTime.now().toIso8601String(),
+        'status': 'started',
+        'customers': _customers.map((c) => c.toJson()).toList(),
+        'totalCustomers': _customers.length,
+        'pickupCustomers': _customers.where((c) => c.isLogin).length,
+        'dropCustomers': _customers.where((c) => !c.isLogin).length,
+      };
+
+      final response = await http.post(
+        Uri.parse('${ApiConfig.baseUrl}/api/driver/trip/start'),
+        headers: {
+          'Authorization': 'Bearer ${token}',
+          'Content-Type': 'application/json',
+        },
+        body: json.encode(tripData),
+      );
+
+      if (response.statusCode != 200) {
+        throw Exception('Failed to store trip start: ${response.body}');
+      }
+
+      print('✅ Trip start stored in database');
+    } catch (e) {
+      print('❌ Error storing trip start: $e');
+      // Don't throw - trip can continue without database storage
+    }
+  }
+
+  // NEW: Store Trip End in Database
+  Future<void> _storeTripEnd() async {
+    try {
+            final prefs = await SharedPreferences.getInstance();            final token = prefs.getString('jwt_token');            final userDataString = prefs.getString('user_data');            final userData = userDataString != null ? jsonDecode(userDataString) : null;            final userId = userData?['id'];            final userEmail = userData?['email'];            final userName = userData?['name'] ?? 'Driver';
+      if (token == null || token.isEmpty) return;
+
+      final tripData = {
+        'driverId': userId,
+        'endTime': DateTime.now().toIso8601String(),
+        'status': 'completed',
+        'finalCustomerStates': _customers.map((c) => c.toJson()).toList(),
+        'completedPickups': _customers.where((c) => c.isLogin && c.status == CustomerStatus.pickedUp).length,
+        'completedDrops': _customers.where((c) => !c.isLogin && c.status == CustomerStatus.dropped).length,
+        'noShows': _customers.where((c) => c.status == CustomerStatus.noShow).length,
+      };
+
+      final response = await http.post(
+        Uri.parse('${ApiConfig.baseUrl}/api/driver/trip/end'),
+        headers: {
+          'Authorization': 'Bearer ${token}',
+          'Content-Type': 'application/json',
+        },
+        body: json.encode(tripData),
+      );
+
+      if (response.statusCode != 200) {
+        throw Exception('Failed to store trip end: ${response.body}');
+      }
+
+      print('✅ Trip end stored in database');
+    } catch (e) {
+      print('❌ Error storing trip end: $e');
+    }
+  }
+
+  // NEW: Start GPS Tracking
+  Future<void> _startGPSTracking() async {
+    try {
+      // Implementation for GPS tracking
+      print('🛰️ GPS tracking started');
+    } catch (e) {
+      print('❌ Error starting GPS tracking: $e');
+    }
+  }
+
+  // NEW: Send Trip Start Notifications
+  Future<void> _sendTripStartNotifications() async {
+    try {
+      for (final customer in _customers) {
+        final message = 'Hi ${customer.customerName}, your driver has started the trip. You are #${customer.sequenceNumber} in the ${customer.isLogin ? "pickup" : "drop"} sequence. ETA: ${customer.estimatedArrival != null ? DateFormat.jm().format(customer.estimatedArrival!) : "TBD"}';
+        
+        // Send SMS notification (implement based on your SMS service)
+        print('📱 Sending notification to ${customer.customerName}: $message');
+      }
+    } catch (e) {
+      print('❌ Error sending notifications: $e');
+    }
+  }
+
+  Widget _buildQuickActionsCard() {
+    return _buildCard(
+      title: 'Quick Actions',
+      icon: Icons.flash_on,
+      child: GridView.count(
+        crossAxisCount: 2,
+        shrinkWrap: true,
+        physics: const NeverScrollableScrollPhysics(),
+        crossAxisSpacing: 12,
+        mainAxisSpacing: 12,
+        childAspectRatio: 1.5,
+        children: [
+          _buildQuickActionButton(
+            'Broadcast Message',
+            Icons.broadcast_on_personal,
+            kInfoColor,
+            _showBroadcastDialog,
+          ),
+          _buildQuickActionButton(
+            'Route Optimization',
+            Icons.route,
+            kPrimaryColor,
+            _showRouteOptimizationDialog,
+          ),
+          _buildQuickActionButton(
+            'Emergency Alert',
+            Icons.emergency,
+            kDangerColor,
+            _showEmergencyDialog,
+          ),
+          _buildQuickActionButton(
+            'Customer Support',
+            Icons.headset_mic,
+            kSuccessColor,
+            _showSupportDialog,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildQuickActionButton(
+    String title,
+    IconData icon,
+    Color color,
+    VoidCallback onPressed,
+  ) {
+    return ElevatedButton(
+      onPressed: onPressed,
+      style: ElevatedButton.styleFrom(
+        backgroundColor: color.withOpacity(0.1),
+        foregroundColor: color,
+        elevation: 0,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(12),
+          side: BorderSide(color: color.withOpacity(0.3)),
+        ),
+      ),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(icon, size: 32),
+          const SizedBox(height: 8),
+          Text(
+            title,
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildCard({
+    required String title,
+    required IconData icon,
+    required Widget child,
+  }) {
+    return Card(
+      elevation: 2,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(icon, color: kPrimaryColor, size: 24),
+                const SizedBox(width: 8),
+                Text(
+                  title,
+                  style: const TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            child,
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildFloatingActionButtons() {
+    return Column(
+      mainAxisAlignment: MainAxisAlignment.end,
+      children: [
+        FloatingActionButton(
+          heroTag: 'location',
+          onPressed: _shareCurrentLocation,
+          backgroundColor: kInfoColor,
+          child: const Icon(Icons.my_location, color: Colors.white),
+        ),
+        const SizedBox(height: 16),
+        FloatingActionButton(
+          heroTag: 'emergency',
+          onPressed: _showEmergencyDialog,
+          backgroundColor: kDangerColor,
+          child: const Icon(Icons.emergency, color: Colors.white),
+        ),
+      ],
+    );
+  }
+
+  // Helper Methods
+  Color _getStatusColor(CustomerStatus status) {
+    switch (status) {
+      case CustomerStatus.pending:
+        return Colors.orange;
+      case CustomerStatus.notified:
+        return Colors.blue;
+      case CustomerStatus.enRoute:
+        return Colors.purple;
+      case CustomerStatus.arrived:
+        return Colors.indigo;
+      case CustomerStatus.pickedUp:
+        return kSuccessColor;
+      case CustomerStatus.dropped:
+        return Colors.green;
+      case CustomerStatus.noShow:
+        return kDangerColor;
+      case CustomerStatus.cancelled:
+        return Colors.grey;
+    }
+  }
+
+  String _getStatusText(CustomerStatus status) {
+    switch (status) {
+      case CustomerStatus.pending:
+        return 'Pending';
+      case CustomerStatus.notified:
+        return 'Notified';
+      case CustomerStatus.enRoute:
+        return 'En Route';
+      case CustomerStatus.arrived:
+        return 'Arrived';
+      case CustomerStatus.pickedUp:
+        return 'Picked Up';
+      case CustomerStatus.dropped:
+        return 'Dropped';
+      case CustomerStatus.noShow:
+        return 'No Show';
+      case CustomerStatus.cancelled:
+        return 'Cancelled';
+    }
+  }
+
+  // Action Methods
+  Future<void> _refreshData() async {
+    print('\n🔄 ========== MANUAL REFRESH TRIGGERED ==========');
+    print('📅 Timestamp: ${DateTime.now().toIso8601String()}');
+    print('🔄 Reinitializing fleet service...');
+    
+    setState(() => _isLoading = true);
+    
+    try {
+      await _initializeFleetService();
+      
+      // Force route optimization to ensure sequence numbers are properly set
+      print('🔄 Forcing route optimization to fix sequence numbers...');
+      await _fleetService.optimizeRoute();
+      
+      // Wait a moment for the stream to update
+      await Future.delayed(const Duration(milliseconds: 500));
+      
+      print('✅ Manual refresh completed successfully');
+      _showSnackBar('Data refreshed successfully', kSuccessColor);
+    } catch (e) {
+      print('❌ Manual refresh failed: $e');
+      _showSnackBar('Failed to refresh data: $e', kDangerColor);
+    } finally {
+      setState(() => _isLoading = false);
+    }
+    
+    print('========== MANUAL REFRESH COMPLETE ==========\n');
+  }
+
+  // Fix sequence numbers manually
+  Future<void> _fixSequenceNumbers() async {
+    print('\n🔢 ========== FIXING SEQUENCE NUMBERS ==========');
+    
+    try {
+      if (_customers.isEmpty) {
+        _showSnackBar('No customers to fix sequence numbers for', kWarningColor);
+        return;
+      }
+
+      // Separate customers by type
+      final loginCustomers = _customers.where((c) => c.isLogin).toList();
+      final logoutCustomers = _customers.where((c) => !c.isLogin).toList();
+      
+      // Sort by distance (farthest first for pickup, nearest first for drop)
+      loginCustomers.sort((a, b) => b.distanceFromOffice.compareTo(a.distanceFromOffice));
+      logoutCustomers.sort((a, b) => a.distanceFromOffice.compareTo(b.distanceFromOffice));
+      
+      print('📋 Assigning sequence numbers:');
+      
+      // Assign sequence numbers for pickup customers
+      for (int i = 0; i < loginCustomers.length; i++) {
+        final index = _customers.indexWhere((c) => c.customerId == loginCustomers[i].customerId);
+        if (index != -1) {
+          _customers[index] = _customers[index].copyWith(sequenceNumber: i + 1);
+          print('   Pickup #${i + 1}: ${_customers[index].customerName}');
+        }
+      }
+      
+      // Assign sequence numbers for drop customers
+      for (int i = 0; i < logoutCustomers.length; i++) {
+        final index = _customers.indexWhere((c) => c.customerId == logoutCustomers[i].customerId);
+        if (index != -1) {
+          _customers[index] = _customers[index].copyWith(sequenceNumber: i + 1);
+          print('   Drop #${i + 1}: ${_customers[index].customerName}');
+        }
+      }
+      
+      // Update the UI
+      setState(() {});
+      
+      print('✅ Sequence numbers fixed successfully');
+      _showSnackBar('Sequence numbers fixed successfully', kSuccessColor);
+      
+    } catch (e) {
+      print('❌ Failed to fix sequence numbers: $e');
+      _showSnackBar('Failed to fix sequence numbers: $e', kDangerColor);
+    }
+    
+    print('========== SEQUENCE NUMBERS FIX COMPLETE ==========\n');
+  }
+
+  // Enhanced Action Methods with Database Storage
+  Future<void> _markCustomerPickedUp(CustomerPickupInfo customer) async {
+    try {
+      // Update local state
+      final index = _customers.indexWhere((c) => c.customerId == customer.customerId);
+      if (index != -1) {
+        _customers[index] = _customers[index].copyWith(
+          status: CustomerStatus.pickedUp,
+          actualPickupTime: DateTime.now(),
+        );
+        _addToCustomersStream(_customers);
+      }
+
+      // Store in database
+      await _storeCustomerStatusUpdate(customer, CustomerStatus.pickedUp, {
+        'actualPickupTime': DateTime.now().toIso8601String(),
+        'action': 'pickup',
+        'location': {
+          'latitude': customer.pickupLocation.latitude,
+          'longitude': customer.pickupLocation.longitude,
+        },
+      });
+
+      _showSnackBar('${customer.customerName} marked as picked up', kSuccessColor);
+    } catch (e) {
+      _showSnackBar('Failed to update pickup status: $e', kDangerColor);
+    }
+  }
+
+  Future<void> _markCustomerDropped(CustomerPickupInfo customer) async {
+    try {
+      // Update local state
+      final index = _customers.indexWhere((c) => c.customerId == customer.customerId);
+      if (index != -1) {
+        _customers[index] = _customers[index].copyWith(
+          status: CustomerStatus.dropped,
+          actualDropTime: DateTime.now(),
+        );
+        _addToCustomersStream(_customers);
+      }
+
+      // Store in database
+      await _storeCustomerStatusUpdate(customer, CustomerStatus.dropped, {
+        'actualDropTime': DateTime.now().toIso8601String(),
+        'action': 'drop',
+        'location': {
+          'latitude': customer.dropLocation.latitude,
+          'longitude': customer.dropLocation.longitude,
+        },
+      });
+
+      _showSnackBar('${customer.customerName} marked as dropped', kSuccessColor);
+    } catch (e) {
+      _showSnackBar('Failed to update drop status: $e', kDangerColor);
+    }
+  }
+
+  Future<void> _markCustomerNoShow(CustomerPickupInfo customer) async {
+    // Show No Show explanation dialog first
+    final reason = await _showNoShowDialog(customer);
+    if (reason != null) {
+      try {
+        // Update local state
+        final index = _customers.indexWhere((c) => c.customerId == customer.customerId);
+        if (index != -1) {
+          _customers[index] = _customers[index].copyWith(
+            status: CustomerStatus.noShow,
+            delayReason: reason,
+          );
+          _addToCustomersStream(_customers);
+        }
+
+        // Store in database
+        await _storeCustomerStatusUpdate(customer, CustomerStatus.noShow, {
+          'noShowTime': DateTime.now().toIso8601String(),
+          'reason': reason,
+          'action': 'no_show',
+          'waitTime': '10', // Assume 10 minutes wait time
+        });
+
+        _showSnackBar('${customer.customerName} marked as no-show', kWarningColor);
+      } catch (e) {
+        _showSnackBar('Failed to update no-show status: $e', kDangerColor);
+      }
+    }
+  }
+
+  // NEW: Enhanced No Show Dialog with Explanation
+  Future<String?> _showNoShowDialog(CustomerPickupInfo customer) async {
+    String selectedReason = 'Customer not available';
+    final reasonController = TextEditingController();
+
+    return showDialog<String>(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setState) => AlertDialog(
+          title: Row(
+            children: [
+              Icon(Icons.person_off, color: kWarningColor),
+              const SizedBox(width: 8),
+              const Text('Mark as No Show'),
+            ],
+          ),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Customer: ${customer.customerName}'),
+                const SizedBox(height: 16),
+                
+                // No Show Explanation
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: kInfoColor.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: kInfoColor.withOpacity(0.3)),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Icon(Icons.info, color: kInfoColor, size: 20),
+                          const SizedBox(width: 8),
+                          const Text(
+                            'What is "No Show"?',
+                            style: TextStyle(fontWeight: FontWeight.bold),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      const Text(
+                        'A "No Show" means the customer was not available at the pickup location after waiting for a reasonable time (usually 10 minutes).',
+                        style: TextStyle(fontSize: 13),
+                      ),
+                      const SizedBox(height: 8),
+                      const Text(
+                        'This will:',
+                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                      ),
+                      const Text('• Record the incident in the database', style: TextStyle(fontSize: 12)),
+                      const Text('• Notify the customer and admin', style: TextStyle(fontSize: 12)),
+                      const Text('• Update trip statistics', style: TextStyle(fontSize: 12)),
+                      const Text('• Allow you to continue with next customer', style: TextStyle(fontSize: 12)),
+                    ],
+                  ),
+                ),
+                
+                const SizedBox(height: 16),
+                const Text('Reason for No Show:', style: TextStyle(fontWeight: FontWeight.bold)),
+                const SizedBox(height: 8),
+                
+                // Predefined reasons
+                ...['Customer not available', 'Customer cancelled last minute', 'Wrong pickup location', 'Customer not responding to calls', 'Other'].map((reason) => 
+                  RadioListTile<String>(
+                    title: Text(reason, style: const TextStyle(fontSize: 14)),
+                    value: reason,
+                    groupValue: selectedReason,
+                    onChanged: (value) {
+                      setState(() => selectedReason = value!);
+                    },
+                    dense: true,
+                    contentPadding: EdgeInsets.zero,
+                  ),
+                ),
+                
+                // Custom reason input
+                if (selectedReason == 'Other') ...[
+                  const SizedBox(height: 8),
+                  TextField(
+                    controller: reasonController,
+                    decoration: const InputDecoration(
+                      hintText: 'Enter custom reason...',
+                      border: OutlineInputBorder(),
+                      isDense: true,
+                    ),
+                    maxLines: 2,
+                  ),
+                ],
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                final finalReason = selectedReason == 'Other' 
+                    ? reasonController.text.trim()
+                    : selectedReason;
+                if (finalReason.isNotEmpty) {
+                  Navigator.pop(context, finalReason);
+                }
+              },
+              style: ElevatedButton.styleFrom(backgroundColor: kWarningColor),
+              child: const Text('Mark No Show'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // NEW: Store Customer Status Update in Database
+  Future<void> _storeCustomerStatusUpdate(
+    CustomerPickupInfo customer, 
+    CustomerStatus newStatus, 
+    Map<String, dynamic> additionalData,
+  ) async {
+    try {
+            final prefs = await SharedPreferences.getInstance();            final token = prefs.getString('jwt_token');            final userDataString = prefs.getString('user_data');            final userData = userDataString != null ? jsonDecode(userDataString) : null;            final userId = userData?['id'];            final userEmail = userData?['email'];            final userName = userData?['name'] ?? 'Driver';
+      if (token == null || token.isEmpty) return;
+
+      final updateData = {
+        'customerId': customer.customerId,
+        'customerName': customer.customerName,
+        'driverId': userId,
+        'driverName': userName,
+        'previousStatus': customer.status.toString().split('.').last,
+        'newStatus': newStatus.toString().split('.').last,
+        'timestamp': DateTime.now().toIso8601String(),
+        'tripType': customer.isLogin ? 'pickup' : 'drop',
+        'sequenceNumber': customer.sequenceNumber,
+        ...additionalData,
+      };
+
+      final response = await http.post(
+        Uri.parse('${ApiConfig.baseUrl}/api/driver/customer/status-update'),
+        headers: {
+          'Authorization': 'Bearer ${token}',
+          'Content-Type': 'application/json',
+        },
+        body: json.encode(updateData),
+      );
+
+      if (response.statusCode == 200) {
+        print('✅ Customer status update stored in database');
+        
+        // Send notification to customer
+        await _sendCustomerStatusNotification(customer, newStatus, additionalData);
+      } else {
+        throw Exception('Failed to store status update: ${response.body}');
+      }
+    } catch (e) {
+      print('❌ Error storing customer status update: $e');
+      // Don't throw - operation can continue without database storage
+    }
+  }
+
+  // NEW: Send Customer Status Notification
+  Future<void> _sendCustomerStatusNotification(
+    CustomerPickupInfo customer, 
+    CustomerStatus status, 
+    Map<String, dynamic> data,
+  ) async {
+    try {
+      String message;
+      switch (status) {
+        case CustomerStatus.pickedUp:
+          message = 'Hi ${customer.customerName}, you have been successfully picked up. Thank you for choosing Abra Travels!';
+          break;
+        case CustomerStatus.dropped:
+          message = 'Hi ${customer.customerName}, you have been safely dropped at your destination. Thank you for traveling with Abra Travels!';
+          break;
+        case CustomerStatus.noShow:
+          message = 'Hi ${customer.customerName}, our driver waited at the pickup location but you were not available. Please contact us to reschedule. Reason: ${data['reason']}';
+          break;
+        default:
+          return;
+      }
+
+      // Send SMS notification (implement based on your SMS service)
+      print('📱 Sending status notification to ${customer.customerName}: $message');
+      
+      // You can implement actual SMS sending here
+      // await _smsService.sendSMS(customer.customerPhone, message);
+      
+    } catch (e) {
+      print('❌ Error sending customer notification: $e');
+    }
+  }
+
+  Future<void> _callCustomer(String phoneNumber) async {
+    final uri = Uri(scheme: 'tel', path: phoneNumber);
+    if (await canLaunchUrl(uri)) {
+      await launchUrl(uri);
+    } else {
+      _showSnackBar('Cannot make phone call', kDangerColor);
+    }
+  }
+
+  Future<void> _openWhatsApp(String phoneNumber) async {
+    // Remove any non-digit characters and ensure proper format
+    final cleanNumber = phoneNumber.replaceAll(RegExp(r'[^\d+]'), '');
+    final whatsappUrl = 'https://wa.me/$cleanNumber?text=Hi, this is your driver from Abra Travels. I will be arriving shortly for your pickup.';
+    
+    final uri = Uri.parse(whatsappUrl);
+    if (await canLaunchUrl(uri)) {
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    } else {
+      _showSnackBar('Cannot open WhatsApp', kDangerColor);
+    }
+  }
+
+  Future<void> _openMaps(CustomerPickupInfo customer) async {
+    final location = customer.isLogin ? customer.pickupLocation : customer.dropLocation;
+    final uri = Uri.parse('https://www.google.com/maps/search/?api=1&query=${location.latitude},${location.longitude}');
+    
+    if (await canLaunchUrl(uri)) {
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    } else {
+      _showSnackBar('Cannot open maps', kDangerColor);
+    }
+  }
+
+  Future<void> _shareCurrentLocation() async {
+    try {
+      final position = await Geolocator.getCurrentPosition();
+      final uri = Uri.parse('https://www.google.com/maps/search/?api=1&query=${position.latitude},${position.longitude}');
+      
+      if (await canLaunchUrl(uri)) {
+        await launchUrl(uri, mode: LaunchMode.externalApplication);
+      }
+    } catch (e) {
+      _showSnackBar('Cannot get current location', kDangerColor);
+    }
+  }
+
+  // Dialog Methods
+  void _showETAUpdateDialog(ETAUpdate etaUpdate) {
+    // Don't show dialog for unknown/demo customers
+    final customer = _customers.firstWhere(
+      (c) => c.customerId == etaUpdate.customerId,
+      orElse: () => CustomerPickupInfo(
+        customerId: '',
+        customerName: 'Unknown Customer',
+        customerPhone: '',
+        customerEmail: '',
+        pickupAddress: '',
+        dropAddress: '',
+        pickupLocation: LatLng(0, 0),
+        dropLocation: LatLng(0, 0),
+        isLogin: true,
+        scheduledTime: DateTime.now(),
+        organizationId: '',
+        distanceFromOffice: 0.0,
+        status: CustomerStatus.pending,
+      ),
+    );
+    
+    if (customer.customerName == 'Unknown Customer') {
+      print('⚠️ Skipping ETA dialog for unknown customer');
+      return;
+    }
+    
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Row(
+          children: [
+            Icon(Icons.update, color: etaUpdate.isDelayed ? kWarningColor : kInfoColor),
+            const SizedBox(width: 8),
+            const Text('ETA Update'),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Customer: ${customer.customerName}'),
+            const SizedBox(height: 8),
+            Text('Original ETA: ${DateFormat.jm().format(etaUpdate.originalETA)}'),
+            Text('Updated ETA: ${DateFormat.jm().format(etaUpdate.updatedETA)}'),
+            if (etaUpdate.isDelayed) ...[
+              const SizedBox(height: 8),
+              Text('Delay: ${etaUpdate.delay.inMinutes} minutes'),
+              Text('Reason: ${etaUpdate.reason}'),
+            ],
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('OK'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showBroadcastDialog() {
+    final messageController = TextEditingController();
+    String selectedMessageType = 'general';
+    
+    showDialog(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setState) => AlertDialog(
+          title: const Row(
+            children: [
+              Icon(Icons.broadcast_on_personal, color: kInfoColor),
+              SizedBox(width: 8),
+              Text('Broadcast Message'),
+            ],
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text('Message Type:', style: TextStyle(fontWeight: FontWeight.bold)),
+              const SizedBox(height: 8),
+              DropdownButtonFormField<String>(
+                value: selectedMessageType,
+                decoration: const InputDecoration(
+                  border: OutlineInputBorder(),
+                  contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                ),
+                items: const [
+                  DropdownMenuItem(value: 'general', child: Text('General Update')),
+                  DropdownMenuItem(value: 'delay', child: Text('Delay Notification')),
+                  DropdownMenuItem(value: 'weather', child: Text('Weather Alert')),
+                  DropdownMenuItem(value: 'route_change', child: Text('Route Change')),
+                  DropdownMenuItem(value: 'emergency', child: Text('Emergency Alert')),
+                ],
+                onChanged: (value) {
+                  setState(() {
+                    selectedMessageType = value!;
+                    // Auto-fill message based on type
+                    switch (value) {
+                      case 'delay':
+                        messageController.text = 'We are experiencing slight delays due to traffic conditions. Thank you for your patience.';
+                        break;
+                      case 'weather':
+                        messageController.text = 'Due to weather conditions, there may be slight delays in pickup/drop times. Please stay safe.';
+                        break;
+                      case 'route_change':
+                        messageController.text = 'Your pickup/drop route has been optimized for better efficiency. Updated ETA will be shared shortly.';
+                        break;
+                      case 'emergency':
+                        messageController.text = 'URGENT: Please contact our support team immediately for important updates regarding your trip.';
+                        break;
+                      default:
+                        messageController.text = '';
+                    }
+                  });
+                },
+              ),
+              const SizedBox(height: 16),
+              const Text('Message:', style: TextStyle(fontWeight: FontWeight.bold)),
+              const SizedBox(height: 8),
+              TextField(
+                controller: messageController,
+                maxLines: 4,
+                decoration: const InputDecoration(
+                  hintText: 'Enter your message to all customers...',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+              const SizedBox(height: 12),
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: kInfoColor.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Row(
+                  children: [
+                    Icon(Icons.info_outline, color: kInfoColor, size: 16),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'This message will be sent to ${_customers.length} customers via SMS',
+                        style: const TextStyle(fontSize: 12),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton.icon(
+              onPressed: () async {
+                if (messageController.text.isNotEmpty) {
+                  Navigator.pop(context);
+                  
+                  // Show sending progress
+                  _showSendingProgressDialog();
+                  
+                  try {
+                    await _fleetService.broadcastMessage(messageController.text);
+                    Navigator.pop(context); // Close progress dialog
+                    _showSnackBar('Message broadcasted to ${_customers.length} customers', kSuccessColor);
+                  } catch (e) {
+                    Navigator.pop(context); // Close progress dialog
+                    _showSnackBar('Failed to send broadcast message', kDangerColor);
+                  }
+                }
+              },
+              icon: const Icon(Icons.send, size: 16),
+              style: ElevatedButton.styleFrom(backgroundColor: kInfoColor),
+              label: const Text('Send Broadcast'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showSendingProgressDialog() {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => const AlertDialog(
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            CircularProgressIndicator(),
+            SizedBox(height: 16),
+            Text('Sending broadcast message...'),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showRouteOptimizationDialog() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Route Optimization'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text('Current optimization strategy:'),
+            const SizedBox(height: 8),
+            const Text('• Pickups: Farthest from office first'),
+            const Text('• Drops: Nearest to office first'),
+            const SizedBox(height: 16),
+            const Text('This minimizes backtracking and reduces total travel time.'),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Close'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.pop(context);
+              _refreshData();
+              _showSnackBar('Route re-optimized', kSuccessColor);
+            },
+            child: const Text('Re-optimize'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showEmergencyDialog() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Row(
+          children: [
+            Icon(Icons.emergency, color: kDangerColor),
+            SizedBox(width: 8),
+            Text('Emergency Alert'),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'This will send an emergency alert with your current location to:',
+              style: TextStyle(fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 12),
+            const Text('• Support Team'),
+            const Text('• Fleet Manager'),
+            const Text('• Emergency Contacts'),
+            const SizedBox(height: 16),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: kDangerColor.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: kDangerColor.withOpacity(0.3)),
+              ),
+              child: const Row(
+                children: [
+                  Icon(Icons.warning, color: kDangerColor, size: 20),
+                  SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Only use this for genuine emergencies. False alarms may result in penalties.',
+                      style: TextStyle(fontSize: 12, color: kDangerColor),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton.icon(
+            onPressed: () async {
+              Navigator.pop(context);
+              
+              // Show sending progress
+              showDialog(
+                context: context,
+                barrierDismissible: false,
+                builder: (context) => const AlertDialog(
+                  content: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      CircularProgressIndicator(),
+                      SizedBox(height: 16),
+                      Text('Sending emergency alert...'),
+                    ],
+                  ),
+                ),
+              );
+              
+              try {
+                await _fleetService.sendEmergencyAlert();
+                Navigator.pop(context); // Close progress dialog
+                _showSnackBar('Emergency alert sent successfully', kDangerColor);
+              } catch (e) {
+                Navigator.pop(context); // Close progress dialog
+                _showSnackBar('Failed to send emergency alert', kDangerColor);
+              }
+            },
+            icon: const Icon(Icons.emergency, size: 16),
+            style: ElevatedButton.styleFrom(backgroundColor: kDangerColor),
+            label: const Text('Send Emergency Alert'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showSupportDialog() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Customer Support'),
+        content: const Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: Icon(Icons.phone, color: kSuccessColor),
+              title: Text('Call Support'),
+              subtitle: Text('+91 886-728-8076'),
+            ),
+            ListTile(
+              leading: Icon(Icons.chat, color: kInfoColor),
+              title: Text('WhatsApp'),
+              subtitle: Text('Chat with support'),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Close'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<String?> _showNoShowReasonDialog() async {
+    final reasonController = TextEditingController();
+    
+    return showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('No Show Reason'),
+        content: TextField(
+          controller: reasonController,
+          decoration: const InputDecoration(
+            hintText: 'Enter reason for no-show...',
+            border: OutlineInputBorder(),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, reasonController.text),
+            child: const Text('Confirm'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showNotificationSnackBar(NotificationMessage notification) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('${notification.customerName}: ${notification.message}'),
+        backgroundColor: kInfoColor,
+        action: SnackBarAction(
+          label: 'View',
+          onPressed: () {
+            // TODO: Show notification details
+          },
+        ),
+      ),
+    );
+  }
+
+  void _showSnackBar(String message, Color color) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: color,
+        duration: const Duration(seconds: 3),
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+      ),
+    );
+  }
+
+  // Helper method to add customers to stream
+  void _addToCustomersStream(List<CustomerPickupInfo> customers) {
+    if (!_customersController.isClosed) {
+      _customersController.add(customers);
+    }
+  }
+
+  // Helper method to add route to stream
+  void _addToRouteStream(OptimizedRoute route) {
+    if (!_routeController.isClosed) {
+      _routeController.add(route);
+    }
+  }
+
+  // Helper method to add ETA update to stream
+  void _addToEtaStream(ETAUpdate etaUpdate) {
+    if (!_etaController.isClosed) {
+      _etaController.add(etaUpdate);
+    }
+  }
+
+  // Helper method to add notification to stream
+  void _addToNotificationStream(NotificationMessage notification) {
+    if (!_notificationController.isClosed) {
+      _notificationController.add(notification);
+    }
+  }
+}

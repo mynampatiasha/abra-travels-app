@@ -1,0 +1,547 @@
+// ============================================================================
+// VEHICLE MASTER SCREEN - REDESIGNED
+// UI Similar to driver_list_page.dart with MORE cell spacing & padding
+// Advanced Filters: 2 Rows (Country/State/City + Vehicle-specific)
+// Export: Excel, PDF, WhatsApp
+// Horizontal Scrolling: Cursor-based
+// ============================================================================
+
+import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:abra_fleet/features/admin/vehicle_admin_management/vehicle_master/add_vehicle.dart';
+import 'package:abra_fleet/features/admin/vehicle_admin_management/vehicle_master/bulk_import_vehicles.dart';
+import 'package:abra_fleet/features/admin/vehicle_admin_management/maintainace_managemnt/maintainance_management.dart';
+import 'package:abra_fleet/core/services/vehicle_service.dart';
+import 'package:abra_fleet/core/services/document_storage_service.dart';
+import 'package:abra_fleet/features/admin/widgets/country_state_city_filter.dart';
+import 'package:file_picker/file_picker.dart';
+import 'package:url_launcher/url_launcher.dart';
+import 'package:http/http.dart' as http;
+import 'package:shared_preferences/shared_preferences.dart';
+import 'dart:convert';
+import 'dart:io';
+import 'dart:async';
+import 'package:excel/excel.dart' as excel;
+import 'package:path_provider/path_provider.dart';
+import 'package:universal_html/html.dart' as html show AnchorElement, Blob, Url;
+import 'package:intl/intl.dart';
+import 'package:pdf/pdf.dart';
+import 'package:pdf/widgets.dart' as pw;
+import 'package:printing/printing.dart';
+
+// ============================================================================
+// COLOR SCHEME - Same as driver_list_page.dart
+// ============================================================================
+const Color primaryColor = Color(0xFF1B7FA8);
+const Color darkPrimaryColor = Color(0xFF0D5A7A);
+const Color accentColor = Color(0xFF2D3E50);
+const Color lightBackgroundColor = Color(0xFFF5F9FA);
+const Color cardBackgroundColor = Colors.white;
+const Color borderColor = Color(0xFFE0E0E0);
+const Color textPrimaryColor = Color(0xFF2D3E50);
+const Color textSecondaryColor = Color(0xFF6B7280);
+
+// ============================================================================
+// VEHICLE DATA MODEL
+// ============================================================================
+class _VehicleData {
+  final String id;
+  final String vehicleId;
+  final String registration;
+  final String type;
+  final String model;
+  final String status;
+  final String year;
+  final String engineType;
+  final String engineCapacity;
+  final String seatingCapacity;
+  final String mileage;
+  final String lastServiceDate;
+  final String nextServiceDue;
+  final String? assignedDriverName;
+  final String? assignedDriverId;
+  final DateTime? onboardedDate;
+  final List<Map<String, dynamic>> documents;
+  final String? vendor;
+  final int assignedCustomersCount;
+  final int maintenanceScheduleCount;
+  final String? country;
+  final String? state;
+  final String? city;
+
+  const _VehicleData({
+    required this.id,
+    required this.vehicleId,
+    required this.registration,
+    required this.type,
+    required this.model,
+    required this.status,
+    required this.year,
+    required this.engineType,
+    required this.engineCapacity,
+    required this.seatingCapacity,
+    required this.mileage,
+    required this.lastServiceDate,
+    required this.nextServiceDue,
+    this.assignedDriverName,
+    this.assignedDriverId,
+    this.onboardedDate,
+    this.documents = const [],
+    this.vendor,
+    this.assignedCustomersCount = 0,
+    this.maintenanceScheduleCount = 0,
+    this.country,
+    this.state,
+    this.city,
+  });
+
+  bool get hasExpiredDocuments {
+    final now = DateTime.now();
+    return documents.any((doc) {
+      final expiryDate = doc['expiryDate'];
+      return expiryDate != null && DateTime.parse(expiryDate).isBefore(now);
+    });
+  }
+
+    return _VehicleData(
+      id: mongoId,
+      vehicleId: data['vehicleId'] ?? '',
+      registration: data['registrationNumber'] ?? '',
+      type: (data['type'] ?? '').toString().toUpperCase(),
+      model: '${data['make'] ?? ''} ${data['model'] ?? ''}'.trim(),
+      status: (data['status'] ?? 'active').toString().toUpperCase(),
+      year: (data['year'] ?? data['yearOfManufacture'] ?? '').toString(),
+      engineType: data['specifications']?['engineType'] ?? data['engineType'] ?? '',
+      engineCapacity: (data['specifications']?['engineCapacity'] ?? data['engineCapacity'] ?? '').toString(),
+      seatingCapacity: (() {
+        try {
+          if (data['seatCapacity'] != null) {
+            return data['seatCapacity'].toString();
+          }
+          
+          if (data['seatingCapacity'] != null) {
+            return data['seatingCapacity'].toString();
+          }
+          
+          if (data['capacity'] != null) {
+            final capacity = data['capacity'];
+            if (capacity is Map && capacity['passengers'] != null) {
+              return capacity['passengers'].toString();
+            } else if (capacity is num) {
+              return capacity.toString();
+            } else {
+              return capacity.toString();
+            }
+          }
+          
+          return '4';
+        } catch (e) {
+          print('Error parsing seating capacity: $e');
+          return '4';
+        }
+      })(),
+      mileage: (data['specifications']?['mileage'] ?? data['mileage'] ?? '').toString(),
+      lastServiceDate: data['maintenance']?['lastServiceDate'] != null 
+          ? DateTime.parse(data['maintenance']['lastServiceDate']).toString().split(' ')[0]
+          : '-',
+      nextServiceDue: data['maintenance']?['nextServiceDue'] != null
+          ? DateTime.parse(data['maintenance']['nextServiceDue']).toString().split(' ')[0]
+          : '-',
+      assignedDriverName: driverName,
+      assignedDriverId: driverId,
+      onboardedDate: onboarded,
+      documents: vehicleDocs,
+      vendor: data['vendor'],
+      assignedCustomersCount: assignedCount,
+      maintenanceScheduleCount: maintenanceCount,
+      country: data['country'],
+      state: data['state'],
+      city: data['city'],
+    );
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    _filterAnimationController.dispose();
+    _horizontalScrollController.dispose();
+    _refreshTimer?.cancel();
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      print('🔄 Vehicle Master: App resumed, refreshing vehicles...');
+      _loadVehicles();
+    }
+  }
+
+  void _startAutoRefresh() {
+    _refreshTimer = Timer.periodic(const Duration(seconds: 30), (timer) {
+      if (mounted && !_isLoading) {
+        print('🔄 Vehicle Master: Auto-refresh triggered (every 30s)');
+        _loadVehicles();
+      }
+    });
+  }
+
+  // ============================================================================
+  // API METHODS
+  // ============================================================================
+  Future<void> _loadVehicles() async {
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+    });
+
+    try {
+      final response = await _vehicleService.getVehicles(limit: 100);
+      
+      if (response['success'] == true) {
+        final List<dynamic> vehiclesData = response['data'] ?? [];
+        setState(() {
+          _vehicleData = vehiclesData
+              .map((vehicle) => _VehicleData.fromBackend(vehicle))
+              .toList();
+          _applyFilters();
+          _isLoading = false;
+          _lastRefreshTime = DateTime.now();
+        });
+      } else {
+        setState(() {
+          _errorMessage = response['message'] ?? 'Failed to load vehicles';
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      setState(() {
+        _errorMessage = 'Error loading vehicles: $e';
+        _isLoading = false;
+      });
+    }
+  }
+
+  // ============================================================================
+  // FILTER LOGIC
+  // ============================================================================
+  void _applyFilters() {
+    final searchQuery = _searchController.text.toLowerCase().trim();
+    
+    _filteredVehicleData = _vehicleData.where((vehicle) {
+      // Search filter
+      if (searchQuery.isNotEmpty) {
+        final seatCapacity = int.tryParse(vehicle.seatingCapacity) ?? 4;
+        final driverSeats = vehicle.assignedDriverName != null ? 1 : 0;
+        final assignedCustomers = vehicle.assignedCustomersCount;
+        final availableSeats = seatCapacity - driverSeats - assignedCustomers;
+        
+        final matchesSearch = 
+          vehicle.vehicleId.toLowerCase().contains(searchQuery) ||
+          vehicle.registration.toLowerCase().contains(searchQuery) ||
+          vehicle.type.toLowerCase().contains(searchQuery) ||
+          vehicle.model.toLowerCase().contains(searchQuery) ||
+          vehicle.status.toLowerCase().contains(searchQuery) ||
+          vehicle.year.toLowerCase().contains(searchQuery) ||
+          vehicle.engineType.toLowerCase().contains(searchQuery) ||
+          vehicle.engineCapacity.toLowerCase().contains(searchQuery) ||
+          vehicle.mileage.toLowerCase().contains(searchQuery) ||
+          (vehicle.vendor?.toLowerCase().contains(searchQuery) ?? false) ||
+          (vehicle.assignedDriverName?.toLowerCase().contains(searchQuery) ?? false) ||
+          vehicle.seatingCapacity.contains(searchQuery) ||
+          availableSeats.toString().contains(searchQuery) ||
+          '$availableSeats/$seatCapacity'.contains(searchQuery) ||
+          vehicle.lastServiceDate.toLowerCase().contains(searchQuery) ||
+          vehicle.nextServiceDue.toLowerCase().contains(searchQuery);
+        
+        if (!matchesSearch) return false;
+      }
+      
+      // Status filter
+      if (_selectedStatusFilter != 'All' && 
+          vehicle.status.toUpperCase() != _selectedStatusFilter.toUpperCase()) {
+        return false;
+      }
+      
+      // Type filter
+      if (_selectedTypeFilter != 'All' && 
+          vehicle.type.toUpperCase() != _selectedTypeFilter.toUpperCase()) {
+        return false;
+      }
+      
+      // Vendor filter
+      if (_selectedVendorFilter == 'Own Fleet' && vehicle.vendor != null && vehicle.vendor!.isNotEmpty) {
+        return false;
+      } else if (_selectedVendorFilter == 'Vendor' && (vehicle.vendor == null || vehicle.vendor!.isEmpty)) {
+        return false;
+      }
+      
+      // Driver filter
+      if (_selectedDriverFilter == 'Assigned' && vehicle.assignedDriverName == null) {
+        return false;
+      } else if (_selectedDriverFilter == 'Not Assigned' && vehicle.assignedDriverName != null) {
+        return false;
+      }
+      
+      // Document filter
+      if (_selectedDocumentFilter == 'Expired Documents' && !vehicle.hasExpiredDocuments) {
+        return false;
+      } else if (_selectedDocumentFilter == 'Expiring Soon' && !vehicle.hasExpiringSoonDocuments) {
+        return false;
+      } else if (_selectedDocumentFilter == 'All Valid' && 
+                 (vehicle.hasExpiredDocuments || vehicle.hasExpiringSoonDocuments)) {
+        return false;
+      } else if (_selectedDocumentFilter == 'No Documents' && vehicle.documents.isNotEmpty) {
+        return false;
+      }
+      
+      // Location filters (Country → State → City hierarchy)
+      if (_selectedCountry != null && _selectedCountry!.isNotEmpty) {
+        if (vehicle.country == null || 
+            !vehicle.country!.toLowerCase().contains(_selectedCountry!.toLowerCase())) {
+          return false;
+        }
+      }
+      
+      if (_selectedState != null && _selectedState!.isNotEmpty) {
+        if (vehicle.state == null || 
+            !vehicle.state!.toLowerCase().contains(_selectedState!.toLowerCase())) {
+          return false;
+        }
+      }
+      
+      if (_selectedCity != null && _selectedCity!.isNotEmpty) {
+        if (vehicle.city == null || 
+            !vehicle.city!.toLowerCase().contains(_selectedCity!.toLowerCase())) {
+          return false;
+        }
+      }
+      
+      // Date range filter
+      if (_startDate != null && _endDate != null && vehicle.onboardedDate != null) {
+        if (vehicle.onboardedDate!.isBefore(_startDate!) || 
+            vehicle.onboardedDate!.isAfter(_endDate!)) {
+          return false;
+        }
+      }
+      
+      return true;
+    }).toList();
+    
+    setState(() {});
+  }
+
+  void _updateFilter(String filterType, String value) {
+    setState(() {
+      if (filterType == 'status') {
+        _selectedStatusFilter = value;
+      } else if (filterType == 'document') {
+        _selectedDocumentFilter = value;
+      } else if (filterType == 'vendor') {
+        _selectedVendorFilter = value;
+      } else if (filterType == 'driver') {
+        _selectedDriverFilter = value;
+      } else if (filterType == 'type') {
+        _selectedTypeFilter = value;
+      }
+      _applyFilters();
+    });
+  }
+
+  void _clearAllFilters() {
+    setState(() {
+      _selectedStatusFilter = 'All';
+      _selectedDocumentFilter = 'All';
+      _selectedVendorFilter = 'All';
+      _selectedDriverFilter = 'All';
+      _selectedTypeFilter = 'All';
+      _selectedCountry = null;
+      _selectedState = null;
+      _selectedCity = null;
+      _selectedArea = null;
+      _startDate = null;
+      _endDate = null;
+      _searchController.clear();
+      _applyFilters();
+    });
+  }
+
+  void _toggleAdvancedFilters() {
+    setState(() {
+      _showAdvancedFilters = !_showAdvancedFilters;
+      if (_showAdvancedFilters) {
+        _filterAnimationController.forward();
+      } else {
+        _filterAnimationController.reverse();
+      }
+    });
+  }
+
+  int _getActiveFilterCount() {
+    int count = 0;
+    if (_selectedStatusFilter != 'All') count++;
+    if (_selectedDocumentFilter != 'All') count++;
+    if (_selectedVendorFilter != 'All') count++;
+    if (_selectedDriverFilter != 'All') count++;
+    if (_selectedTypeFilter != 'All') count++;
+    if (_selectedCountry != null && _selectedCountry!.isNotEmpty) count++;
+    if (_selectedState != null && _selectedState!.isNotEmpty) count++;
+    if (_selectedCity != null && _selectedCity!.isNotEmpty) count++;
+    if (_startDate != null && _endDate != null) count++;
+    return count;
+  }
+
+  // ============================================================================
+  // EXCEL EXPORT
+  // ============================================================================
+  Future<void> _exportToExcel() async {
+    try {
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => Center(
+          child: Container(
+            padding: const EdgeInsets.all(24),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: const Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                CircularProgressIndicator(
+                  valueColor: AlwaysStoppedAnimation<Color>(primaryColor),
+                ),
+                SizedBox(height: 16),
+                Text(
+                  'Generating Excel file...',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                    color: primaryColor,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+
+      var excelFile = excel.Excel.createExcel();
+      var sheet = excelFile['Vehicles'];
+
+      final headers = [
+        'Vehicle ID',
+        'Registration Number',
+        'Vehicle Type',
+        'Make & Model',
+        'Year of Manufacture',
+        'Engine Type',
+        'Engine Capacity (CC)',
+        'Seating Capacity',
+        'Seat Availability',
+        'Mileage (km/l)',
+        'Status',
+        'Vendor',
+        'Assigned Driver',
+        'Assigned Customers',
+        'Last Service Date',
+        'Next Service Due',
+        'Onboarded Date',
+        'Document Status',
+        'Country',
+        'State',
+        'City',
+      ];
+
+      for (var i = 0; i < headers.length; i++) {
+        var cell = sheet.cell(excel.CellIndex.indexByColumnRow(columnIndex: i, rowIndex: 0));
+        cell.value = excel.TextCellValue(headers[i]);
+        cell.cellStyle = excel.CellStyle(
+          bold: true,
+          backgroundColorHex: excel.ExcelColor.fromHexString('#1B7FA8'),
+          fontColorHex: excel.ExcelColor.white,
+        );
+      }
+
+      for (var i = 0; i < _filteredVehicleData.length; i++) {
+        final vehicle = _filteredVehicleData[i];
+        final vehicleMap = vehicle.toMap();
+        
+        for (var j = 0; j < headers.length; j++) {
+          var cell = sheet.cell(excel.CellIndex.indexByColumnRow(columnIndex: j, rowIndex: i + 1));
+          final value = vehicleMap[headers[j]] ?? '';
+          cell.value = excel.TextCellValue(value.toString());
+        }
+      }
+
+      for (var i = 0; i < headers.length; i++) {
+        sheet.setColumnWidth(i, 20);
+      }
+
+      var fileBytes = excelFile.save();
+
+      if (fileBytes == null) {
+        throw Exception('Failed to generate Excel file');
+      }
+
+      if (mounted) Navigator.pop(context);
+
+      if (kIsWeb) {
+        final blob = html.Blob([fileBytes], 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+        final url = html.Url.createObjectUrlFromBlob(blob);
+        final anchor = html.AnchorElement(href: url)
+          ..setAttribute('download', 'Vehicles_Export_${DateTime.now().millisecondsSinceEpoch}.xlsx')
+          ..click();
+        html.Url.revokeObjectUrl(url);
+      } else {
+        final directory = await getApplicationDocumentsDirectory();
+        final filePath = '${directory.path}/Vehicles_Export_${DateTime.now().millisecondsSinceEpoch}.xlsx';
+        final file = File(filePath);
+        await file.writeAsBytes(fileBytes);
+        
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Excel file saved to: $filePath'),
+              backgroundColor: primaryColor,
+              duration: const Duration(seconds: 5),
+              action: SnackBarAction(
+                label: 'Open',
+                textColor: Colors.white,
+                onPressed: () async {
+                  final uri = Uri.file(filePath);
+                  if (await canLaunchUrl(uri)) {
+                    await launchUrl(uri);
+                  }
+                },
+              ),
+            ),
+          );
+        }
+      }
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Successfully exported ${_filteredVehicleData.length} vehicles to Excel'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        Navigator.of(context).popUntil((route) => route.isFirst);
+      }
+      
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error exporting to Excel: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }

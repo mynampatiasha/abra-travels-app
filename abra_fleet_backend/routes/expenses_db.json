@@ -1,0 +1,28 @@
+{
+  "expenses": [
+    {
+      "id": 1,
+      "date": "2026-01-28",
+      "expenseAccount": "Fuel",
+      "amount": 500,
+      "tax": 0,
+      "total": 500,
+      "paidThrough": "Petty Cash",
+      "vendor": "Amazon India",
+      "invoiceNumber": null,
+      "customerName": "Enterprise Ltd",
+      "isBillable": true,
+      "project": null,
+      "markupPercentage": 0,
+      "billableAmount": 500,
+      "reportingTags": [],
+      "notes": null,
+      "isItemized": false,
+      "itemizedExpenses": [],
+      "receiptFile": null,
+      "createdAt": "2026-01-28T16:01:58.815Z",
+      "updatedAt": "2026-01-29T09:19:12.833Z"
+    }
+  ],
+  "idCounter": 2
+}

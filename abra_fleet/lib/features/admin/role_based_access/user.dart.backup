@@ -1,0 +1,1264 @@
+// import 'package:flutter/material.dart';
+// import 'dart:convert';
+// import 'package:http/http.dart' as http;
+// import 'package:firebase_auth/firebase_auth.dart' as auth;
+
+// // ============================================================================
+// // MODELS
+// // ============================================================================
+
+// class User {
+//   final String? id;
+//   final String name;
+//   final String email;
+//   final String? phone;
+//   final String? password;
+//   final String role;
+//   final String status;
+//   final DateTime? lastActive;
+//   final Map<String, dynamic>? customPermissions;
+
+//   User({
+//     this.id,
+//     required this.name,
+//     required this.email,
+//     this.phone,
+//     this.password,
+//     required this.role,
+//     this.status = 'active',
+//     this.lastActive,
+//     this.customPermissions,
+//   });
+
+//   factory User.fromJson(Map<String, dynamic> json) {
+//     return User(
+//       id: json['_id']?.toString() ?? json['id']?.toString(),
+//       name: json['name'] ?? '',
+//       email: json['email'] ?? '',
+//       phone: json['phone'],
+//       password: json['password'],
+//       role: json['role'] ?? '',
+//       status: json['status'] ?? 'active',
+//       lastActive: json['lastActive'] != null 
+//           ? DateTime.parse(json['lastActive']) 
+//           : null,
+//       customPermissions: json['customPermissions'],
+//     );
+//   }
+
+//   Map<String, dynamic> toJson() {
+//     return {
+//       if (id != null) 'id': id,
+//       'name': name,
+//       'email': email,
+//       if (phone != null) 'phone': phone,
+//       if (password != null) 'password': password,
+//       'role': role,
+//       'status': status,
+//       'lastActive': lastActive?.toIso8601String(),
+//       if (customPermissions != null) 'customPermissions': customPermissions,
+//     };
+//   }
+// }
+
+// class RoleData {
+//   final String id;
+//   final String title;
+//   final String icon;
+//   final Color color;
+//   final int userCount;
+//   final Map<String, List<String>> permissions;
+
+//   RoleData({
+//     required this.id,
+//     required this.title,
+//     required this.icon,
+//     required this.color,
+//     this.userCount = 0,
+//     required this.permissions,
+//   });
+
+//   static Color hexToColor(String hexString) {
+//     final buffer = StringBuffer();
+//     if (hexString.length == 6 || hexString.length == 7) buffer.write('ff');
+//     buffer.write(hexString.replaceFirst('#', ''));
+//     return Color(int.parse(buffer.toString(), radix: 16));
+//   }
+
+//   factory RoleData.fromJson(Map<String, dynamic> json) {
+//     Map<String, List<String>> perms = {};
+//     if (json['permissions'] != null) {
+//       (json['permissions'] as Map<String, dynamic>).forEach((key, value) {
+//         perms[key] = List<String>.from(value);
+//       });
+//     }
+
+//     return RoleData(
+//       id: json['id'] ?? '',
+//       title: json['title'] ?? '',
+//       icon: json['icon'] ?? '👤',
+//       color: hexToColor(json['color'] ?? '#667eea'),
+//       userCount: json['userCount'] ?? 0,
+//       permissions: perms,
+//     );
+//   }
+// }
+
+// // ============================================================================
+// // API SERVICE
+// // ============================================================================
+
+// class ApiService {
+//   // CHANGE THIS TO YOUR BACKEND URL
+//   static const String baseUrl = 'http://localhost:3001/api';
+  
+//   static String? _authToken;
+  
+//   static void setAuthToken(String token) {
+//     _authToken = token;
+//   }
+
+//   static Future<Map<String, String>> _getHeaders() async {
+//     // Get fresh Firebase token
+//     try {
+//       final user = auth.FirebaseAuth.instance.currentUser;
+//       if (user != null) {
+//         final token = await user.getIdToken();
+//         if (token != null) {
+//           _authToken = token;
+//         }
+//       }
+//     } catch (e) {
+//       print('⚠️ Failed to get Firebase token: $e');
+//     }
+    
+//     return {
+//       'Content-Type': 'application/json',
+//       if (_authToken != null) 'Authorization': 'Bearer $_authToken',
+//     };
+//   }
+
+//   // User APIs
+//   static Future<List<User>> getUsers() async {
+//     try {
+//       final headers = await _getHeaders();
+//       final response = await http.get(
+//         Uri.parse('$baseUrl/user-roles'),
+//         headers: headers,
+//       );
+
+//       if (response.statusCode == 200) {
+//         final List<dynamic> data = json.decode(response.body);
+//         return data.map((json) => User.fromJson(json)).toList();
+//       } else {
+//         throw Exception('Failed to load users');
+//       }
+//     } catch (e) {
+//       throw Exception('Error: $e');
+//     }
+//   }
+
+//   static Future<User> createUser(User user) async {
+//     try {
+//       final headers = await _getHeaders();
+//       final response = await http.post(
+//         Uri.parse('$baseUrl/user-roles'),
+//         headers: headers,
+//         body: json.encode(user.toJson()),
+//       );
+
+//       if (response.statusCode == 201 || response.statusCode == 200) {
+//         return User.fromJson(json.decode(response.body));
+//       } else {
+//         throw Exception('Failed to create user');
+//       }
+//     } catch (e) {
+//       throw Exception('Error: $e');
+//     }
+//   }
+
+//   static Future<User> updateUser(String id, User user) async {
+//     try {
+//       final headers = await _getHeaders();
+//       final response = await http.put(
+//         Uri.parse('$baseUrl/user-roles/$id'),
+//         headers: headers,
+//         body: json.encode(user.toJson()),
+//       );
+
+//       if (response.statusCode == 200) {
+//         return User.fromJson(json.decode(response.body));
+//       } else {
+//         throw Exception('Failed to update user');
+//       }
+//     } catch (e) {
+//       throw Exception('Error: $e');
+//     }
+//   }
+
+//   static Future<void> deleteUser(String id) async {
+//     try {
+//       final headers = await _getHeaders();
+//       final response = await http.delete(
+//         Uri.parse('$baseUrl/user-roles/$id'),
+//         headers: headers,
+//       );
+
+//       if (response.statusCode != 200 && response.statusCode != 204) {
+//         throw Exception('Failed to delete user');
+//       }
+//     } catch (e) {
+//       throw Exception('Error: $e');
+//     }
+//   }
+
+//   static Future<User> toggleUserStatus(String id) async {
+//     try {
+//       final headers = await _getHeaders();
+//       final response = await http.patch(
+//         Uri.parse('$baseUrl/user-roles/$id/toggle-status'),
+//         headers: headers,
+//       );
+
+//       if (response.statusCode == 200) {
+//         return User.fromJson(json.decode(response.body));
+//       } else {
+//         throw Exception('Failed to toggle status');
+//       }
+//     } catch (e) {
+//       throw Exception('Error: $e');
+//     }
+//   }
+
+//   static Future<List<RoleData>> getRoles() async {
+//     try {
+//       final headers = await _getHeaders();
+//       final response = await http.get(
+//         Uri.parse('$baseUrl/roles'),
+//         headers: headers,
+//       );
+
+//       if (response.statusCode == 200) {
+//         final List<dynamic> data = json.decode(response.body);
+//         return data.map((json) => RoleData.fromJson(json)).toList();
+//       } else {
+//         throw Exception('Failed to load roles');
+//       }
+//     } catch (e) {
+//       throw Exception('Error: $e');
+//     }
+//   }
+
+//   static Future<List<User>> searchUsers(String query) async {
+//     try {
+//       final headers = await _getHeaders();
+//       final response = await http.get(
+//         Uri.parse('$baseUrl/user-roles/search?q=$query'),
+//         headers: headers,
+//       );
+
+//       if (response.statusCode == 200) {
+//         final List<dynamic> data = json.decode(response.body);
+//         return data.map((json) => User.fromJson(json)).toList();
+//       } else {
+//         throw Exception('Failed to search users');
+//       }
+//     } catch (e) {
+//       throw Exception('Error: $e');
+//     }
+//   }
+// }
+
+// // ============================================================================
+// // MAIN SCREEN
+// // ============================================================================
+
+// class UserRoleAdminAccess extends StatefulWidget {
+//   const UserRoleAdminAccess({Key? key}) : super(key: key);
+
+//   @override
+//   State<UserRoleAdminAccess> createState() => _UserRoleAdminAccessState();
+// }
+
+// class _UserRoleAdminAccessState extends State<UserRoleAdminAccess> {
+//   int _currentTabIndex = 0;
+//   List<User> users = [];
+//   List<RoleData> roles = [];
+//   bool isLoading = true;
+//   String searchQuery = '';
+
+//   @override
+//   void initState() {
+//     super.initState();
+//     _loadData();
+//   }
+
+//   Future<void> _loadData() async {
+//     print('\n📊 LOADING DATA...');
+//     setState(() => isLoading = true);
+//     try {
+//       print('Fetching users...');
+//       final fetchedUsers = await ApiService.getUsers();
+//       print('✅ Fetched ${fetchedUsers.length} users');
+      
+//       print('Fetching roles...');
+//       final fetchedRoles = await ApiService.getRoles();
+//       print('✅ Fetched ${fetchedRoles.length} roles');
+      
+//       setState(() {
+//         users = fetchedUsers;
+//         roles = fetchedRoles;
+//         isLoading = false;
+//       });
+//       print('✅ Data loaded successfully\n');
+//     } catch (e) {
+//       print('❌ Failed to load data: $e\n');
+//       setState(() => isLoading = false);
+//       _showErrorSnackBar('Failed to load data: $e');
+//     }
+//   }
+
+//   void _showErrorSnackBar(String message) {
+//     ScaffoldMessenger.of(context).showSnackBar(
+//       SnackBar(content: Text(message), backgroundColor: Colors.red),
+//     );
+//   }
+
+//   void _showSuccessSnackBar(String message) {
+//     ScaffoldMessenger.of(context).showSnackBar(
+//       SnackBar(content: Text(message), backgroundColor: Colors.green),
+//     );
+//   }
+
+//   // Default permissions for each role when backend data is not available
+//   Map<String, List<String>> _getDefaultPermissions(String roleId) {
+//     switch (roleId) {
+//       case 'superAdmin':
+//         return {
+//           "Fleet Management": ["View all vehicles", "Add/Edit/Delete vehicles", "Assign vehicles to routes", "Vehicle maintenance", "Fleet analytics"],
+//           "Driver Management": ["View all drivers", "Add/Edit/Delete drivers", "Manage driver documents", "Driver performance reports"],
+//           "Route Planning": ["View all routes", "Create/Edit/Delete routes", "Optimize routes", "Route analytics"],
+//           "Customer/Employee": ["View all employees", "Bulk operations", "Manage rosters", "Employee analytics"],
+//           "Billing & Finance": ["View all invoices", "Generate invoices", "Payment tracking", "Audit reports"],
+//           "System Administration": ["User management", "Role management", "System settings", "API access"]
+//         };
+//       case 'orgAdmin':
+//         return {
+//           "Fleet Management": ["View all vehicles", "Add/Edit vehicles", "Assign vehicles", "Fleet reports"],
+//           "Driver Management": ["View all drivers", "Add/Edit drivers", "Driver assignments"],
+//           "Route Planning": ["View all routes", "Create/Edit routes", "Route optimization"],
+//           "Customer/Employee": ["View employees", "Manage rosters", "Employee reports"],
+//           "User Management": ["Create users", "Assign roles", "Manage departments"]
+//         };
+//       case 'fleetManager':
+//         return {
+//           "Fleet Management": ["View vehicles", "Add/Edit vehicles", "Vehicle maintenance", "Fleet reports"],
+//           "Driver Management": ["View drivers", "Assign drivers", "Driver performance"],
+//           "Route Planning": ["View routes", "Vehicle-route assignment"]
+//         };
+//       case 'operations':
+//         return {
+//           "Route Planning": ["View routes", "Create routes", "Modify routes", "Trip scheduling"],
+//           "Real-Time Tracking": ["Live tracking", "Trip monitoring", "Delay management"],
+//           "Driver Management": ["View drivers", "Daily assignments"]
+//         };
+//       case 'hrManager':
+//         return {
+//           "Customer/Employee": ["View employees", "Manage rosters", "Create schedules", "Employee requests"],
+//           "Route Planning": ["View routes", "Employee route assignment"],
+//           "Reports": ["Employee analytics", "Attendance reports"]
+//         };
+//       case 'finance':
+//         return {
+//           "Billing & Finance": ["View all invoices", "Generate invoices", "Payment tracking", "Tax reports"],
+//           "Reports": ["Financial reports", "Audit trails", "Expense analysis"]
+//         };
+//       default:
+//         return {
+//           "Basic Access": ["View dashboard", "Basic operations"]
+//         };
+//     }
+//   }
+
+//   // Get role display information when backend data is not available
+//   Map<String, dynamic> _getRoleDisplayInfo(String roleId) {
+//     switch (roleId) {
+//       case 'superAdmin':
+//         return {'title': 'Super Admin', 'icon': '👑', 'color': Colors.red};
+//       case 'orgAdmin':
+//         return {'title': 'Organization Admin', 'icon': '🏢', 'color': Colors.teal};
+//       case 'fleetManager':
+//         return {'title': 'Fleet Manager', 'icon': '🚛', 'color': Colors.purple};
+//       case 'operations':
+//         return {'title': 'Operations Manager', 'icon': '📊', 'color': Colors.blue};
+//       case 'hrManager':
+//         return {'title': 'HR Manager', 'icon': '👥', 'color': Colors.green};
+//       case 'finance':
+//         return {'title': 'Finance Admin', 'icon': '💰', 'color': Colors.cyan};
+//       default:
+//         return {'title': roleId, 'icon': '👤', 'color': Colors.grey};
+//     }
+//   }
+
+//   @override
+//   Widget build(BuildContext context) {
+//     return Scaffold(
+//       backgroundColor: const Color(0xFFF5F7FA),
+//       body: Column(
+//         children: [
+//           _buildTopBar(),
+//           Expanded(
+//             child: isLoading
+//                 ? const Center(child: CircularProgressIndicator())
+//                 : _currentTabIndex == 0
+//                     ? _buildUsersTab()
+//                     : _buildRolesTab(),
+//           ),
+//         ],
+//       ),
+//     );
+//   }
+
+//   Widget _buildTopBar() {
+//     return Container(
+//       padding: const EdgeInsets.all(20),
+//       decoration: BoxDecoration(
+//         color: Colors.white,
+//         boxShadow: [
+//           BoxShadow(
+//             color: Colors.black.withOpacity(0.05),
+//             blurRadius: 10,
+//           ),
+//         ],
+//       ),
+//       child: Row(
+//         children: [
+//           const Text(
+//             'User & Permission Management',
+//             style: TextStyle(
+//               fontSize: 28,
+//               fontWeight: FontWeight.bold,
+//               color: Color(0xFF2c3e50),
+//             ),
+//           ),
+//           const Spacer(),
+//           // Refresh Button
+//           IconButton(
+//             onPressed: isLoading ? null : _loadData,
+//             icon: Icon(
+//               Icons.refresh,
+//               color: isLoading ? Colors.grey : const Color(0xFF667eea),
+//             ),
+//             tooltip: 'Refresh Data',
+//             iconSize: 28,
+//           ),
+//           const SizedBox(width: 15),
+//           _buildTabButton('👥 User Management', 0),
+//           const SizedBox(width: 10),
+//           _buildTabButton('🔐 Role Settings', 1),
+//         ],
+//       ),
+//     );
+//   }
+
+//   Widget _buildTabButton(String title, int index) {
+//     final isActive = _currentTabIndex == index;
+//     return ElevatedButton(
+//       onPressed: () => setState(() => _currentTabIndex = index),
+//       style: ElevatedButton.styleFrom(
+//         backgroundColor: isActive ? const Color(0xFF667eea) : Colors.grey[200],
+//         foregroundColor: isActive ? Colors.white : Colors.black87,
+//         padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+//         shape: RoundedRectangleBorder(
+//           borderRadius: BorderRadius.circular(8),
+//         ),
+//       ),
+//       child: Text(title),
+//     );
+//   }
+
+//   Widget _buildUsersTab() {
+//     final filteredUsers = searchQuery.isEmpty
+//         ? users
+//         : users.where((user) =>
+//             user.name.toLowerCase().contains(searchQuery.toLowerCase()) ||
+//             user.email.toLowerCase().contains(searchQuery.toLowerCase()))
+//         .toList();
+
+//     return Padding(
+//       padding: const EdgeInsets.all(30),
+//       child: Column(
+//         children: [
+//           _buildActionBar(),
+//           const SizedBox(height: 20),
+//           Expanded(child: _buildUsersTable(filteredUsers)),
+//         ],
+//       ),
+//     );
+//   }
+
+//   Widget _buildActionBar() {
+//     return Row(
+//       mainAxisAlignment: MainAxisAlignment.spaceBetween,
+//       children: [
+//         ElevatedButton.icon(
+//           onPressed: () => _showUserDialog(),
+//           icon: const Icon(Icons.add),
+//           label: const Text('Add New User'),
+//           style: ElevatedButton.styleFrom(
+//             backgroundColor: const Color(0xFF667eea),
+//             foregroundColor: Colors.white,
+//             padding: const EdgeInsets.symmetric(horizontal: 25, vertical: 15),
+//             shape: RoundedRectangleBorder(
+//               borderRadius: BorderRadius.circular(8),
+//             ),
+//           ),
+//         ),
+//         SizedBox(
+//           width: 300,
+//           child: TextField(
+//             onChanged: (value) => setState(() => searchQuery = value),
+//             decoration: InputDecoration(
+//               hintText: 'Search users...',
+//               prefixIcon: const Icon(Icons.search),
+//               border: OutlineInputBorder(
+//                 borderRadius: BorderRadius.circular(8),
+//                 borderSide: const BorderSide(color: Color(0xFFe0e0e0)),
+//               ),
+//               enabledBorder: OutlineInputBorder(
+//                 borderRadius: BorderRadius.circular(8),
+//                 borderSide: const BorderSide(color: Color(0xFFe0e0e0)),
+//               ),
+//               filled: true,
+//               fillColor: Colors.white,
+//             ),
+//           ),
+//         ),
+//       ],
+//     );
+//   }
+
+//   Widget _buildUsersTable(List<User> displayUsers) {
+//     return Container(
+//       decoration: BoxDecoration(
+//         color: Colors.white,
+//         borderRadius: BorderRadius.circular(12),
+//         boxShadow: [
+//           BoxShadow(
+//             color: Colors.black.withOpacity(0.05),
+//             blurRadius: 10,
+//           ),
+//         ],
+//       ),
+//       child: SingleChildScrollView(
+//         scrollDirection: Axis.horizontal,
+//         child: DataTable(
+//           headingRowColor: MaterialStateProperty.all(const Color(0xFFF8F9FA)),
+//           columns: const [
+//             DataColumn(label: Text('Name', style: TextStyle(fontWeight: FontWeight.bold))),
+//             DataColumn(label: Text('Email', style: TextStyle(fontWeight: FontWeight.bold))),
+//             DataColumn(label: Text('Password', style: TextStyle(fontWeight: FontWeight.bold))),
+//             DataColumn(label: Text('Role', style: TextStyle(fontWeight: FontWeight.bold))),
+//             DataColumn(label: Text('Status', style: TextStyle(fontWeight: FontWeight.bold))),
+//             DataColumn(label: Text('Last Active', style: TextStyle(fontWeight: FontWeight.bold))),
+//             DataColumn(label: Text('Actions', style: TextStyle(fontWeight: FontWeight.bold))),
+//           ],
+//           rows: displayUsers.map((user) => _buildUserRow(user)).toList(),
+//         ),
+//       ),
+//     );
+//   }
+
+//   DataRow _buildUserRow(User user) {
+//     final role = roles.firstWhere(
+//       (r) => r.id == user.role,
+//       orElse: () {
+//         final roleInfo = _getRoleDisplayInfo(user.role);
+//         return RoleData(
+//           id: user.role,
+//           title: roleInfo['title'],
+//           icon: roleInfo['icon'],
+//           color: roleInfo['color'],
+//           permissions: _getDefaultPermissions(user.role),
+//         );
+//       },
+//     );
+
+//     return DataRow(cells: [
+//       DataCell(Text(user.name, style: const TextStyle(fontWeight: FontWeight.w600))),
+//       DataCell(Text(user.email)),
+//       DataCell(Text(user.password != null && user.password!.isNotEmpty ? '••••••••' : 'Not Set')),
+//       DataCell(
+//         Container(
+//           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+//           decoration: BoxDecoration(
+//             color: role.color.withOpacity(0.1),
+//             borderRadius: BorderRadius.circular(20),
+//           ),
+//           child: Text(
+//             role.title,
+//             style: TextStyle(
+//               color: role.color,
+//               fontWeight: FontWeight.w600,
+//               fontSize: 12,
+//             ),
+//           ),
+//         ),
+//       ),
+//       DataCell(
+//         Container(
+//           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+//           decoration: BoxDecoration(
+//             color: user.status == 'active' 
+//                 ? Colors.green.withOpacity(0.1) 
+//                 : Colors.red.withOpacity(0.1),
+//             borderRadius: BorderRadius.circular(20),
+//           ),
+//           child: Text(
+//             user.status,
+//             style: TextStyle(
+//               color: user.status == 'active' ? Colors.green : Colors.red,
+//               fontWeight: FontWeight.w600,
+//               fontSize: 12,
+//             ),
+//           ),
+//         ),
+//       ),
+//       DataCell(Text(user.lastActive != null 
+//           ? _formatDate(user.lastActive!) 
+//           : 'Never')),
+//       DataCell(
+//         Row(
+//           children: [
+//             IconButton(
+//               icon: const Icon(Icons.edit, size: 20),
+//               onPressed: () => _showUserDialog(user: user),
+//               tooltip: 'Edit',
+//             ),
+//             IconButton(
+//               icon: const Icon(Icons.delete, size: 20, color: Colors.red),
+//               onPressed: () => _deleteUser(user),
+//               tooltip: 'Delete',
+//             ),
+//             IconButton(
+//               icon: const Icon(Icons.sync, size: 20),
+//               onPressed: () => _toggleStatus(user),
+//               tooltip: 'Toggle Status',
+//             ),
+//           ],
+//         ),
+//       ),
+//     ]);
+//   }
+
+//   String _formatDate(DateTime date) {
+//     final now = DateTime.now();
+//     final difference = now.difference(date);
+
+//     if (difference.inMinutes < 60) {
+//       return '${difference.inMinutes} mins ago';
+//     } else if (difference.inHours < 24) {
+//       return '${difference.inHours} hours ago';
+//     } else {
+//       return '${difference.inDays} days ago';
+//     }
+//   }
+
+//   Widget _buildRolesTab() {
+//     return Padding(
+//       padding: const EdgeInsets.all(30),
+//       child: GridView.builder(
+//         gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+//           maxCrossAxisExtent: 350,
+//           childAspectRatio: 1.5,
+//           crossAxisSpacing: 20,
+//           mainAxisSpacing: 20,
+//         ),
+//         itemCount: roles.length,
+//         itemBuilder: (context, index) => _buildRoleCard(roles[index]),
+//       ),
+//     );
+//   }
+
+//   Widget _buildRoleCard(RoleData role) {
+//     return Container(
+//       padding: const EdgeInsets.all(25),
+//       decoration: BoxDecoration(
+//         color: Colors.white,
+//         borderRadius: BorderRadius.circular(12),
+//         boxShadow: [
+//           BoxShadow(
+//             color: Colors.black.withOpacity(0.05),
+//             blurRadius: 10,
+//           ),
+//         ],
+//       ),
+//       child: Column(
+//         crossAxisAlignment: CrossAxisAlignment.start,
+//         children: [
+//           Row(
+//             children: [
+//               Container(
+//                 width: 60,
+//                 height: 60,
+//                 decoration: BoxDecoration(
+//                   color: role.color,
+//                   borderRadius: BorderRadius.circular(12),
+//                 ),
+//                 child: Center(
+//                   child: Text(role.icon, style: const TextStyle(fontSize: 28)),
+//                 ),
+//               ),
+//               const SizedBox(width: 15),
+//               Expanded(
+//                 child: Column(
+//                   crossAxisAlignment: CrossAxisAlignment.start,
+//                   children: [
+//                     Text(
+//                       '${role.userCount}',
+//                       style: const TextStyle(
+//                         fontSize: 32,
+//                         fontWeight: FontWeight.bold,
+//                         color: Color(0xFF2c3e50),
+//                       ),
+//                     ),
+//                     Text(
+//                       role.title,
+//                       style: const TextStyle(color: Colors.grey, fontSize: 14),
+//                     ),
+//                   ],
+//                 ),
+//               ),
+//             ],
+//           ),
+//           const Spacer(),
+//           SizedBox(
+//             width: double.infinity,
+//             child: ElevatedButton.icon(
+//               onPressed: () => _showRolePermissionsDialog(role),
+//               icon: const Icon(Icons.settings, size: 18),
+//               label: const Text('Customize'),
+//               style: ElevatedButton.styleFrom(
+//                 backgroundColor: const Color(0xFF667eea),
+//                 foregroundColor: Colors.white,
+//                 shape: RoundedRectangleBorder(
+//                   borderRadius: BorderRadius.circular(8),
+//                 ),
+//               ),
+//             ),
+//           ),
+//         ],
+//       ),
+//     );
+//   }
+
+//   void _showUserDialog({User? user}) {
+//     final nameController = TextEditingController(text: user?.name ?? '');
+//     final emailController = TextEditingController(text: user?.email ?? '');
+//     final phoneController = TextEditingController(text: user?.phone ?? '');
+//     final passwordController = TextEditingController(text: user?.password ?? '');
+//     String selectedRole = user?.role ?? (roles.isNotEmpty ? roles.first.id : 'operations');
+//     bool obscurePassword = true;
+//     Map<String, Map<String, bool>> customPermissions = {};
+
+//     // Initialize custom permissions from user data if available
+//     if (user?.customPermissions != null) {
+//       user!.customPermissions!.forEach((module, perms) {
+//         customPermissions[module] = {};
+//         if (perms is Map) {
+//           perms.forEach((perm, value) {
+//             customPermissions[module]![perm.toString()] = value == true;
+//           });
+//         } else if (perms is List) {
+//           for (var perm in perms) {
+//             customPermissions[module]![perm.toString()] = true;
+//           }
+//         }
+//       });
+//     } else if (selectedRole.isNotEmpty) {
+//       // Initialize permissions for the selected role (all enabled by default)
+//       final roleData = roles.firstWhere(
+//         (r) => r.id == selectedRole,
+//         orElse: () => RoleData(
+//           id: selectedRole,
+//           title: selectedRole,
+//           icon: '👤',
+//           color: Colors.grey,
+//           permissions: {},
+//         ),
+//       );
+//       roleData.permissions.forEach((module, perms) {
+//         customPermissions[module] = {};
+//         for (var perm in perms) {
+//           customPermissions[module]![perm] = true;
+//         }
+//       });
+//     }
+
+//     showDialog(
+//       context: context,
+//       builder: (context) => StatefulBuilder(
+//         builder: (context, setDialogState) {
+//           // Get current role data for permissions
+//           RoleData? currentRoleData;
+//           if (selectedRole.isNotEmpty) {
+//             currentRoleData = roles.firstWhere(
+//               (r) => r.id == selectedRole,
+//               orElse: () => RoleData(
+//                 id: selectedRole,
+//                 title: selectedRole,
+//                 icon: '👤',
+//                 color: Colors.grey,
+//                 permissions: _getDefaultPermissions(selectedRole),
+//               ),
+//             );
+//           }
+
+//           return AlertDialog(
+//             title: Text(user == null ? 'Add New User' : 'Edit User'),
+//             content: SizedBox(
+//               width: 600,
+//               child: SingleChildScrollView(
+//                 child: Column(
+//                   mainAxisSize: MainAxisSize.min,
+//                   children: [
+//                     TextField(
+//                       controller: nameController,
+//                       decoration: const InputDecoration(
+//                         labelText: 'Full Name *',
+//                         border: OutlineInputBorder(),
+//                         prefixIcon: Icon(Icons.person),
+//                       ),
+//                     ),
+//                     const SizedBox(height: 15),
+//                     TextField(
+//                       controller: emailController,
+//                       decoration: const InputDecoration(
+//                         labelText: 'Email *',
+//                         border: OutlineInputBorder(),
+//                         prefixIcon: Icon(Icons.email),
+//                       ),
+//                       keyboardType: TextInputType.emailAddress,
+//                     ),
+//                     const SizedBox(height: 15),
+//                     TextField(
+//                       controller: phoneController,
+//                       decoration: const InputDecoration(
+//                         labelText: 'Phone Number',
+//                         border: OutlineInputBorder(),
+//                         prefixIcon: Icon(Icons.phone),
+//                       ),
+//                       keyboardType: TextInputType.phone,
+//                     ),
+//                     const SizedBox(height: 15),
+//                     TextField(
+//                       controller: passwordController,
+//                       obscureText: obscurePassword,
+//                       decoration: InputDecoration(
+//                         labelText: user == null ? 'Password *' : 'Password (leave empty to keep current)',
+//                         border: const OutlineInputBorder(),
+//                         prefixIcon: const Icon(Icons.lock),
+//                         suffixIcon: IconButton(
+//                           icon: Icon(
+//                             obscurePassword ? Icons.visibility : Icons.visibility_off,
+//                           ),
+//                           onPressed: () {
+//                             setDialogState(() {
+//                               obscurePassword = !obscurePassword;
+//                             });
+//                           },
+//                         ),
+//                       ),
+//                     ),
+//                     const SizedBox(height: 15),
+//                     DropdownButtonFormField<String>(
+//                       value: roles.any((r) => r.id == selectedRole) ? selectedRole : null,
+//                       decoration: const InputDecoration(
+//                         labelText: 'Assign Role *',
+//                         border: OutlineInputBorder(),
+//                         prefixIcon: Icon(Icons.admin_panel_settings),
+//                       ),
+//                       items: roles.isEmpty 
+//                         ? [
+//                             DropdownMenuItem(
+//                               value: 'superAdmin',
+//                               child: Row(
+//                                 children: const [
+//                                   Text('👑'),
+//                                   SizedBox(width: 8),
+//                                   Text('Super Admin'),
+//                                 ],
+//                               ),
+//                             ),
+//                             DropdownMenuItem(
+//                               value: 'orgAdmin',
+//                               child: Row(
+//                                 children: const [
+//                                   Text('🏢'),
+//                                   SizedBox(width: 8),
+//                                   Text('Organization Admin'),
+//                                 ],
+//                               ),
+//                             ),
+//                             DropdownMenuItem(
+//                               value: 'fleetManager',
+//                               child: Row(
+//                                 children: const [
+//                                   Text('🚛'),
+//                                   SizedBox(width: 8),
+//                                   Text('Fleet Manager'),
+//                                 ],
+//                               ),
+//                             ),
+//                             DropdownMenuItem(
+//                               value: 'operations',
+//                               child: Row(
+//                                 children: const [
+//                                   Text('📊'),
+//                                   SizedBox(width: 8),
+//                                   Text('Operations Manager'),
+//                                 ],
+//                               ),
+//                             ),
+//                             DropdownMenuItem(
+//                               value: 'hrManager',
+//                               child: Row(
+//                                 children: const [
+//                                   Text('👥'),
+//                                   SizedBox(width: 8),
+//                                   Text('HR Manager'),
+//                                 ],
+//                               ),
+//                             ),
+//                             DropdownMenuItem(
+//                               value: 'finance',
+//                               child: Row(
+//                                 children: const [
+//                                   Text('💰'),
+//                                   SizedBox(width: 8),
+//                                   Text('Finance Admin'),
+//                                 ],
+//                               ),
+//                             ),
+//                           ]
+//                         : roles.map((role) {
+//                             return DropdownMenuItem(
+//                               value: role.id,
+//                               child: Row(
+//                                 children: [
+//                                   Text(role.icon),
+//                                   const SizedBox(width: 8),
+//                                   Text(role.title),
+//                                 ],
+//                               ),
+//                             );
+//                           }).toList(),
+//                       onChanged: (value) {
+//                         if (value != null) {
+//                           setDialogState(() {
+//                             selectedRole = value;
+//                             // Reset permissions for new role
+//                             customPermissions.clear();
+//                             final newRoleData = roles.firstWhere(
+//                               (r) => r.id == value,
+//                               orElse: () => RoleData(
+//                                 id: value,
+//                                 title: value,
+//                                 icon: '👤',
+//                                 color: Colors.grey,
+//                                 permissions: _getDefaultPermissions(value),
+//                               ),
+//                             );
+//                             // Initialize all permissions as enabled by default
+//                             newRoleData.permissions.forEach((module, perms) {
+//                               customPermissions[module] = {};
+//                               for (var perm in perms) {
+//                                 customPermissions[module]![perm] = true;
+//                               }
+//                             });
+//                           });
+//                         }
+//                       },
+//                     ),
+//                     if (roles.isEmpty)
+//                       Padding(
+//                         padding: const EdgeInsets.only(top: 8),
+//                         child: Text(
+//                           '⚠️ Roles not loaded from backend. Using default roles.',
+//                           style: TextStyle(color: Colors.orange[700], fontSize: 12),
+//                         ),
+//                       ),
+                    
+//                     // Permissions Section - ALWAYS show if role is selected
+//                     if (selectedRole.isNotEmpty && currentRoleData != null)
+//                       Column(
+//                         crossAxisAlignment: CrossAxisAlignment.start,
+//                         children: [
+//                           const SizedBox(height: 25),
+//                           const Divider(),
+//                           const SizedBox(height: 15),
+//                           Row(
+//                             children: [
+//                               Icon(Icons.security, color: currentRoleData?.color ?? Colors.blue),
+//                               const SizedBox(width: 10),
+//                               const Text(
+//                                 'Customize Permissions for this User',
+//                                 style: TextStyle(
+//                                   fontSize: 16,
+//                                   fontWeight: FontWeight.bold,
+//                                   color: Color(0xFF2c3e50),
+//                                 ),
+//                               ),
+//                             ],
+//                           ),
+//                           const SizedBox(height: 15),
+//                           ...currentRoleData.permissions.entries.map((entry) {
+//                             final module = entry.key;
+//                             final perms = entry.value;
+//                             final allChecked = customPermissions[module]?.values.every((v) => v) ?? false;
+                            
+//                             return Container(
+//                               margin: const EdgeInsets.only(bottom: 15),
+//                               padding: const EdgeInsets.all(15),
+//                               decoration: BoxDecoration(
+//                                 color: const Color(0xFFF8F9FA),
+//                                 borderRadius: BorderRadius.circular(8),
+//                               ),
+//                               child: Column(
+//                                 crossAxisAlignment: CrossAxisAlignment.start,
+//                                 children: [
+//                                   // Module header with checkbox
+//                                   Row(
+//                                     children: [
+//                                       Checkbox(
+//                                         value: allChecked,
+//                                         onChanged: (value) {
+//                                           setDialogState(() {
+//                                             customPermissions[module] = {};
+//                                             for (var perm in perms) {
+//                                               customPermissions[module]![perm] = value ?? false;
+//                                             }
+//                                           });
+//                                         },
+//                                       ),
+//                                       Expanded(
+//                                         child: Text(
+//                                           module,
+//                                           style: TextStyle(
+//                                             fontWeight: FontWeight.bold,
+//                                             color: currentRoleData?.color ?? Colors.blue,
+//                                             fontSize: 14,
+//                                           ),
+//                                         ),
+//                                       ),
+//                                     ],
+//                                   ),
+//                                   const SizedBox(height: 8),
+//                                   // Individual permissions
+//                                   Wrap(
+//                                     spacing: 10,
+//                                     runSpacing: 10,
+//                                     children: perms.map((perm) {
+//                                       return SizedBox(
+//                                         width: 250,
+//                                         child: Row(
+//                                           children: [
+//                                             Checkbox(
+//                                               value: customPermissions[module]?[perm] ?? false,
+//                                               onChanged: (value) {
+//                                                 setDialogState(() {
+//                                                   if (customPermissions[module] == null) {
+//                                                     customPermissions[module] = {};
+//                                                   }
+//                                                   customPermissions[module]![perm] = value ?? false;
+//                                                 });
+//                                               },
+//                                             ),
+//                                             Expanded(
+//                                               child: Text(
+//                                                 perm,
+//                                                 style: const TextStyle(fontSize: 13),
+//                                               ),
+//                                             ),
+//                                           ],
+//                                         ),
+//                                       );
+//                                     }).toList(),
+//                                   ),
+//                                 ],
+//                               ),
+//                             );
+//                           }).toList(),
+//                         ],
+//                       ),
+//                   ],
+//                 ),
+//               ),
+//             ),
+//             actions: [
+//               TextButton(
+//                 onPressed: () => Navigator.pop(context),
+//                 child: const Text('Cancel'),
+//               ),
+//               ElevatedButton(
+//                 onPressed: () async {
+//                   print('\n🔍 SAVE USER DEBUG');
+//                   print('Name: ${nameController.text}');
+//                   print('Email: ${emailController.text}');
+//                   print('Role: $selectedRole');
+//                   print('Custom Permissions: ${customPermissions.length} modules');
+                  
+//                   if (nameController.text.isEmpty || emailController.text.isEmpty) {
+//                     _showErrorSnackBar('Name and Email are required');
+//                     return;
+//                   }
+
+//                   if (user == null && passwordController.text.isEmpty) {
+//                     _showErrorSnackBar('Password is required for new users');
+//                     return;
+//                   }
+
+//                   try {
+//                     final newUser = User(
+//                       id: user?.id,
+//                       name: nameController.text,
+//                       email: emailController.text,
+//                       phone: phoneController.text.isEmpty ? null : phoneController.text,
+//                       password: passwordController.text.isEmpty ? null : passwordController.text,
+//                       role: selectedRole,
+//                       customPermissions: customPermissions.isNotEmpty ? customPermissions : null,
+//                     );
+
+//                     print('📤 Sending user to API...');
+//                     print('User JSON: ${newUser.toJson()}');
+
+//                     if (user == null) {
+//                       print('Creating new user...');
+//                       final createdUser = await ApiService.createUser(newUser);
+//                       print('✅ User created: ${createdUser.id}');
+//                       _showSuccessSnackBar('User created successfully');
+//                     } else {
+//                       print('Updating user: ${user.id}');
+//                       await ApiService.updateUser(user.id!, newUser);
+//                       print('✅ User updated');
+//                       _showSuccessSnackBar('User updated successfully');
+//                     }
+
+//                     Navigator.pop(context);
+//                     await _loadData();
+//                   } catch (e) {
+//                     print('❌ Error saving user: $e');
+//                     _showErrorSnackBar('Operation failed: $e');
+//                   }
+//                 },
+//                 style: ElevatedButton.styleFrom(
+//                   backgroundColor: const Color(0xFF667eea),
+//                 ),
+//                 child: Text(user == null ? 'Create' : 'Update'),
+//               ),
+//             ],
+//           );
+//         },
+//       ),
+//     );
+//   }
+
+//   void _deleteUser(User user) {
+//     showDialog(
+//       context: context,
+//       builder: (context) => AlertDialog(
+//         title: const Text('Delete User'),
+//         content: Text('Are you sure you want to delete ${user.name}?'),
+//         actions: [
+//           TextButton(
+//             onPressed: () => Navigator.pop(context),
+//             child: const Text('Cancel'),
+//           ),
+//           ElevatedButton(
+//             onPressed: () async {
+//               try {
+//                 await ApiService.deleteUser(user.id!);
+//                 Navigator.pop(context);
+//                 _showSuccessSnackBar('User deleted successfully');
+//                 _loadData();
+//               } catch (e) {
+//                 _showErrorSnackBar('Delete failed: $e');
+//               }
+//             },
+//             style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+//             child: const Text('Delete'),
+//           ),
+//         ],
+//       ),
+//     );
+//   }
+
+//   void _toggleStatus(User user) async {
+//     try {
+//       await ApiService.toggleUserStatus(user.id!);
+//       _showSuccessSnackBar('Status updated successfully');
+//       _loadData();
+//     } catch (e) {
+//       _showErrorSnackBar('Failed to update status: $e');
+//     }
+//   }
+
+//   void _showRolePermissionsDialog(RoleData role) {
+//     showDialog(
+//       context: context,
+//       builder: (context) => AlertDialog(
+//         title: Row(
+//           children: [
+//             Text(role.icon, style: const TextStyle(fontSize: 28)),
+//             const SizedBox(width: 10),
+//             Text('${role.title} Permissions'),
+//           ],
+//         ),
+//         content: SizedBox(
+//           width: 600,
+//           height: 400,
+//           child: SingleChildScrollView(
+//             child: Column(
+//               crossAxisAlignment: CrossAxisAlignment.start,
+//               children: role.permissions.entries.map((entry) {
+//                 return Column(
+//                   crossAxisAlignment: CrossAxisAlignment.start,
+//                   children: [
+//                     Text(
+//                       entry.key,
+//                       style: TextStyle(
+//                         fontSize: 16,
+//                         fontWeight: FontWeight.bold,
+//                         color: role.color,
+//                       ),
+//                     ),
+//                     const SizedBox(height: 8),
+//                     ...entry.value.map((perm) {
+//                       return Padding(
+//                         padding: const EdgeInsets.only(left: 16, bottom: 8),
+//                         child: Row(
+//                           children: [
+//                             const Icon(Icons.check, size: 16, color: Colors.green),
+//                             const SizedBox(width: 8),
+//                             Expanded(child: Text(perm)),
+//                           ],
+//                         ),
+//                       );
+//                     }).toList(),
+//                     const SizedBox(height: 16),
+//                   ],
+//                 );
+//               }).toList(),
+//             ),
+//           ),
+//         ),
+//         actions: [
+//           TextButton(
+//             onPressed: () => Navigator.pop(context),
+//             child: const Text('Close'),
+//           ),
+//         ],
+//       ),
+//     );
+//   }
+// }

@@ -1,0 +1,2474 @@
+// lib/features/admin/client_management/presentation/screens/client_dashboard_screen.dart
+// COMPLETE VERSION WITH EDIT, DELETE, AND STATUS DROPDOWN
+
+import 'package:flutter/material.dart';
+// Firebase removed - using HTTP API
+import 'package:shared_preferences/shared_preferences.dart';
+import 'dart:convert';
+// Firebase removed - using HTTP API
+// Firebase removed - using HTTP API
+import 'package:http/http.dart' as http;
+import 'package:abra_fleet/core/services/backend_connection_manager.dart';
+import 'package:abra_fleet/features/support/support_system_screen.dart';
+import 'package:abra_fleet/app/config/api_config.dart';
+import 'package:abra_fleet/core/services/api_service.dart';
+import 'package:abra_fleet/core/services/client_service.dart';
+import 'package:abra_fleet/core/services/customer_service.dart';
+import 'package:abra_fleet/core/models/client_model.dart';
+import 'package:abra_fleet/features/admin/widgets/horizontal_filter_bar.dart';
+
+
+// Using ClientModel from core/models/client_model.dart instead of ClientEntity
+// This provides better type safety and consistency across the app
+
+class ClientDashboardScreen extends StatefulWidget {
+  const ClientDashboardScreen({super.key});
+
+  @override
+  State<ClientDashboardScreen> createState() => _ClientDashboardScreenState();
+}
+
+class _ClientDashboardScreenState extends State<ClientDashboardScreen> {
+  List<ClientModel> _clients = [];
+  Map<String, int> _clientCustomerCounts = {}; // Store customer counts by client ID
+  bool _isLoading = true;
+  String _searchQuery = '';
+  
+  final ClientService _clientService = ClientService();
+  final CustomerService _customerService = CustomerService();
+
+  @override
+  void initState() {
+    super.initState();
+    _loadClients();
+  }
+
+  /// Count customers by domain for each client
+  /// This method extracts the domain from each client's email and counts matching customers
+  Future<void> _countCustomersByDomain() async {
+    try {
+      debugPrint('🔄 Counting customers by domain for each client...');
+      
+      final Map<String, int> counts = {};
+      
+      for (var client in _clients) {
+        // Extract domain from client email
+        // Example: admin@abrafleet.com → @abrafleet.com
+        if (client.email.contains('@')) {
+          final emailParts = client.email.split('@');
+          if (emailParts.length == 2) {
+            final domain = '@${emailParts[1]}';
+            
+            debugPrint('📧 Client: ${client.name} | Domain: $domain');
+            
+            // Count customers with matching domain
+            final count = await _customerService.countCustomersByDomain(domain);
+            counts[client.id] = count;
+            
+            debugPrint('   ✅ Found $count customers with domain $domain');
+          }
+        }
+      }
+      
+      setState(() {
+        _clientCustomerCounts = counts;
+      });
+      
+      debugPrint('✅ Customer counts by domain completed');
+      debugPrint('📊 Total clients processed: ${counts.length}');
+      
+    } catch (e) {
+      debugPrint('❌ Error counting customers by domain: $e');
+    }
+  }
+
+  Future<void> _loadClients() async {
+    setState(() => _isLoading = true);
+    
+    try {
+      debugPrint('📥 Loading clients using ClientService...');
+      
+      // Fetch all clients using ClientService
+      final clients = await _clientService.getAllClients(limit: 100);
+      
+      // Sort by creation date (newest first)
+      clients.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+      
+      if (mounted) {
+        setState(() {
+          _clients = clients;
+        });
+        
+        debugPrint('✅ Loaded ${clients.length} clients');
+        
+        // Count customers by domain for each client
+        await _countCustomersByDomain();
+        
+        setState(() => _isLoading = false);
+      }
+    } catch (e) {
+      debugPrint('❌ Error loading clients: $e');
+      if (mounted) {
+        setState(() => _isLoading = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error loading clients: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  List<ClientModel> get _filteredClients {
+    if (_searchQuery.isEmpty) return _clients;
+    return _clients.where((client) {
+      return client.name.toLowerCase().contains(_searchQuery.toLowerCase()) ||
+             client.email.toLowerCase().contains(_searchQuery.toLowerCase()) ||
+             client.phone.contains(_searchQuery);
+    }).toList();
+  }
+  
+  /// Get customer count for a client (from domain-based counting)
+  int _getClientCustomerCount(ClientModel client) {
+    return _clientCustomerCounts[client.id] ?? client.totalCustomers;
+  }
+
+  // ✅ UPDATE CLIENT STATUS (HTTP API)
+  Future<void> _updateClientStatus(ClientModel client, String newStatus) async {
+    try {
+      debugPrint('🔄 Updating client status: ${client.id} to $newStatus');
+      
+      // Update client status via HTTP API
+      final apiService = ApiService();
+      await apiService.put('/api/clients/${client.id}', body: {
+        'status': newStatus,
+      });
+      
+      debugPrint('✅ Client status updated successfully');
+      
+      // Reload clients
+      await _loadClients();
+      
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Client status updated to ${newStatus.toUpperCase()}'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    } catch (e) {
+      debugPrint('❌ Error updating client status: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error updating status: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  // ✅ DELETE CLIENT (Realtime Database + Firestore + Firebase Auth)
+  Future<void> _deleteClient(ClientModel client) async {
+    // Show confirmation dialog
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Row(
+          children: [
+            Icon(Icons.warning, color: Colors.orange),
+            SizedBox(width: 12),
+            Text('Delete Client'),
+          ],
+        ),
+        content: Text(
+          'Are you sure you want to delete "${client.name}"?\n\n'
+          'This will:\n'
+          '• Remove client from database\n'
+          '• Delete user account\n'
+          '• This action cannot be undone!',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red,
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true) return;
+
+    try {
+      debugPrint('🗑️ Deleting client: ${client.id}');
+      
+      // Delete client via HTTP API
+      final apiService = ApiService();
+      await apiService.delete('/api/clients/${client.id}');
+      
+      debugPrint('✅ Client deleted successfully');
+      
+      // Reload clients
+      await _loadClients();
+      
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Client "${client.name}" deleted successfully'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    } catch (e) {
+      debugPrint('❌ Error deleting client: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error deleting client: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  // ✅ EDIT CLIENT
+  void _showEditClientDialog(ClientModel client) {
+    final formKey = GlobalKey<FormState>();
+    final nameController = TextEditingController(text: client.name);
+    final emailController = TextEditingController(text: client.email);
+    final phoneController = TextEditingController(text: client.phone);
+    final addressController = TextEditingController(text: client.address);
+    final contactPersonController = TextEditingController(text: client.contactPerson);
+    final gstController = TextEditingController(text: client.gstNumber);
+    final panController = TextEditingController(text: client.panNumber);
+    
+    // Password update controllers
+    final newPasswordController = TextEditingController();
+    final confirmPasswordController = TextEditingController();
+    bool showPasswordFields = false;
+    bool obscureNewPassword = true;
+    bool obscureConfirmPassword = true;
+    
+    bool isUpdating = false;
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: const Row(
+            children: [
+              Icon(Icons.edit, color: Color(0xFF0D47A1)),
+              SizedBox(width: 12),
+              Text('Edit Client Information'),
+            ],
+          ),
+          content: SingleChildScrollView(
+            child: Form(
+              key: formKey,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TextFormField(
+                    controller: nameController,
+                    decoration: const InputDecoration(
+                      labelText: 'Company Name *',
+                      border: OutlineInputBorder(),
+                      prefixIcon: Icon(Icons.business),
+                    ),
+                    validator: (value) {
+                      if (value == null || value.isEmpty) {
+                        return 'Company name is required';
+                      }
+                      return null;
+                    },
+                  ),
+                  const SizedBox(height: 16),
+                  TextFormField(
+                    controller: contactPersonController,
+                    decoration: const InputDecoration(
+                      labelText: 'Contact Person Name *',
+                      border: OutlineInputBorder(),
+                      prefixIcon: Icon(Icons.person),
+                    ),
+                    validator: (value) {
+                      if (value == null || value.isEmpty) {
+                        return 'Contact person name is required';
+                      }
+                      return null;
+                    },
+                  ),
+                  const SizedBox(height: 16),
+                  TextFormField(
+                    controller: emailController,
+                    readOnly: true, // Changed from enabled: false to readOnly: true
+                    decoration: const InputDecoration(
+                      labelText: 'Email *',
+                      border: OutlineInputBorder(),
+                      prefixIcon: Icon(Icons.email),
+                      helperText: 'Email cannot be changed',
+                      filled: true,
+                      fillColor: Color(0xFFF5F5F5), // Light gray background to show it's readonly
+                    ),
+                    keyboardType: TextInputType.emailAddress,
+                  ),
+                  const SizedBox(height: 16),
+                  TextFormField(
+                    controller: phoneController,
+                    decoration: const InputDecoration(
+                      labelText: 'Phone Number *',
+                      border: OutlineInputBorder(),
+                      prefixIcon: Icon(Icons.phone),
+                    ),
+                    keyboardType: TextInputType.phone,
+                    validator: (value) {
+                      if (value == null || value.isEmpty) {
+                        return 'Phone number is required';
+                      }
+                      if (value.length < 10) {
+                        return 'Enter a valid phone number';
+                      }
+                      return null;
+                    },
+                  ),
+                  const SizedBox(height: 16),
+                  TextFormField(
+                    controller: addressController,
+                    decoration: const InputDecoration(
+                      labelText: 'Address *',
+                      border: OutlineInputBorder(),
+                      prefixIcon: Icon(Icons.location_on),
+                    ),
+                    maxLines: 2,
+                    validator: (value) {
+                      if (value == null || value.isEmpty) {
+                        return 'Address is required';
+                      }
+                      return null;
+                    },
+                  ),
+                  const SizedBox(height: 16),
+                  TextFormField(
+                    controller: gstController,
+                    decoration: const InputDecoration(
+                      labelText: 'GST Number (Optional)',
+                      border: OutlineInputBorder(),
+                      prefixIcon: Icon(Icons.receipt_long),
+                    ),
+                    textCapitalization: TextCapitalization.characters,
+                  ),
+                  const SizedBox(height: 16),
+                  TextFormField(
+                    controller: panController,
+                    decoration: const InputDecoration(
+                      labelText: 'PAN Number (Optional)',
+                      border: OutlineInputBorder(),
+                      prefixIcon: Icon(Icons.credit_card),
+                    ),
+                    textCapitalization: TextCapitalization.characters,
+                  ),
+                  
+                  // Password Update Section
+                  const SizedBox(height: 24),
+                  const Divider(),
+                  const SizedBox(height: 16),
+                  
+                  if (!showPasswordFields)
+                    OutlinedButton.icon(
+                      onPressed: () {
+                        setDialogState(() => showPasswordFields = true);
+                      },
+                      icon: const Icon(Icons.lock_reset),
+                      label: const Text('Update Password'),
+                      style: OutlinedButton.styleFrom(
+                        minimumSize: const Size(double.infinity, 48),
+                      ),
+                    ),
+                  
+                  if (showPasswordFields) ...[
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: Colors.orange.shade50,
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: Colors.orange.shade200),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(Icons.info_outline, color: Colors.orange.shade700, size: 20),
+                          const SizedBox(width: 8),
+                          const Expanded(
+                            child: Text(
+                              'Leave blank to keep current password',
+                              style: TextStyle(fontSize: 12),
+                            ),
+                          ),
+                          IconButton(
+                            icon: const Icon(Icons.close, size: 18),
+                            onPressed: () {
+                              setDialogState(() {
+                                showPasswordFields = false;
+                                newPasswordController.clear();
+                                confirmPasswordController.clear();
+                              });
+                            },
+                            padding: EdgeInsets.zero,
+                            constraints: const BoxConstraints(),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    TextFormField(
+                      controller: newPasswordController,
+                      obscureText: obscureNewPassword,
+                      decoration: InputDecoration(
+                        labelText: 'New Password',
+                        border: const OutlineInputBorder(),
+                        prefixIcon: const Icon(Icons.lock_outline),
+                        suffixIcon: IconButton(
+                          icon: Icon(
+                            obscureNewPassword ? Icons.visibility_off : Icons.visibility,
+                          ),
+                          onPressed: () {
+                            setDialogState(() => obscureNewPassword = !obscureNewPassword);
+                          },
+                        ),
+                      ),
+                      validator: (value) {
+                        if (value != null && value.isNotEmpty && value.length < 6) {
+                          return 'Password must be at least 6 characters';
+                        }
+                        return null;
+                      },
+                    ),
+                    const SizedBox(height: 16),
+                    TextFormField(
+                      controller: confirmPasswordController,
+                      obscureText: obscureConfirmPassword,
+                      decoration: InputDecoration(
+                        labelText: 'Confirm New Password',
+                        border: const OutlineInputBorder(),
+                        prefixIcon: const Icon(Icons.lock_outline),
+                        suffixIcon: IconButton(
+                          icon: Icon(
+                            obscureConfirmPassword ? Icons.visibility_off : Icons.visibility,
+                          ),
+                          onPressed: () {
+                            setDialogState(() => obscureConfirmPassword = !obscureConfirmPassword);
+                          },
+                        ),
+                      ),
+                      validator: (value) {
+                        if (newPasswordController.text.isNotEmpty && 
+                            value != newPasswordController.text) {
+                          return 'Passwords do not match';
+                        }
+                        return null;
+                      },
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: isUpdating ? null : () => Navigator.pop(context),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: isUpdating ? null : () async {
+                if (!formKey.currentState!.validate()) {
+                  return;
+                }
+
+                setDialogState(() => isUpdating = true);
+
+                try {
+                  debugPrint('🔄 Updating client: ${client.id}');
+                  
+                  final updateData = {
+                    'email': emailController.text.trim(), // ✅ REQUIRED by backend
+                    'name': nameController.text.trim(),
+                    'phoneNumber': phoneController.text.trim(), // Changed from 'phone' to 'phoneNumber'
+                    'address': addressController.text.trim(),
+                    'contactPerson': contactPersonController.text.trim(),
+                    'gstNumber': gstController.text.trim().isNotEmpty 
+                        ? gstController.text.trim() 
+                        : null,
+                    'panNumber': panController.text.trim().isNotEmpty 
+                        ? panController.text.trim() 
+                        : null,
+                  };
+                  
+                  // Update client via HTTP API
+                  final apiService = ApiService();
+                  await apiService.put('/api/clients/${client.id}', body: updateData);
+                  
+                  debugPrint('✅ Client updated successfully');
+                  
+                  // Update password if provided
+                  if (newPasswordController.text.trim().isNotEmpty && 
+                      client.userId != null && 
+                      client.userId!.isNotEmpty) {
+                    try {
+                      debugPrint('🔐 Updating client password...');
+                      
+                      // Get JWT token from SharedPreferences
+                      final prefs = await SharedPreferences.getInstance();
+                      final token = prefs.getString('jwt_token');
+                      
+                      if (token != null && token.isNotEmpty) {
+                        final response = await http.post(
+                          Uri.parse('${ApiConfig.baseUrl}/api/users/update-password'),
+                          headers: {
+                            'Content-Type': 'application/json',
+                            'Authorization': 'Bearer $token',
+                          },
+                          body: json.encode({
+                            'userId': client.userId,
+                            'newPassword': newPasswordController.text.trim(),
+                          }),
+                        );
+                        
+                        final responseData = json.decode(response.body);
+                        
+                        if (response.statusCode == 200 && responseData['success'] == true) {
+                          debugPrint('✅ Password updated successfully');
+                        } else {
+                          debugPrint('⚠️ Password update failed: ${responseData['message']}');
+                          if (mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text('Warning: ${responseData['message'] ?? 'Failed to update password'}'),
+                                backgroundColor: Colors.orange,
+                              ),
+                            );
+                          }
+                        }
+                      }
+                    } catch (e) {
+                      debugPrint('❌ Error updating password: $e');
+                      if (mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text('Warning: Failed to update password - $e'),
+                            backgroundColor: Colors.orange,
+                          ),
+                        );
+                      }
+                    }
+                  }
+                  
+                  if (mounted) {
+                    Navigator.pop(context);
+                    
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text('Client "${nameController.text}" updated successfully'),
+                        backgroundColor: Colors.green,
+                      ),
+                    );
+                    
+                    // Reload clients
+                    _loadClients();
+                  }
+                } catch (e) {
+                  setDialogState(() => isUpdating = false);
+                  
+                  debugPrint('❌ Error updating client: $e');
+                  
+                  // Check if widget is still mounted before showing SnackBar
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text('Error updating client: $e'),
+                        backgroundColor: Colors.red,
+                      ),
+                    );
+                  }
+                }
+              },
+              child: isUpdating
+                  ? const SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: Colors.white,
+                      ),
+                    )
+                  : const Text('Update Client'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _createClient({
+    required String name,
+    required String email,
+    required String password,
+    required String phone,
+    required String address,
+    required String contactPerson,
+    String? branch, // Add branch parameter
+    String? gstNumber,
+    String? panNumber,
+  }) async {
+    // Get JWT token from SharedPreferences
+    final prefs = await SharedPreferences.getInstance();
+    final token = prefs.getString('jwt_token');
+    
+    if (token == null || token.isEmpty) {
+      throw Exception('Admin must be logged in');
+    }
+
+    debugPrint('🔐 Creating client account via backend API...');
+
+    try {
+      // Create client via backend API
+      final response = await http.post(
+        Uri.parse('${ApiConfig.baseUrl}/api/admin/clients/unified'),
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Content-Type': 'application/json',
+        },
+        body: json.encode({
+          'name': name,
+          'email': email,
+          'password': password,
+          'phone': phone,
+          'address': address,
+          'contactPerson': contactPerson,
+          'branch': branch,
+          'gstNumber': gstNumber,
+          'panNumber': panNumber,
+          'role': 'client',
+          'status': 'active',
+        }),
+      );
+
+      if (response.statusCode == 201 || response.statusCode == 200) {
+        final data = json.decode(response.body);
+        debugPrint('✅ Client created successfully: ${data['message']}');
+        debugPrint('🎉 Client creation completed!');
+      } else {
+        final error = json.decode(response.body);
+        throw Exception(error['message'] ?? 'Failed to create client');
+      }
+      
+    } catch (e) {
+      debugPrint('❌ Error creating client: $e');
+      rethrow;
+    }
+  }
+
+  void _showAddClientDialog() {
+    final formKey = GlobalKey<FormState>();
+    final nameController = TextEditingController();
+    final emailController = TextEditingController();
+    final passwordController = TextEditingController();
+    final phoneController = TextEditingController();
+    final addressController = TextEditingController();
+    final contactPersonController = TextEditingController();
+    final gstController = TextEditingController();
+    final panController = TextEditingController();
+    final branchController = TextEditingController(); // Add branch controller
+    bool obscurePassword = true;
+    bool isCreating = false;
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: const Row(
+            children: [
+              Icon(Icons.business, color: Color(0xFF0D47A1)),
+              SizedBox(width: 12),
+              Text('Add New Client Organization'),
+            ],
+          ),
+          content: SingleChildScrollView(
+            child: Form(
+              key: formKey,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    margin: const EdgeInsets.only(bottom: 16),
+                    decoration: BoxDecoration(
+                      color: Colors.blue.shade50,
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: Colors.blue.shade200),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(Icons.info_outline, color: Colors.blue.shade700, size: 20),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            'Client will use these credentials to access their dashboard',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: Colors.blue.shade900,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  TextFormField(
+                    controller: nameController,
+                    decoration: const InputDecoration(
+                      labelText: 'Company Name *',
+                      border: OutlineInputBorder(),
+                      prefixIcon: Icon(Icons.business),
+                    ),
+                    validator: (value) {
+                      if (value == null || value.isEmpty) {
+                        return 'Company name is required';
+                      }
+                      return null;
+                    },
+                  ),
+                  const SizedBox(height: 16),
+                  TextFormField(
+                    controller: contactPersonController,
+                    decoration: const InputDecoration(
+                      labelText: 'Contact Person Name *',
+                      border: OutlineInputBorder(),
+                      prefixIcon: Icon(Icons.person),
+                    ),
+                    validator: (value) {
+                      if (value == null || value.isEmpty) {
+                        return 'Contact person name is required';
+                      }
+                      return null;
+                    },
+                  ),
+                  const SizedBox(height: 16),
+                  TextFormField(
+                    controller: emailController,
+                    decoration: const InputDecoration(
+                      labelText: 'Email *',
+                      border: OutlineInputBorder(),
+                      prefixIcon: Icon(Icons.email),
+                      helperText: 'Client will use this to login',
+                    ),
+                    keyboardType: TextInputType.emailAddress,
+                    validator: (value) {
+                      if (value == null || value.isEmpty) {
+                        return 'Email is required';
+                      }
+                      if (!RegExp(r'^[^@]+@[^@]+\.[^@]+').hasMatch(value)) {
+                        return 'Enter a valid email';
+                      }
+                      return null;
+                    },
+                  ),
+                  const SizedBox(height: 16),
+                  TextFormField(
+                    controller: passwordController,
+                    decoration: InputDecoration(
+                      labelText: 'Password *',
+                      border: const OutlineInputBorder(),
+                      prefixIcon: const Icon(Icons.lock),
+                      helperText: 'Minimum 6 characters',
+                      suffixIcon: IconButton(
+                        icon: Icon(
+                          obscurePassword 
+                              ? Icons.visibility_off 
+                              : Icons.visibility,
+                        ),
+                        onPressed: () {
+                          setDialogState(() {
+                            obscurePassword = !obscurePassword;
+                          });
+                        },
+                      ),
+                    ),
+                    obscureText: obscurePassword,
+                    validator: (value) {
+                      if (value == null || value.isEmpty) {
+                        return 'Password is required';
+                      }
+                      if (value.length < 6) {
+                        return 'Password must be at least 6 characters';
+                      }
+                      return null;
+                    },
+                  ),
+                  const SizedBox(height: 16),
+                  TextFormField(
+                    controller: phoneController,
+                    decoration: const InputDecoration(
+                      labelText: 'Phone Number *',
+                      border: OutlineInputBorder(),
+                      prefixIcon: Icon(Icons.phone),
+                    ),
+                    keyboardType: TextInputType.phone,
+                    validator: (value) {
+                      if (value == null || value.isEmpty) {
+                        return 'Phone number is required';
+                      }
+                      if (value.length < 10) {
+                        return 'Enter a valid phone number';
+                      }
+                      return null;
+                    },
+                  ),
+                  const SizedBox(height: 16),
+                  TextFormField(
+                    controller: addressController,
+                    decoration: const InputDecoration(
+                      labelText: 'Address *',
+                      border: OutlineInputBorder(),
+                      prefixIcon: Icon(Icons.location_on),
+                    ),
+                    maxLines: 2,
+                    validator: (value) {
+                      if (value == null || value.isEmpty) {
+                        return 'Address is required';
+                      }
+                      return null;
+                    },
+                  ),
+                  const SizedBox(height: 16),
+                  TextFormField(
+                    controller: gstController,
+                    decoration: const InputDecoration(
+                      labelText: 'GST Number (Optional)',
+                      border: OutlineInputBorder(),
+                      prefixIcon: Icon(Icons.receipt_long),
+                    ),
+                    textCapitalization: TextCapitalization.characters,
+                  ),
+                  const SizedBox(height: 16),
+                  TextFormField(
+                    controller: branchController,
+                    decoration: const InputDecoration(
+                      labelText: 'Branch Location (Optional)',
+                      border: OutlineInputBorder(),
+                      prefixIcon: Icon(Icons.location_city),
+                      hintText: 'e.g., Bangalore, Chennai, Mumbai',
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  TextFormField(
+                    controller: panController,
+                    decoration: const InputDecoration(
+                      labelText: 'PAN Number (Optional)',
+                      border: OutlineInputBorder(),
+                      prefixIcon: Icon(Icons.credit_card),
+                    ),
+                    textCapitalization: TextCapitalization.characters,
+                  ),
+                ],
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: isCreating ? null : () => Navigator.pop(context),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: isCreating ? null : () async {
+                if (!formKey.currentState!.validate()) {
+                  return;
+                }
+
+                // Store values BEFORE starting the async operation
+                final clientName = nameController.text.trim();
+                final clientEmail = emailController.text.trim();
+                final clientPassword = passwordController.text.trim();
+                final clientPhone = phoneController.text.trim();
+                final clientAddress = addressController.text.trim();
+                final clientContactPerson = contactPersonController.text.trim();
+                final clientBranch = branchController.text.trim().isNotEmpty 
+                    ? branchController.text.trim() 
+                    : null;
+                final clientGst = gstController.text.trim().isNotEmpty 
+                    ? gstController.text.trim() 
+                    : null;
+                final clientPan = panController.text.trim().isNotEmpty 
+                    ? panController.text.trim() 
+                    : null;
+
+                setDialogState(() => isCreating = true);
+
+                try {
+                  await _createClient(
+                    name: clientName,
+                    email: clientEmail,
+                    password: clientPassword,
+                    phone: clientPhone,
+                    address: clientAddress,
+                    contactPerson: clientContactPerson,
+                    branch: clientBranch,
+                    gstNumber: clientGst,
+                    panNumber: clientPan,
+                  );
+
+                  // Pop the dialog first
+                  if (!mounted) return;
+                  Navigator.pop(context);
+                  
+                  // Wait for navigation to complete
+                  await Future.delayed(const Duration(milliseconds: 300));
+                  
+                  // Show success message and reload
+                  if (!mounted) return;
+                  
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text(
+                        '✅ Client "$clientName" created successfully!\n'
+                        '📧 Email: $clientEmail\n'
+                        '🔑 Password: $clientPassword\n'
+                        '👤 Role: Client Organization',
+                      ),
+                      backgroundColor: Colors.green,
+                      duration: const Duration(seconds: 6),
+                    ),
+                  );
+                  
+                  _loadClients();
+                } catch (e) {
+                  setDialogState(() => isCreating = false);
+                  
+                  String errorMessage = 'Error creating client account';
+                  // Handle different error types
+                  if (e.toString().contains('email-already-in-use')) {
+                    errorMessage = '❌ This email is already registered';
+                  } else if (e.toString().contains('weak-password')) {
+                    errorMessage = '❌ Password is too weak (min 6 characters)';
+                  } else if (e.toString().contains('invalid-email')) {
+                    errorMessage = '❌ Invalid email address';
+                  } else {
+                    errorMessage = '❌ ${e.toString()}';
+                  }
+                  
+                  if (!mounted) return;
+                  
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text(errorMessage),
+                      backgroundColor: Colors.red,
+                      duration: const Duration(seconds: 5),
+                    ),
+                  );
+                }
+              },
+              child: isCreating
+                  ? const SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: Colors.white,
+                      ),
+                    )
+                  : const Text('Create Client'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showClientDetails(ClientModel client) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => ClientDetailsScreen(
+          client: client,
+          onUpdate: _loadClients,
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final screenSize = MediaQuery.of(context).size;
+    final isDesktop = screenSize.width > 1200;
+    final isTablet = screenSize.width > 800 && screenSize.width <= 1200;
+
+    return Scaffold(
+      backgroundColor: const Color(0xFFF8FAFC),
+      body: _isLoading
+          ? const Center(child: CircularProgressIndicator())
+          : SingleChildScrollView(
+              padding: EdgeInsets.all(isDesktop ? 32 : 16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _buildStatsCards(isDesktop, isTablet),
+                  const SizedBox(height: 32),
+                  _buildSearchAndActions(isDesktop),
+                  const SizedBox(height: 24),
+                  _buildClientsTable(isDesktop, isTablet),
+                ],
+              ),
+            ),
+    );
+  }
+
+ 
+
+  Widget _buildStatsCards(bool isDesktop, bool isTablet) {
+    final totalClients = _clients.length;
+    final activeClients = _clients.where((c) => c.isActive).length;
+    
+    // Calculate total customers from domain-based counts
+    final totalCustomers = _clientCustomerCounts.values.fold<int>(
+      0,
+      (sum, count) => sum + count,
+    );
+
+    final stats = [
+      {
+        'title': 'Total Clients',
+        'value': totalClients.toString(),
+        'icon': Icons.business,
+        'color': const Color(0xFF4F46E5),
+      },
+      {
+        'title': 'Active Clients',
+        'value': activeClients.toString(),
+        'icon': Icons.verified,
+        'color': const Color(0xFF10B981),
+      },
+      {
+        'title': 'Total Employees',
+        'value': totalCustomers.toString(),
+        'icon': Icons.people,
+        'color': const Color(0xFFF59E0B),
+        'subtitle': 'Assigned to clients',
+      },
+    ];
+
+    return GridView.builder(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: isDesktop ? 4 : isTablet ? 2 : 2,
+        crossAxisSpacing: 16,
+        mainAxisSpacing: 16,
+        childAspectRatio: isDesktop ? 1.5 : 1.3,
+      ),
+      itemCount: stats.length,
+      itemBuilder: (context, index) {
+        final stat = stats[index];
+        return Container(
+          padding: const EdgeInsets.all(20),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(16),
+            boxShadow: [
+              BoxShadow(
+                color: (stat['color'] as Color).withOpacity(0.1),
+                spreadRadius: 0,
+                blurRadius: 20,
+                offset: const Offset(0, 8),
+              ),
+            ],
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: (stat['color'] as Color).withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Icon(
+                  stat['icon'] as IconData,
+                  color: stat['color'] as Color,
+                  size: 24,
+                ),
+              ),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    stat['value'] as String,
+                    style: const TextStyle(
+                      fontSize: 28,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.black87,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    stat['title'] as String,
+                    style: TextStyle(
+                      fontSize: 14,
+                      color: Colors.grey[600],
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                  if (stat['subtitle'] != null) ...[
+                    const SizedBox(height: 2),
+                    Text(
+                      stat['subtitle'] as String,
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Colors.grey[500],
+                        fontStyle: FontStyle.italic,
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildSearchAndActions(bool isDesktop) {
+    return Row(
+      children: [
+        Expanded(
+          child: TextField(
+            onChanged: (value) => setState(() => _searchQuery = value),
+            decoration: InputDecoration(
+              hintText: 'Search clients by name, email, or phone...',
+              prefixIcon: const Icon(Icons.search),
+              filled: true,
+              fillColor: Colors.white,
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: BorderSide.none,
+              ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: BorderSide(color: Colors.grey[300]!),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: const BorderSide(
+                  color: Color(0xFF0D47A1),
+                  width: 2,
+                ),
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(width: 16),
+        ElevatedButton.icon(
+          onPressed: _showAddClientDialog,
+          icon: const Icon(Icons.add),
+          label: Text(isDesktop ? 'Add Client' : 'Add'),
+          style: ElevatedButton.styleFrom(
+            backgroundColor: const Color(0xFF0D47A1),
+            foregroundColor: Colors.white,
+            padding: EdgeInsets.symmetric(
+              horizontal: isDesktop ? 24 : 16,
+              vertical: isDesktop ? 20 : 16,
+            ),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
+          ),
+        ),
+        const SizedBox(width: 8),
+        IconButton(
+          onPressed: _isLoading ? null : _loadClients,
+          icon: const Icon(Icons.refresh),
+          tooltip: 'Refresh Clients & Customer Counts',
+          style: IconButton.styleFrom(
+            backgroundColor: Colors.white,
+            foregroundColor: const Color(0xFF0D47A1),
+            padding: const EdgeInsets.all(16),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildClientsTable(bool isDesktop, bool isTablet) {
+    if (_filteredClients.isEmpty) {
+      return Container(
+        padding: const EdgeInsets.all(64),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(16),
+        ),
+        child: Center(
+          child: Column(
+            children: [
+              Icon(Icons.business_outlined, size: 80, color: Colors.grey[400]),
+              const SizedBox(height: 16),
+              const Text(
+                'No Clients Found',
+                style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                _searchQuery.isEmpty 
+                    ? 'Add your first client organization to get started'
+                    : 'No clients match your search',
+                style: TextStyle(fontSize: 16, color: Colors.grey[600]),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            spreadRadius: 0,
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        children: [
+          if (isDesktop) _buildDesktopTable() else _buildMobileList(),
+        ],
+      ),
+    );
+  }
+
+  // ✅ UPDATED DESKTOP TABLE WITH STATUS DROPDOWN AND EDIT/DELETE
+  Widget _buildDesktopTable() {
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: DataTable(
+        headingRowColor: MaterialStateProperty.all(Colors.grey[100]),
+        columns: [
+          const DataColumn(
+            label: Text(
+              'Client Name',
+              style: TextStyle(fontWeight: FontWeight.bold),
+            ),
+          ),
+          const DataColumn(
+            label: Text(
+              'Contact Person',
+              style: TextStyle(fontWeight: FontWeight.bold),
+            ),
+          ),
+          const DataColumn(
+            label: Text(
+              'Email',
+              style: TextStyle(fontWeight: FontWeight.bold),
+            ),
+          ),
+          const DataColumn(
+            label: Text(
+              'Phone',
+              style: TextStyle(fontWeight: FontWeight.bold),
+            ),
+          ),
+          DataColumn(
+            label: Row(
+              children: [
+                const Text(
+                  'Employees',
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(width: 4),
+                Tooltip(
+                  message: 'Count of employees assigned to this client',
+                  child: Icon(
+                    Icons.help_outline,
+                    size: 14,
+                    color: Colors.grey.shade600,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const DataColumn(
+            label: Text(
+              'Status',
+              style: TextStyle(fontWeight: FontWeight.bold),
+            ),
+          ),
+          const DataColumn(
+            label: Text(
+              'Actions',
+              style: TextStyle(fontWeight: FontWeight.bold),
+            ),
+          ),
+        ],
+        rows: _filteredClients.map((client) {
+          return DataRow(
+            cells: [
+              DataCell(
+                Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF0D47A1).withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: const Icon(
+                        Icons.business,
+                        color: Color(0xFF0D47A1),
+                        size: 20,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Text(
+                      client.name,
+                      style: const TextStyle(fontWeight: FontWeight.w600),
+                    ),
+                  ],
+                ),
+              ),
+              DataCell(Text(client.contactPerson ?? 'N/A')),
+              DataCell(Text(client.email)),
+              DataCell(Text(client.phone)),
+              DataCell(
+                Row(
+                  children: [
+                    Text(_getClientCustomerCount(client).toString()),
+                    const SizedBox(width: 4),
+                    Tooltip(
+                      message: 'Employees with email domain matching ${client.email.split('@').last}',
+                      child: Icon(
+                        Icons.info_outline,
+                        size: 14,
+                        color: Colors.grey[500],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              // ✅ STATUS DROPDOWN
+              DataCell(
+                DropdownButton<String>(
+                  value: client.status,
+                  underline: Container(),
+                  items: [
+                    DropdownMenuItem(
+                      value: 'active',
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 6,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Colors.green.withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: const Text(
+                          'ACTIVE',
+                          style: TextStyle(
+                            color: Colors.green,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 12,
+                          ),
+                        ),
+                      ),
+                    ),
+                    DropdownMenuItem(
+                      value: 'inactive',
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 6,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Colors.orange.withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: const Text(
+                          'INACTIVE',
+                          style: TextStyle(
+                            color: Colors.orange,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 12,
+                          ),
+                        ),
+                      ),
+                    ),
+                    DropdownMenuItem(
+                      value: 'suspended',
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 6,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Colors.red.withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: const Text(
+                          'SUSPENDED',
+                          style: TextStyle(
+                            color: Colors.red,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 12,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                  onChanged: (newStatus) {
+                    if (newStatus != null && newStatus != client.status) {
+                      _updateClientStatus(client, newStatus);
+                    }
+                  },
+                ),
+              ),
+              // ✅ EDIT AND DELETE ACTIONS
+              DataCell(
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    IconButton(
+                      icon: const Icon(
+                        Icons.visibility,
+                        color: Color(0xFF0D47A1),
+                        size: 20,
+                      ),
+                      onPressed: () => _showClientDetails(client),
+                      tooltip: 'View Details',
+                    ),
+                    IconButton(
+                      icon: const Icon(
+                        Icons.edit,
+                        color: Color(0xFF10B981),
+                        size: 20,
+                      ),
+                      onPressed: () => _showEditClientDialog(client),
+                      tooltip: 'Edit Client',
+                    ),
+                    IconButton(
+                      icon: const Icon(
+                        Icons.delete,
+                        color: Colors.red,
+                        size: 20,
+                      ),
+                      onPressed: () => _deleteClient(client),
+                      tooltip: 'Delete Client',
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          );
+        }).toList(),
+      ),
+    );
+  }
+
+  // ✅ UPDATED MOBILE LIST WITH ACTIONS
+  Widget _buildMobileList() {
+    return ListView.separated(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      itemCount: _filteredClients.length,
+      separatorBuilder: (context, index) => const Divider(height: 1),
+      itemBuilder: (context, index) {
+        final client = _filteredClients[index];
+        return ListTile(
+          contentPadding: const EdgeInsets.all(16),
+          leading: Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: const Color(0xFF0D47A1).withOpacity(0.1),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: const Icon(
+              Icons.business,
+              color: Color(0xFF0D47A1),
+            ),
+          ),
+          title: Text(
+            client.name,
+            style: const TextStyle(fontWeight: FontWeight.bold),
+          ),
+          subtitle: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const SizedBox(height: 4),
+              if (client.contactPerson != null)
+                Text(
+                  client.contactPerson!,
+                  style: const TextStyle(fontSize: 12),
+                ),
+              Text(
+                client.email,
+                style: const TextStyle(fontSize: 12),
+              ),
+              const SizedBox(height: 4),
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 4,
+                    ),
+                    decoration: BoxDecoration(
+                      color: client.status == 'active'
+                          ? Colors.green.withOpacity(0.1)
+                          : Colors.orange.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Text(
+                      client.status.toUpperCase(),
+                      style: TextStyle(
+                        color: client.status == 'active'
+                            ? Colors.green
+                            : Colors.orange,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 10,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    '${_getClientCustomerCount(client)} employees',
+                    style: const TextStyle(fontSize: 12),
+                  ),
+                  const SizedBox(width: 4),
+                  if (client.email.contains('@'))
+                    Text(
+                      '(@${client.email.split('@')[1]})',
+                      style: TextStyle(
+                        fontSize: 10,
+                        color: Colors.grey[500],
+                        fontStyle: FontStyle.italic,
+                      ),
+                    ),
+                ],
+              ),
+            ],
+          ),
+          trailing: PopupMenuButton<String>(
+            icon: const Icon(Icons.more_vert),
+            onSelected: (value) {
+              switch (value) {
+                case 'view':
+                  _showClientDetails(client);
+                  break;
+                case 'edit':
+                  _showEditClientDialog(client);
+                  break;
+                case 'delete':
+                  _deleteClient(client);
+                  break;
+                case 'active':
+                case 'inactive':
+                case 'suspended':
+                  _updateClientStatus(client, value);
+                  break;
+              }
+            },
+            itemBuilder: (context) => [
+              const PopupMenuItem(
+                value: 'view',
+                child: Row(
+                  children: [
+                    Icon(Icons.visibility, size: 20, color: Color(0xFF0D47A1)),
+                    SizedBox(width: 12),
+                    Text('View Details'),
+                  ],
+                ),
+              ),
+              const PopupMenuItem(
+                value: 'edit',
+                child: Row(
+                  children: [
+                    Icon(Icons.edit, size: 20, color: Color(0xFF10B981)),
+                    SizedBox(width: 12),
+                    Text('Edit Client'),
+                  ],
+                ),
+              ),
+              const PopupMenuDivider(),
+              const PopupMenuItem(
+                value: 'active',
+                child: Row(
+                  children: [
+                    Icon(Icons.check_circle, size: 20, color: Colors.green),
+                    SizedBox(width: 12),
+                    Text('Set Active'),
+                  ],
+                ),
+              ),
+              const PopupMenuItem(
+                value: 'inactive',
+                child: Row(
+                  children: [
+                    Icon(Icons.pause_circle, size: 20, color: Colors.orange),
+                    SizedBox(width: 12),
+                    Text('Set Inactive'),
+                  ],
+                ),
+              ),
+              const PopupMenuItem(
+                value: 'suspended',
+                child: Row(
+                  children: [
+                    Icon(Icons.block, size: 20, color: Colors.red),
+                    SizedBox(width: 12),
+                    Text('Suspend'),
+                  ],
+                ),
+              ),
+              const PopupMenuDivider(),
+              const PopupMenuItem(
+                value: 'delete',
+                child: Row(
+                  children: [
+                    Icon(Icons.delete, size: 20, color: Colors.red),
+                    SizedBox(width: 12),
+                    Text('Delete Client'),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+}
+
+// ClientDetailsScreen with Employee Management Integration
+class ClientDetailsScreen extends StatefulWidget {
+  final ClientModel client;
+  final VoidCallback onUpdate;
+
+  const ClientDetailsScreen({
+    super.key,
+    required this.client,
+    required this.onUpdate,
+  });
+
+  @override
+  State<ClientDetailsScreen> createState() => _ClientDetailsScreenState();
+}
+
+class _ClientDetailsScreenState extends State<ClientDetailsScreen> {
+  List<Map<String, dynamic>> _companyEmployees = [];
+  bool _isLoadingEmployees = true;
+  String _companyDomain = '';
+  Map<String, dynamic> _companyStats = {};
+  Map<String, dynamic> _activeFilters = {}; // For horizontal filter bar
+
+  @override
+  void initState() {
+    super.initState();
+    _extractCompanyDomain();
+    _loadCompanyEmployees();
+  }
+
+  void _extractCompanyDomain() {
+    // Extract domain from client email
+    if (widget.client.email.contains('@')) {
+      _companyDomain = widget.client.email.split('@')[1];
+    }
+    debugPrint('🏢 Client company domain: $_companyDomain');
+  }
+
+  Future<void> _loadCompanyEmployees() async {
+    try {
+      debugPrint('🔍 Loading customers for client: ${widget.client.name}');
+      
+      // Use the new client customers endpoint that matches "All Customers" data
+      final apiService = BackendConnectionManager().apiService;
+      final response = await apiService.get('/clients/${widget.client.id}/customers');
+      
+      if (response['success'] == true) {
+        final customerData = response;
+        final categories = customerData['categories'] as Map<String, dynamic>? ?? {};
+        
+        // Combine all customers for display
+        final allCustomers = <Map<String, dynamic>>[];
+        
+        // Add explicitly assigned customers
+        if (categories['explicitlyAssigned']?['customers'] != null) {
+          final explicit = List<Map<String, dynamic>>.from(categories['explicitlyAssigned']['customers']);
+          for (var customer in explicit) {
+            customer['categoryType'] = 'Directly Assigned';
+            customer['categoryColor'] = 'green';
+            allCustomers.add(customer);
+          }
+        }
+        
+        // Add domain matched customers
+        if (categories['domainMatched']?['customers'] != null) {
+          final domain = List<Map<String, dynamic>>.from(categories['domainMatched']['customers']);
+          for (var customer in domain) {
+            customer['categoryType'] = 'Domain Matched (@${customerData['clientInfo']['domain']})';
+            customer['categoryColor'] = 'blue';
+            allCustomers.add(customer);
+          }
+        }
+        
+        // Add company matched customers
+        if (categories['companyMatched']?['customers'] != null) {
+          final company = List<Map<String, dynamic>>.from(categories['companyMatched']['customers']);
+          for (var customer in company) {
+            customer['categoryType'] = 'Company Matched';
+            customer['categoryColor'] = 'orange';
+            allCustomers.add(customer);
+          }
+        }
+        
+        setState(() {
+          _companyEmployees = allCustomers;
+          _companyStats = {
+            'totalCustomers': customerData['totalCount'] ?? 0,
+            'explicitlyAssigned': categories['explicitlyAssigned']?['count'] ?? 0,
+            'domainMatched': categories['domainMatched']?['count'] ?? 0,
+            'companyMatched': categories['companyMatched']?['count'] ?? 0,
+          };
+          _companyDomain = customerData['clientInfo']['domain'] ?? '';
+          _isLoadingEmployees = false;
+        });
+        
+        debugPrint('✅ Loaded ${allCustomers.length} customers for ${widget.client.name}');
+        debugPrint('   - Explicitly assigned: ${categories['explicitlyAssigned']?['count'] ?? 0}');
+        debugPrint('   - Domain matched: ${categories['domainMatched']?['count'] ?? 0}');
+        debugPrint('   - Company matched: ${categories['companyMatched']?['count'] ?? 0}');
+      } else {
+        debugPrint('❌ Failed to load customers: ${response['message']}');
+        setState(() => _isLoadingEmployees = false);
+      }
+    } catch (e) {
+      debugPrint('❌ Error loading customers: $e');
+      setState(() => _isLoadingEmployees = false);
+    }
+  }
+  
+  // 🎯 FILTER HANDLERS
+  void _handleFilterApplied(Map<String, dynamic> filters) {
+    setState(() {
+      _activeFilters = filters;
+    });
+  }
+
+  void _handleFilterCleared() {
+    setState(() {
+      _activeFilters = {};
+    });
+  }
+  
+  // Apply local filters to employees
+  List<Map<String, dynamic>> _getFilteredEmployees() {
+    if (_activeFilters.isEmpty) return _companyEmployees;
+    
+    return _companyEmployees.where((employee) {
+      // Date range filter
+      if (_activeFilters.containsKey('startDate') && _activeFilters.containsKey('endDate')) {
+        final startDate = _activeFilters['startDate'] as DateTime;
+        final endDate = _activeFilters['endDate'] as DateTime;
+        final employeeDate = _parseDate(employee['createdAt'] ?? employee['registrationDate']);
+        if (employeeDate == null || 
+            employeeDate.isBefore(startDate) || 
+            employeeDate.isAfter(endDate)) {
+          return false;
+        }
+      }
+      
+      // State filter
+      if (_activeFilters.containsKey('state')) {
+        final state = _activeFilters['state'] as String;
+        if (employee['state']?.toString().toLowerCase() != state.toLowerCase()) {
+          return false;
+        }
+      }
+      
+      // City filter
+      if (_activeFilters.containsKey('city')) {
+        final city = _activeFilters['city'] as String;
+        final employeeCity = employee['city']?.toString() ?? '';
+        if (!employeeCity.toLowerCase().contains(city.toLowerCase())) {
+          return false;
+        }
+      }
+      
+      // Area filter
+      if (_activeFilters.containsKey('area')) {
+        final area = _activeFilters['area'] as String;
+        final employeeArea = employee['area']?.toString() ?? '';
+        if (!employeeArea.toLowerCase().contains(area.toLowerCase())) {
+          return false;
+        }
+      }
+      
+      return true;
+    }).toList();
+  }
+  
+  DateTime? _parseDate(dynamic timestamp) {
+    if (timestamp == null) return null;
+    
+    try {
+      if (timestamp is String) {
+        return DateTime.parse(timestamp);
+      } else if (timestamp is int) {
+        return DateTime.fromMillisecondsSinceEpoch(timestamp);
+      } else if (timestamp is DateTime) {
+        return timestamp;
+      }
+    } catch (e) {
+      debugPrint('Error parsing date: $e');
+    }
+    return null;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: const Color(0xFFF8FAFC),
+      appBar: AppBar(
+        title: Text(widget.client.name),
+        backgroundColor: const Color(0xFF0D47A1),
+        foregroundColor: Colors.white,
+        actions: [
+          // 💬 Support Icon
+          IconButton(
+            icon: const Icon(Icons.headset_mic_outlined, color: Colors.white),
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => const SupportSystemScreen(),
+                ),
+              );
+            },
+            tooltip: 'Support',
+          ),
+        ],
+      ),
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _buildInfoCard(context),
+            const SizedBox(height: 24),
+            _buildStatsSection(context),
+            const SizedBox(height: 24),
+            _buildEmployeesSection(context),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildEmployeesSection(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.people, color: Colors.blue[700], size: 28),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Customer Details',
+                      style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                    ),
+                    Text(
+                      'All customers from "All Customers" section, categorized by assignment type',
+                      style: TextStyle(fontSize: 14, color: Colors.grey[600]),
+                    ),
+                  ],
+                ),
+              ),
+              if (!_isLoadingEmployees && _companyEmployees.isNotEmpty)
+                ElevatedButton.icon(
+                  onPressed: _showAllEmployees,
+                  icon: const Icon(Icons.visibility, size: 18),
+                  label: const Text('View All'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.blue[600],
+                    foregroundColor: Colors.white,
+                  ),
+                ),
+              const SizedBox(width: 12),
+              IconButton(
+                onPressed: _loadCompanyEmployees,
+                icon: const Icon(Icons.refresh),
+                tooltip: 'Refresh Customer Data',
+              ),
+            ],
+          ),
+          const SizedBox(height: 20),
+          
+          // 🎯 HORIZONTAL FILTER BAR
+          AlternativeFilterBar(
+            onFilterApplied: _handleFilterApplied,
+            onFilterCleared: _handleFilterCleared,
+            initialFilters: _activeFilters,
+            showDateFilter: false,
+            showDateRangeFilter: true,
+            showCountryFilter: true,
+            showStateFilter: true,
+            showCityFilter: true,
+            showAreaFilter: true,
+          ),
+          const SizedBox(height: 20),
+          
+          if (_isLoadingEmployees)
+            const Center(
+              child: Padding(
+                padding: EdgeInsets.all(40),
+                child: CircularProgressIndicator(),
+              ),
+            )
+          else if (_companyEmployees.isEmpty)
+            Container(
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                color: Colors.grey[50],
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.grey[200]!),
+              ),
+              child: Row(
+                children: [
+                  Icon(Icons.people_outline, color: Colors.grey[600]),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      'No customers found for ${widget.client.name}',
+                      style: TextStyle(fontSize: 14, color: Colors.grey[600]),
+                    ),
+                  ),
+                ],
+              ),
+            )
+          else ...[
+            // Customer Stats Row
+            if (_companyStats.isNotEmpty) ...[
+              Row(
+                children: [
+                  Expanded(
+                    child: _buildEmployeeStatCard(
+                      'Total Customers',
+                      (_companyStats['totalCustomers'] ?? 0).toString(),
+                      Icons.people,
+                      Colors.blue,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: _buildEmployeeStatCard(
+                      'Directly Assigned',
+                      (_companyStats['explicitlyAssigned'] ?? 0).toString(),
+                      Icons.assignment_ind,
+                      Colors.green,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: _buildEmployeeStatCard(
+                      'Domain Matched',
+                      (_companyStats['domainMatched'] ?? 0).toString(),
+                      Icons.domain,
+                      Colors.blue,
+                    ),
+                  ),
+                  if ((_companyStats['companyMatched'] ?? 0) > 0) ...[
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: _buildEmployeeStatCard(
+                        'Company Matched',
+                        (_companyStats['companyMatched'] ?? 0).toString(),
+                        Icons.business,
+                        Colors.orange,
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+              const SizedBox(height: 20),
+            ],
+            
+            // Customer List with Categories
+            const Text(
+              'Customer List by Category',
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+            ),
+            const SizedBox(height: 12),
+            
+            // Group customers by category
+            ..._buildCustomersByCategory(),
+          ],
+        ],
+      ),
+    );
+  }
+
+  List<Widget> _buildCustomersByCategory() {
+    // Get filtered employees
+    final filteredEmployees = _getFilteredEmployees();
+    
+    // Group customers by category type
+    final Map<String, List<Map<String, dynamic>>> groupedCustomers = {};
+    
+    for (var customer in filteredEmployees) {
+      final categoryType = customer['categoryType'] as String? ?? 'Unknown';
+      if (!groupedCustomers.containsKey(categoryType)) {
+        groupedCustomers[categoryType] = [];
+      }
+      groupedCustomers[categoryType]!.add(customer);
+    }
+    
+    final List<Widget> categoryWidgets = [];
+    
+    // Define category order and colors
+    final categoryOrder = [
+      'Directly Assigned',
+      'Domain Matched (@$_companyDomain)',
+      'Company Matched',
+    ];
+    
+    final categoryColors = {
+      'Directly Assigned': Colors.green,
+      'Domain Matched (@$_companyDomain)': Colors.blue,
+      'Company Matched': Colors.orange,
+    };
+    
+    for (String categoryType in categoryOrder) {
+      if (groupedCustomers.containsKey(categoryType) && groupedCustomers[categoryType]!.isNotEmpty) {
+        final customers = groupedCustomers[categoryType]!;
+        final color = categoryColors[categoryType] ?? Colors.grey;
+        
+        categoryWidgets.add(
+          ExpansionTile(
+            leading: Icon(
+              categoryType.contains('Directly') ? Icons.assignment_ind :
+              categoryType.contains('Domain') ? Icons.domain : Icons.business,
+              color: color,
+            ),
+            title: Text(
+              '$categoryType (${customers.length})',
+              style: const TextStyle(fontWeight: FontWeight.w600),
+            ),
+            subtitle: Text(
+              _getCategoryDescription(categoryType),
+              style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+            ),
+            children: [
+              ListView.builder(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                itemCount: customers.length,
+                itemBuilder: (context, index) {
+                  final customer = customers[index];
+                  return ListTile(
+                    leading: CircleAvatar(
+                      backgroundColor: color.withOpacity(0.1),
+                      child: Text(
+                        (customer['name'] as String? ?? 'U')[0].toUpperCase(),
+                        style: TextStyle(color: color, fontWeight: FontWeight.bold),
+                      ),
+                    ),
+                    title: Text(customer['name'] ?? 'Unknown'),
+                    subtitle: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(customer['email'] ?? ''),
+                        if (customer['companyName'] != null && customer['companyName'].toString().isNotEmpty)
+                          Text(
+                            customer['companyName'].toString(),
+                            style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                          ),
+                      ],
+                    ),
+                    trailing: customer['phoneNumber'] != null && customer['phoneNumber'].toString().isNotEmpty
+                        ? IconButton(
+                            icon: const Icon(Icons.phone),
+                            onPressed: () {
+                              // Handle phone call
+                            },
+                          )
+                        : null,
+                  );
+                },
+              ),
+            ],
+          ),
+        );
+        
+        categoryWidgets.add(const SizedBox(height: 8));
+      }
+    }
+    
+    return categoryWidgets;
+  }
+
+  String _getCategoryDescription(String categoryType) {
+    if (categoryType.contains('Directly')) {
+      return 'Customers explicitly assigned to this client';
+    } else if (categoryType.contains('Domain')) {
+      return 'Employees with matching email domain';
+    } else if (categoryType.contains('Company')) {
+      return 'Customers matched by company name';
+    }
+    return 'Unknown category';
+  }
+
+  Widget _buildEmployeeStatCard(String title, String value, IconData icon, Color color) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: color.withOpacity(0.3)),
+      ),
+      child: Column(
+        children: [
+          Icon(icon, size: 24, color: color),
+          const SizedBox(height: 8),
+          Text(
+            value,
+            style: TextStyle(
+              fontSize: 20,
+              fontWeight: FontWeight.bold,
+              color: color,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            title,
+            style: TextStyle(
+              fontSize: 12,
+              color: Colors.grey[600],
+            ),
+            textAlign: TextAlign.center,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildEmployeeCard(Map<String, dynamic> employee) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.grey[50],
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: Colors.grey[200]!),
+      ),
+      child: Row(
+        children: [
+          CircleAvatar(
+            backgroundColor: Colors.blue[100],
+            child: Text(
+              (employee['name'] ?? 'U')[0].toUpperCase(),
+              style: TextStyle(
+                color: Colors.blue[700],
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  employee['name'] ?? 'Unknown',
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w600,
+                    fontSize: 14,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  employee['email'] ?? '',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: Colors.grey[600],
+                  ),
+                ),
+                if (employee['department'] != null) ...[
+                  const SizedBox(height: 2),
+                  Text(
+                    employee['department'],
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: Colors.blue[600],
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            decoration: BoxDecoration(
+              color: employee['status'] == 'active' ? Colors.green[100] : Colors.orange[100],
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Text(
+              employee['status']?.toString().toUpperCase() ?? 'UNKNOWN',
+              style: TextStyle(
+                fontSize: 10,
+                fontWeight: FontWeight.bold,
+                color: employee['status'] == 'active' ? Colors.green[700] : Colors.orange[700],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showAllEmployees() {
+    showDialog(
+      context: context,
+      builder: (context) => Dialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        child: Container(
+          constraints: BoxConstraints(
+            maxWidth: MediaQuery.of(context).size.width * 0.9,
+            maxHeight: MediaQuery.of(context).size.height * 0.8,
+          ),
+          child: Column(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  color: Colors.blue[50],
+                  borderRadius: const BorderRadius.only(
+                    topLeft: Radius.circular(16),
+                    topRight: Radius.circular(16),
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    Icon(Icons.people, color: Colors.blue[700]),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            '${widget.client.name} Employees',
+                            style: const TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          Text(
+                            'Domain: $_companyDomain • ${_companyEmployees.length} employees',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: Colors.grey[600],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    IconButton(
+                      onPressed: () => Navigator.pop(context),
+                      icon: const Icon(Icons.close),
+                    ),
+                  ],
+                ),
+              ),
+              Expanded(
+                child: ListView.separated(
+                  padding: const EdgeInsets.all(20),
+                  itemCount: _companyEmployees.length,
+                  separatorBuilder: (context, index) => const SizedBox(height: 12),
+                  itemBuilder: (context, index) {
+                    final employee = _companyEmployees[index];
+                    return _buildEmployeeCard(employee);
+                  },
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _showBulkImportDialog() {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('📄 Bulk import feature is available via CSV template'),
+        backgroundColor: Colors.blue,
+      ),
+    );
+  }
+
+  Widget _buildInfoCard(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Client Information',
+            style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+          ),
+          const SizedBox(height: 20),
+          _buildInfoRow(Icons.business, 'Company Name', widget.client.name),
+          if (widget.client.contactPerson != null)
+            _buildInfoRow(Icons.person, 'Contact Person', widget.client.contactPerson!),
+          _buildInfoRow(Icons.email, 'Email', widget.client.email),
+          _buildInfoRow(Icons.phone, 'Phone', widget.client.phone),
+          _buildInfoRow(Icons.location_on, 'Address', widget.client.address ?? 'N/A'),
+          if (widget.client.gstNumber != null)
+            _buildInfoRow(Icons.receipt_long, 'GST Number', widget.client.gstNumber!),
+          if (widget.client.panNumber != null)
+            _buildInfoRow(Icons.credit_card, 'PAN Number', widget.client.panNumber!),
+          _buildInfoRow(
+            Icons.circle,
+            'Status',
+            widget.client.status.toUpperCase(),
+            valueColor: widget.client.status == 'active' ? Colors.green : Colors.orange,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildInfoRow(IconData icon, String label, String value, {Color? valueColor}) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 16),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icon, size: 20, color: Colors.grey[600]),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  label,
+                  style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  value,
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                    color: valueColor ?? Colors.black87,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildStatsSection(BuildContext context) {
+    // Use the total count from the loaded customer data if available
+    final totalCustomers = _companyStats['totalCustomers'] ?? 0;
+    
+    return Row(
+      children: [
+        Expanded(
+          child: _buildStatCard(
+            'Total Customers',
+            totalCustomers.toString(),
+            Icons.people,
+            Colors.blue,
+          ),
+        ),
+        // Removed Active Vehicles card as requested
+      ],
+    );
+  }
+
+  Widget _buildStatCard(String title, String value, IconData icon, Color color) {
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: color.withOpacity(0.1),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        children: [
+          Icon(icon, size: 40, color: color),
+          const SizedBox(height: 12),
+          Text(
+            value,
+            style: const TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            title,
+            style: TextStyle(fontSize: 14, color: Colors.grey[600]),
+            textAlign: TextAlign.center,
+          ),
+        ],
+      ),
+    );
+  }
+}

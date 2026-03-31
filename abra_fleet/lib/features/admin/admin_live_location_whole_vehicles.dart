@@ -1,0 +1,2446 @@
+// lib/screens/admin/admin_live_location_whole_vehicles.dart
+// ============================================================================
+// ADMIN LIVE VEHICLE TRACKING - Complete Fleet Monitoring Dashboard
+// ============================================================================
+// Features:
+// ✅ Real-time vehicle positions on map (Flutter Map + OpenStreetMap)
+// ✅ 10-second polling for live updates
+// ✅ Vehicle markers with status colors
+// ✅ Route polylines from location history
+// ✅ Stop markers (pickup/drop)
+// ✅ Filters: Date, Status, Company
+// ✅ Vehicle details panel (click marker)
+// ✅ Timeline playback slider
+// ✅ Notification alerts badge
+// ✅ AUTO POPUP - alerts appear on screen without clicking (any screen)
+// ✅ PUSH NOTIFICATIONS - system notifications when app in background/closed
+// ============================================================================
+//
+// SETUP REQUIRED:
+// --------------
+// 1. Add to pubspec.yaml:
+//    dependencies:
+//      flutter_local_notifications: ^17.0.0
+//
+// 2. Android: android/app/src/main/AndroidManifest.xml
+//    Add inside <manifest>:
+//      <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
+//      <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"/>
+//      <uses-permission android:name="android.permission.VIBRATE"/>
+//
+//    Add inside <application>:
+//      <receiver android:exported="false" android:name="com.dexterous.flutterlocalnotifications.ScheduledNotificationReceiver"/>
+//      <receiver android:exported="false" android:name="com.dexterous.flutterlocalnotifications.ScheduledNotificationBootReceiver">
+//        <intent-filter>
+//          <action android:name="android.intent.action.BOOT_COMPLETED"/>
+//          <action android:name="android.intent.action.MY_PACKAGE_REPLACED"/>
+//          <action android:name="android.intent.action.QUICKBOOT_POWERON"/>
+//          <action android:name="com.htc.intent.action.QUICKBOOT_POWERON"/>
+//        </intent-filter>
+//      </receiver>
+//
+// 3. iOS: ios/Runner/AppDelegate.swift
+//    Add: UNUserNotificationCenter.current().delegate = self as? UNUserNotificationCenterDelegate
+//
+// 4. Create notification icon:
+//    Place a white-on-transparent PNG at:
+//    android/app/src/main/res/drawable/ic_notification.png
+//    (Simple car or bell icon, 96x96px recommended)
+// ============================================================================
+
+import 'package:flutter/material.dart';
+import 'package:flutter_map/flutter_map.dart';
+import 'package:latlong2/latlong.dart';
+import 'package:http/http.dart' as http;
+import 'dart:async';
+import 'dart:convert';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:intl/intl.dart';
+import 'package:abra_fleet/app/config/api_config.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:url_launcher/url_launcher.dart';
+
+// ============================================================================
+// NOTIFICATION SERVICE - Handles both in-app overlays & push notifications
+// ============================================================================
+
+class AlertNotificationService {
+  static final AlertNotificationService _instance =
+      AlertNotificationService._internal();
+  factory AlertNotificationService() => _instance;
+  AlertNotificationService._internal();
+
+  final FlutterLocalNotificationsPlugin _localNotifications =
+      FlutterLocalNotificationsPlugin();
+
+  bool _isInitialized = false;
+
+  // Notification channel IDs
+  static const String _offlineChannelId = 'vehicle_offline';
+  static const String _deviationChannelId = 'route_deviation';
+  static const String _speedingChannelId = 'vehicle_speeding';
+
+  Future<void> initialize() async {
+    if (_isInitialized) return;
+
+    // Android settings
+    const androidSettings =
+        AndroidInitializationSettings('ic_notification'); // your drawable icon
+
+    // iOS settings
+    const iosSettings = DarwinInitializationSettings(
+      requestAlertPermission: true,
+      requestBadgePermission: true,
+      requestSoundPermission: true,
+    );
+
+    const initSettings = InitializationSettings(
+      android: androidSettings,
+      iOS: iosSettings,
+    );
+
+    await _localNotifications.initialize(
+      initSettings,
+      onDidReceiveNotificationResponse: _onNotificationTapped,
+    );
+
+    // Request permissions (Android 13+)
+    final androidPlugin =
+        _localNotifications.resolvePlatformSpecificImplementation<
+            AndroidFlutterLocalNotificationsPlugin>();
+
+    await androidPlugin?.requestNotificationsPermission();
+
+    _isInitialized = true;
+    debugPrint('✅ AlertNotificationService initialized');
+  }
+
+  void _onNotificationTapped(NotificationResponse response) {
+    // You can navigate to the tracking screen when notification is tapped
+    debugPrint('🔔 Notification tapped: ${response.payload}');
+    // TODO: Navigate to live tracking screen using your app's navigation
+    // NavigationService.navigateTo(AdminLiveLocationWholeVehicles.routeName);
+  }
+
+  // Send a push notification (works when app is in background/closed)
+  Future<void> sendPushNotification({
+    required int id,
+    required String title,
+    required String body,
+    required String channelId,
+    required String channelName,
+    String? payload,
+    Color? color,
+  }) async {
+    if (!_isInitialized) await initialize();
+
+    final androidDetails = AndroidNotificationDetails(
+      channelId,
+      channelName,
+      importance: Importance.high,
+      priority: Priority.high,
+      color: color ?? Colors.blue,
+      playSound: true,
+      enableVibration: true,
+      styleInformation: BigTextStyleInformation(body),
+    );
+
+    const iosDetails = DarwinNotificationDetails(
+      presentAlert: true,
+      presentBadge: true,
+      presentSound: true,
+    );
+
+    final details = NotificationDetails(
+      android: androidDetails,
+      iOS: iosDetails,
+    );
+
+    await _localNotifications.show(id, title, body, details,
+        payload: payload);
+
+    debugPrint('📤 Push notification sent: $title');
+  }
+
+  // Send offline vehicle notification
+  Future<void> notifyVehicleOffline(String vehicleNumber,
+      String duration) async {
+    await sendPushNotification(
+      id: vehicleNumber.hashCode,
+      title: '🚨 Vehicle Offline: $vehicleNumber',
+      body: '$vehicleNumber has been offline for $duration. '
+          'Please contact the driver immediately.',
+      channelId: _offlineChannelId,
+      channelName: 'Vehicle Offline Alerts',
+      color: Colors.red,
+      payload: 'offline:$vehicleNumber',
+    );
+  }
+
+  // Send route deviation notification
+  Future<void> notifyRouteDeviation(
+      String vehicleNumber, String deviation) async {
+    await sendPushNotification(
+      id: vehicleNumber.hashCode + 1,
+      title: '⚠️ Route Deviation: $vehicleNumber',
+      body: '$vehicleNumber is $deviation km off the planned route.',
+      channelId: _deviationChannelId,
+      channelName: 'Route Deviation Alerts',
+      color: Colors.orange,
+      payload: 'deviation:$vehicleNumber',
+    );
+  }
+
+  // Send speeding notification
+  Future<void> notifySpeeding(String vehicleNumber, String speed) async {
+    await sendPushNotification(
+      id: vehicleNumber.hashCode + 2,
+      title: '⚡ Speeding Alert: $vehicleNumber',
+      body: '$vehicleNumber is travelling at $speed km/h. '
+          'Speed limit may be exceeded.',
+      channelId: _speedingChannelId,
+      channelName: 'Speeding Alerts',
+      color: Colors.deepOrange,
+      payload: 'speeding:$vehicleNumber',
+    );
+  }
+}
+
+// ============================================================================
+// MAIN SCREEN
+// ============================================================================
+
+// ============================================================================
+// TRIP ASSIGNMENT CONTEXT - passed from TripOperationScreen
+// ============================================================================
+class TripAssignmentContext {
+  final String tripId;
+  final String tripNumber;
+  final String customerName;
+  final String customerPhone;
+  final String pickupAddress;
+  final String dropAddress;
+  final String scheduledPickupTime;
+  final bool isReassign;
+  final bool isClientTrip; // NEW: indicates if this is a client trip (uses /api/client-trips/)
+
+  const TripAssignmentContext({
+    required this.tripId,
+    required this.tripNumber,
+    required this.customerName,
+    required this.customerPhone,
+    required this.pickupAddress,
+    required this.dropAddress,
+    required this.scheduledPickupTime,
+    required this.isReassign,
+    this.isClientTrip = false, // Default to false for regular trips
+  });
+}
+
+
+class AdminLiveLocationWholeVehicles extends StatefulWidget {
+  final TripAssignmentContext? tripAssignmentContext;
+
+  const AdminLiveLocationWholeVehicles({
+    super.key,
+    this.tripAssignmentContext,
+  });
+
+  static const String routeName = '/admin/live-tracking';
+
+  @override
+  State<AdminLiveLocationWholeVehicles> createState() =>
+      _AdminLiveLocationWholeVehiclesState();
+}
+
+class _AdminLiveLocationWholeVehiclesState
+    extends State<AdminLiveLocationWholeVehicles> {
+  // ========================================================================
+  // STATE VARIABLES
+  // ========================================================================
+
+  final MapController _mapController = MapController();
+  Timer? _pollingTimer;
+
+  List<Map<String, dynamic>> _vehicles = [];
+  Map<String, dynamic>? _selectedVehicle;
+  Map<String, dynamic> _alerts = {};
+  Map<String, dynamic> _stats = {};
+
+  bool _isLoading = true;
+  String? _errorMessage;
+
+  DateTime _selectedDate = DateTime.now();
+  String _statusFilter = 'all';
+  String _companyFilter = 'all';
+
+  bool _showVehicleList = true;
+  bool _showDetailsPanel = false;
+
+  bool _isPlaybackMode = false;
+  double _playbackTime = 0.0;
+  List<Map<String, dynamic>> _playbackLocations = [];
+
+  // ─── Assignment mode ──────────────────────────────────────────────────────
+TripAssignmentContext? get _tripContext =>
+    widget.tripAssignmentContext;
+bool get _isAssignmentMode => _tripContext != null;
+bool _isAssigning = false;
+
+  int _alertCount = 0;
+
+  // ─── Alert tracking (to detect NEW alerts each poll cycle) ───────────────
+  Set<String> _knownOfflineVehicles = {};
+  Set<String> _knownDeviationVehicles = {};
+  Set<String> _knownSpeedingVehicles = {};
+
+  // ─── Notification service ─────────────────────────────────────────────────
+  final AlertNotificationService _notificationService =
+      AlertNotificationService();
+
+  // ─── Overlay for in-app banners ───────────────────────────────────────────
+  OverlayEntry? _currentBannerOverlay;
+
+  @override
+  void initState() {
+    super.initState();
+    debugPrint('🗺️ AdminLiveLocationWholeVehicles: initState');
+    _notificationService.initialize();
+    _loadLiveVehicles();
+    _startPolling();
+  }
+
+  @override
+  void dispose() {
+    _pollingTimer?.cancel();
+    _currentBannerOverlay?.remove();
+    super.dispose();
+  }
+
+  // ========================================================================
+  // ALERT DETECTION - compares old vs new alerts to find NEW ones
+  // ========================================================================
+
+  void _processNewAlerts(Map<String, dynamic> alertsData) {
+    final offline =
+        (alertsData['offline'] as List<dynamic>? ?? [])
+            .cast<Map<String, dynamic>>();
+    final routeDeviation =
+        (alertsData['routeDeviation'] as List<dynamic>? ?? [])
+            .cast<Map<String, dynamic>>();
+    final speeding =
+        (alertsData['speeding'] as List<dynamic>? ?? [])
+            .cast<Map<String, dynamic>>();
+
+    // ── Offline vehicles ──────────────────────────────────────────────────
+    for (final alert in offline) {
+      final vehicleNumber = alert['vehicleNumber']?.toString() ?? '';
+      final duration = alert['duration']?.toString() ?? '';
+
+      if (vehicleNumber.isNotEmpty &&
+          !_knownOfflineVehicles.contains(vehicleNumber)) {
+        _knownOfflineVehicles.add(vehicleNumber);
+
+        // In-app banner
+        _showAlertBanner(
+          title: '🚨 Vehicle Offline',
+          message: '$vehicleNumber has been offline for $duration',
+          color: Colors.red.shade700,
+          icon: Icons.wifi_off,
+        );
+
+        // Push notification (for background)
+        _notificationService.notifyVehicleOffline(vehicleNumber, duration);
+      }
+    }
+
+    // Remove resolved offline alerts
+    final currentOfflineNumbers =
+        offline.map((a) => a['vehicleNumber']?.toString() ?? '').toSet();
+    _knownOfflineVehicles
+        .removeWhere((v) => !currentOfflineNumbers.contains(v));
+
+    // ── Route deviation vehicles ──────────────────────────────────────────
+    for (final alert in routeDeviation) {
+      final vehicleNumber = alert['vehicleNumber']?.toString() ?? '';
+      final deviation = alert['deviation']?.toString() ?? '';
+
+      if (vehicleNumber.isNotEmpty &&
+          !_knownDeviationVehicles.contains(vehicleNumber)) {
+        _knownDeviationVehicles.add(vehicleNumber);
+
+        _showAlertBanner(
+          title: '⚠️ Route Deviation',
+          message: '$vehicleNumber is $deviation km off the planned route',
+          color: Colors.orange.shade800,
+          icon: Icons.route,
+        );
+
+        _notificationService.notifyRouteDeviation(vehicleNumber, deviation);
+      }
+    }
+
+    final currentDeviationNumbers = routeDeviation
+        .map((a) => a['vehicleNumber']?.toString() ?? '')
+        .toSet();
+    _knownDeviationVehicles
+        .removeWhere((v) => !currentDeviationNumbers.contains(v));
+
+    // ── Speeding vehicles ─────────────────────────────────────────────────
+    for (final alert in speeding) {
+      final vehicleNumber = alert['vehicleNumber']?.toString() ?? '';
+      final speed = alert['speed']?.toString() ?? '';
+
+      if (vehicleNumber.isNotEmpty &&
+          !_knownSpeedingVehicles.contains(vehicleNumber)) {
+        _knownSpeedingVehicles.add(vehicleNumber);
+
+        _showAlertBanner(
+          title: '⚡ Speeding Alert',
+          message: '$vehicleNumber travelling at $speed km/h',
+          color: Colors.deepOrange.shade700,
+          icon: Icons.speed,
+        );
+
+        _notificationService.notifySpeeding(vehicleNumber, speed);
+      }
+    }
+
+    final currentSpeedingNumbers =
+        speeding.map((a) => a['vehicleNumber']?.toString() ?? '').toSet();
+    _knownSpeedingVehicles
+        .removeWhere((v) => !currentSpeedingNumbers.contains(v));
+  }
+
+  // ========================================================================
+  // IN-APP BANNER OVERLAY
+  // Shows a sliding banner at the top of the screen (any screen in the app)
+  // ========================================================================
+
+  void _showAlertBanner({
+    required String title,
+    required String message,
+    required Color color,
+    required IconData icon,
+  }) {
+    if (!mounted) return;
+
+    // Remove any existing banner
+    _currentBannerOverlay?.remove();
+    _currentBannerOverlay = null;
+
+    final overlay = Overlay.of(context);
+
+    _currentBannerOverlay = OverlayEntry(
+      builder: (context) => _AlertBanner(
+        title: title,
+        message: message,
+        color: color,
+        icon: icon,
+        onDismiss: () {
+          _currentBannerOverlay?.remove();
+          _currentBannerOverlay = null;
+        },
+        onTap: () {
+          _currentBannerOverlay?.remove();
+          _currentBannerOverlay = null;
+          _showAlertsDialog();
+        },
+      ),
+    );
+
+    overlay.insert(_currentBannerOverlay!);
+    debugPrint('🔔 In-app banner shown: $title');
+  }
+
+  // ========================================================================
+  // API METHODS
+  // ========================================================================
+
+  Future<String?> _getToken() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      return prefs.getString('jwt_token');
+    } catch (e) {
+      debugPrint('❌ Error getting token: $e');
+      return null;
+    }
+  }
+
+  void _startPolling() {
+    _pollingTimer = Timer.periodic(const Duration(seconds: 10), (timer) {
+      if (mounted && !_isPlaybackMode) {
+        _loadLiveVehicles(silent: true);
+      }
+    });
+    debugPrint('✅ Polling started (every 10 seconds)');
+  }
+
+  Future<void> _loadLiveVehicles({bool silent = false}) async {
+    try {
+      if (!silent) {
+        setState(() {
+          _isLoading = true;
+          _errorMessage = null;
+        });
+      }
+
+      final token = await _getToken();
+      if (token == null) throw Exception('No authentication token found');
+
+      final dateStr = DateFormat('yyyy-MM-dd').format(_selectedDate);
+
+      final url =
+          '${ApiConfig.baseUrl}/api/admin/live-tracking/vehicles'
+          '?date=$dateStr'
+          '&status=$_statusFilter'
+          '&company=$_companyFilter';
+
+      debugPrint('🔍 Fetching live vehicles: $url');
+
+      final response = await http.get(
+        Uri.parse(url),
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Content-Type': 'application/json',
+        },
+      );
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+
+        if (data['success'] == true) {
+          final vehiclesData =
+              data['vehicles'] as List<dynamic>? ?? [];
+          final alertsData =
+              data['alerts'] as Map<String, dynamic>? ?? {};
+          final summaryData =
+              data['summary'] as Map<String, dynamic>? ?? {};
+
+          // ── Process new alerts BEFORE setState ────────────────────────
+          _processNewAlerts(alertsData);
+
+          if (mounted) {
+            setState(() {
+              _vehicles = vehiclesData.cast<Map<String, dynamic>>();
+              _alerts = alertsData;
+              _stats = summaryData;
+
+              _alertCount =
+                  (alertsData['offline']?.length ?? 0) +
+                  (alertsData['routeDeviation']?.length ?? 0) +
+                  (alertsData['speeding']?.length ?? 0);
+
+              _isLoading = false;
+              _errorMessage = null;
+            });
+
+            if (!silent) {
+              debugPrint('✅ Loaded ${_vehicles.length} vehicle(s)');
+            }
+          }
+
+          if (!silent && _vehicles.isNotEmpty) {
+            _fitMapToVehicles();
+          }
+        } else {
+          throw Exception(data['message'] ?? 'Failed to load vehicles');
+        }
+      } else {
+        throw Exception('HTTP ${response.statusCode}: ${response.body}');
+      }
+    } catch (e) {
+      debugPrint('❌ Error loading vehicles: $e');
+      if (mounted) {
+        setState(() {
+          _errorMessage = 'Failed to load vehicles: $e';
+          _isLoading = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _loadVehicleDetails(String tripId) async {
+    try {
+      final token = await _getToken();
+      if (token == null) return;
+
+      // Fetch by tripId directly — gets the EXACT trip shown on the map card
+      final url = '${ApiConfig.baseUrl}/api/admin/live-tracking/trip/$tripId';
+
+      debugPrint('🔍 Loading trip details: $url');
+
+      final response = await http.get(
+        Uri.parse(url),
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Content-Type': 'application/json',
+        },
+      );
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        if (data['success'] == true) {
+          if (mounted) {
+            setState(() {
+              _selectedVehicle = data['data'] as Map<String, dynamic>;
+              _showDetailsPanel = true;
+            });
+          }
+        }
+      }
+    } catch (e) {
+      debugPrint('❌ Error loading trip details: $e');
+    }
+  }
+
+  Future<void> _loadPlaybackHistory(String vehicleId, String time) async {
+    try {
+      final token = await _getToken();
+      if (token == null) return;
+
+      final dateStr = DateFormat('yyyy-MM-dd').format(_selectedDate);
+      final url =
+          '${ApiConfig.baseUrl}/api/admin/live-tracking/history'
+          '?vehicleId=$vehicleId&date=$dateStr&time=$time';
+
+      final response = await http.get(
+        Uri.parse(url),
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Content-Type': 'application/json',
+        },
+      );
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        if (data['success'] == true) {
+          final locations =
+              data['data']['locations'] as List<dynamic>? ?? [];
+          setState(() {
+            _playbackLocations = locations.cast<Map<String, dynamic>>();
+          });
+        }
+      }
+    } catch (e) {
+      debugPrint('❌ Error loading playback history: $e');
+    }
+  }
+
+  // ========================================================================
+  // MAP METHODS
+  // ========================================================================
+
+ void _fitMapToVehicles() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || _vehicles.isEmpty) return;
+
+      final List<LatLng> coordinates = [];
+
+      for (final vehicle in _vehicles) {
+        final location = vehicle['currentLocation'];
+        if (location != null &&
+            location['latitude'] != null &&
+            location['longitude'] != null) {
+          coordinates.add(LatLng(
+            location['latitude'].toDouble(),
+            location['longitude'].toDouble(),
+          ));
+        }
+      }
+
+      if (coordinates.isNotEmpty) {
+        try {
+          final bounds = LatLngBounds.fromPoints(coordinates);
+          _mapController.fitCamera(
+            CameraFit.bounds(
+              bounds: bounds,
+              padding: const EdgeInsets.all(50),
+            ),
+          );
+        } catch (e) {
+          debugPrint('⚠️ fitCamera skipped: $e');
+        }
+      }
+    });
+  }
+
+void _centerOnVehicle(Map<String, dynamic> vehicle) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final location = vehicle['currentLocation'];
+      if (location != null &&
+          location['latitude'] != null &&
+          location['longitude'] != null) {
+        try {
+          _mapController.move(
+            LatLng(
+              location['latitude'].toDouble(),
+              location['longitude'].toDouble(),
+            ),
+            15.0,
+          );
+        } catch (e) {
+          debugPrint('⚠️ centerOnVehicle skipped: $e');
+        }
+      }
+    });
+  }
+
+  // ========================================================================
+  // BUILD
+  // ========================================================================
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.grey[100],
+      appBar: _buildAppBar(),
+      body: _buildBody(),
+    );
+  }
+
+  PreferredSizeWidget _buildAppBar() {
+    return AppBar(
+      backgroundColor: const Color(0xFF0D47A1),
+      foregroundColor: Colors.white,
+      elevation: 2,
+      toolbarHeight: 60,
+      title: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Live Vehicle Tracking',
+            style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+          ),
+          Text(
+            'Total: ${_stats['total'] ?? 0}  •  Active: ${_stats['active'] ?? 0}  •  Idle: ${_stats['idle'] ?? 0}  •  Assigned: ${_stats['assigned'] ?? 0}  •  Unassigned: ${_stats['unassigned'] ?? 0}',
+            style: const TextStyle(fontSize: 11, color: Colors.white70),
+          ),
+        ],
+      ),
+      actions: [
+        if (_alertCount > 0)
+          Stack(
+            children: [
+              IconButton(
+                icon: const Icon(Icons.notifications_active),
+                onPressed: _showAlertsDialog,
+                tooltip: 'View alerts',
+              ),
+              Positioned(
+                right: 8,
+                top: 8,
+                child: Container(
+                  padding: const EdgeInsets.all(4),
+                  decoration: const BoxDecoration(
+                    color: Colors.red,
+                    shape: BoxShape.circle,
+                  ),
+                  constraints:
+                      const BoxConstraints(minWidth: 18, minHeight: 18),
+                  child: Text(
+                    '$_alertCount',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 10,
+                      fontWeight: FontWeight.bold,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        IconButton(
+          icon: const Icon(Icons.refresh),
+          onPressed: () => _loadLiveVehicles(),
+          tooltip: 'Refresh',
+        ),
+        IconButton(
+          icon: const Icon(Icons.filter_list),
+          onPressed: _showFiltersDialog,
+          tooltip: 'Filters',
+        ),
+      ],
+    );
+  }
+
+  Widget _buildBody() {
+    if (_isLoading) {
+      return const Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            CircularProgressIndicator(),
+            SizedBox(height: 16),
+            Text('Loading live vehicles...'),
+          ],
+        ),
+      );
+    }
+
+    if (_errorMessage != null) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Icon(Icons.error_outline, size: 64, color: Colors.red),
+            const SizedBox(height: 16),
+            Text(_errorMessage!, textAlign: TextAlign.center),
+            const SizedBox(height: 16),
+            ElevatedButton(
+              onPressed: () => _loadLiveVehicles(),
+              child: const Text('Retry'),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return Stack(
+      children: [
+        _buildMap(),
+        if (_showVehicleList) _buildVehicleListPanel(),
+        if (_showDetailsPanel && _selectedVehicle != null)
+          _buildDetailsPanel(),
+      ],
+    );
+  }
+
+Widget _buildMap() {
+  return FlutterMap(
+    mapController: _mapController,
+    options: const MapOptions(
+      initialCenter: LatLng(12.9716, 77.5946),
+      initialZoom: 11.0,
+      minZoom: 5.0,
+      maxZoom: 18.0,
+    ),
+    children: [
+      TileLayer(
+        urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+        userAgentPackageName: 'com.abrafleet.admin',
+        maxZoom: 19,
+      ),
+      // ✅ NO PolylineLayer — lines removed
+      // ✅ NO stop MarkerLayer — pickup/drop pins removed  
+      MarkerLayer(markers: _buildVehicleMarkers()),
+    ],
+  );
+}
+  List<Polyline> _buildRoutePolylines() {
+    final polylines = <Polyline>[];
+
+    for (final vehicle in _vehicles) {
+      final locationHistory =
+          vehicle['locationHistory'] as List<dynamic>? ?? [];
+      if (locationHistory.isEmpty) continue;
+
+      final points = <LatLng>[];
+      for (final loc in locationHistory) {
+        if (loc['latitude'] != null && loc['longitude'] != null) {
+          points.add(LatLng(
+            loc['latitude'].toDouble(),
+            loc['longitude'].toDouble(),
+          ));
+        }
+      }
+
+      if (points.length >= 2) {
+        polylines.add(Polyline(
+          points: points,
+          color: _getStatusColor(vehicle['derivedStatus']).withOpacity(0.6),
+          strokeWidth: 3.0,
+        ));
+      }
+    }
+
+    return polylines;
+  }
+
+  List<Marker> _buildStopMarkers() {
+    final markers = <Marker>[];
+
+    if (_selectedVehicle != null) {
+      final stops =
+          _selectedVehicle!['stops'] as List<dynamic>? ?? [];
+
+      for (final stop in stops) {
+        final location = stop['location'];
+        final coordinates = location?['coordinates'];
+
+        if (coordinates != null &&
+            coordinates['latitude'] != null &&
+            coordinates['longitude'] != null) {
+          markers.add(Marker(
+            point: LatLng(
+              coordinates['latitude'].toDouble(),
+              coordinates['longitude'].toDouble(),
+            ),
+            width: 40,
+            height: 40,
+            child: _buildStopMarkerWidget(stop),
+          ));
+        }
+      }
+    }
+
+    return markers;
+  }
+
+  Widget _buildStopMarkerWidget(Map<String, dynamic> stop) {
+    final type = stop['type']?.toString() ?? '';
+    final status = stop['status']?.toString() ?? 'pending';
+
+    Color color;
+    IconData icon;
+
+    if (status == 'completed') {
+      color = Colors.green;
+      icon = Icons.check_circle;
+    } else if (status == 'arrived') {
+      color = Colors.orange;
+      icon = Icons.location_on;
+    } else {
+      color = Colors.red;
+      icon = type == 'drop' ? Icons.flag : Icons.location_on;
+    }
+
+    return Container(
+      decoration: BoxDecoration(
+        color: color,
+        shape: BoxShape.circle,
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.3),
+            blurRadius: 4,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Icon(icon, color: Colors.white, size: 20),
+    );
+  }
+
+  List<Marker> _buildVehicleMarkers() {
+  final markers = <Marker>[];
+
+  for (final vehicle in _vehicles) {
+    final location = vehicle['currentLocation'];
+    if (location == null ||
+        location['latitude'] == null ||
+        location['longitude'] == null) continue;
+
+    markers.add(Marker(
+      point: LatLng(
+        location['latitude'].toDouble(),
+        location['longitude'].toDouble(),
+      ),
+      width: 60,
+      height: 60,
+      child: GestureDetector(
+        onTap: () {
+          _centerOnVehicle(vehicle);
+          if (_isAssignmentMode) {
+            // In assignment mode: tapping marker triggers assignment
+            _assignVehicleFromMap(vehicle);
+          } else {
+            // Normal mode: show details panel
+            if (vehicle['tripId'] != null) {
+              _loadVehicleDetails(vehicle['tripId']);
+            } else {
+              setState(() {
+                _selectedVehicle = vehicle;
+                _showDetailsPanel = true;
+              });
+            }
+          }
+        },
+        child: _buildVehicleMarkerWidget(vehicle),
+      ),
+    ));
+  }
+
+  return markers;
+}
+
+  Widget _buildVehicleMarkerWidget(Map<String, dynamic> vehicle) {
+    final status = vehicle['derivedStatus']?.toString() ?? 'assigned';
+    final vehicleNumber = vehicle['vehicleNumber']?.toString() ?? '?';
+
+    Color color = _getStatusColor(status);
+
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: 40,
+          height: 40,
+          decoration: BoxDecoration(
+            color: color,
+            shape: BoxShape.circle,
+            border: Border.all(color: Colors.white, width: 2),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.3),
+                blurRadius: 6,
+                offset: const Offset(0, 3),
+              ),
+            ],
+          ),
+          child: const Icon(Icons.directions_car,
+              color: Colors.white, size: 24),
+        ),
+        const SizedBox(height: 2),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(4),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.2),
+                blurRadius: 4,
+              ),
+            ],
+          ),
+          child: Text(
+            vehicleNumber,
+            style: const TextStyle(
+              fontSize: 10,
+              fontWeight: FontWeight.bold,
+              color: Colors.black87,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+ Widget _buildVehicleListPanel() {
+  return Positioned(
+    left: 0,
+    top: 0,
+    bottom: 0,
+    width: 300,
+    child: Container(
+      color: Colors.white,
+      child: Column(
+        children: [
+          // ── Assignment Mode Banner ──────────────────────────────────
+          if (_isAssignmentMode)
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(12),
+              color: const Color(0xFFFFF3E0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      const Icon(Icons.assignment_ind,
+                          color: Color(0xFFE65100), size: 18),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          _tripContext!.isReassign
+                              ? 'REASSIGNING TRIP'
+                              : 'ASSIGNING TRIP',
+                          style: const TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
+                            color: Color(0xFFE65100),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    _tripContext!.tripNumber,
+                    style: const TextStyle(
+                        fontWeight: FontWeight.bold, fontSize: 13),
+                  ),
+                  Text(
+                    '👤 ${_tripContext!.customerName}',
+                    style: const TextStyle(fontSize: 12),
+                  ),
+                  Text(
+                    '📍 ${_tripContext!.pickupAddress}',
+                    style: TextStyle(
+                        fontSize: 11, color: Colors.grey.shade600),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  const SizedBox(height: 6),
+                  const Text(
+                    'Tap a vehicle on the map or tap "Assign" below to select it.',
+                    style: TextStyle(fontSize: 11, color: Color(0xFFE65100)),
+                  ),
+                ],
+              ),
+            ),
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: const Color(0xFF0D47A1),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.1),
+                  blurRadius: 4,
+                  offset: const Offset(0, 2),
+                ),
+              ],
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Vehicles',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  '${_vehicles.length} vehicles',
+                  style: TextStyle(
+                    color: Colors.white.withOpacity(0.9),
+                    fontSize: 14,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Container(
+            color: Colors.white,
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(
+                children: [
+                  _buildStatusTab('all', 'All', _stats['total'] ?? 0, Colors.blue),
+                  _buildStatusTab('active', 'Active', _stats['active'] ?? 0, Colors.green),
+                  _buildStatusTab('idle', 'Idle', _stats['idle'] ?? 0, Colors.orange),
+                  _buildStatusTab('assigned', 'Assigned', _stats['assigned'] ?? 0, Colors.blue),
+                  _buildStatusTab('unassigned', 'Unassigned', _stats['unassigned'] ?? 0, Colors.grey),
+                  _buildStatusTab('completed', 'Completed', _stats['completed'] ?? 0, Colors.purple),
+                ],
+              ),
+            ),
+          ),
+          Expanded(
+            child: _vehicles.isEmpty
+                ? const Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.directions_car_outlined,
+                            size: 48, color: Colors.grey),
+                        SizedBox(height: 16),
+                        Text('No vehicles found'),
+                      ],
+                    ),
+                  )
+                : ListView.builder(
+                    itemCount: _vehicles.length,
+                    itemBuilder: (context, index) =>
+                        _buildVehicleListItem(_vehicles[index]),
+                  ),
+          ),
+        ],
+      ),
+    ),
+  );
+}
+
+  Widget _buildVehicleListItem(Map<String, dynamic> vehicle) {
+  final vehicleNumber = vehicle['vehicleNumber']?.toString() ?? 'Unknown';
+  final driverName = vehicle['driverName']?.toString() ?? 'Unknown';
+  final status = vehicle['derivedStatus']?.toString() ?? 'assigned';
+  final progress = vehicle['progress']?.toDouble() ?? 0.0;
+  final currentStop = vehicle['currentStop'];
+  final speed = vehicle['currentLocation']?['speed']?.toString() ?? '0';
+
+  // A vehicle is "free" if it has no active trip
+  final isFree = status == 'unassigned' || status == 'idle';
+
+  return Container(
+    margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+    decoration: BoxDecoration(
+      color: Colors.white,
+      borderRadius: BorderRadius.circular(8),
+      border: Border.all(
+        color: _isAssignmentMode && isFree
+            ? Colors.green.shade400
+            : Colors.grey.shade300,
+        width: _isAssignmentMode && isFree ? 2 : 1,
+      ),
+    ),
+    child: InkWell(
+      onTap: () {
+        _centerOnVehicle(vehicle);
+        if (vehicle['tripId'] != null) {
+          _loadVehicleDetails(vehicle['tripId']);
+        } else {
+          setState(() {
+            _selectedVehicle = vehicle;
+            _showDetailsPanel = true;
+          });
+        }
+      },
+      borderRadius: BorderRadius.circular(8),
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Container(
+                  width: 12,
+                  height: 12,
+                  decoration: BoxDecoration(
+                    color: _getStatusColor(status),
+                    shape: BoxShape.circle,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    vehicleNumber,
+                    style: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 15,
+                    ),
+                  ),
+                ),
+                Text('$speed km/h',
+                    style: TextStyle(
+                        fontSize: 12, color: Colors.grey.shade600)),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                Icon(Icons.person, size: 14, color: Colors.grey.shade600),
+                const SizedBox(width: 4),
+                Expanded(
+                  child: Text(driverName,
+                      style: TextStyle(
+                          fontSize: 13, color: Colors.grey.shade700)),
+                ),
+              ],
+            ),
+            if (status == 'unassigned') ...[
+              const SizedBox(height: 6),
+              Row(
+                children: [
+                  Icon(Icons.info_outline,
+                      size: 14, color: Colors.grey.shade500),
+                  const SizedBox(width: 4),
+                  Text(
+                    'No trip assigned today',
+                    style: TextStyle(
+                        fontSize: 12, color: Colors.grey.shade500),
+                  ),
+                ],
+              ),
+            ],
+            if (currentStop != null && status != 'unassigned') ...[
+              const SizedBox(height: 6),
+              Row(
+                children: [
+                  Icon(Icons.location_on,
+                      size: 14, color: Colors.grey.shade600),
+                  const SizedBox(width: 4),
+                  Expanded(
+                    child: Text(
+                      currentStop['customer']?['name'] ?? 'Next stop',
+                      style: TextStyle(
+                          fontSize: 12, color: Colors.grey.shade600),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
+              ),
+            ],
+            if (status != 'unassigned') ...[
+              const SizedBox(height: 8),
+              ClipRRect(
+                borderRadius: BorderRadius.circular(4),
+                child: LinearProgressIndicator(
+                  value: progress / 100,
+                  backgroundColor: Colors.grey.shade200,
+                  valueColor: AlwaysStoppedAnimation<Color>(
+                      _getStatusColor(status)),
+                  minHeight: 4,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text('${progress.toInt()}% complete',
+                  style: TextStyle(
+                      fontSize: 11, color: Colors.grey.shade600)),
+            ],
+            // ── Assignment mode: show Assign button ────────────────────
+            if (_isAssignmentMode) ...[
+              const SizedBox(height: 10),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  onPressed: _isAssigning
+                      ? null
+                      : () => _assignVehicleFromMap(vehicle),
+                  icon: _isAssigning
+                      ? const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: Colors.white),
+                        )
+                      : Icon(
+                          _tripContext!.isReassign
+                              ? Icons.swap_horiz
+                              : Icons.assignment_turned_in,
+                          size: 16,
+                        ),
+                  label: Text(
+                    _tripContext!.isReassign
+                        ? 'Reassign to this Vehicle'
+                        : 'Assign to this Vehicle',
+                    style: const TextStyle(fontSize: 13),
+                  ),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: _tripContext!.isReassign
+                        ? const Color(0xFFE67E22)
+                        : const Color(0xFF0D47A1),
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 10),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8)),
+                  ),
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    ),
+  );
+}
+  Widget _buildDetailsPanel() {
+    final vehicle = _selectedVehicle!;
+    final vehicleNumber = vehicle['vehicleNumber']?.toString() ?? 'Unknown';
+    final driverName = vehicle['driverName']?.toString() ?? 'Unknown';
+    final driverPhone = vehicle['driverPhone']?.toString() ?? '';
+    final status = vehicle['derivedStatus']?.toString() ?? 'assigned';
+    final stops = vehicle['stops'] as List<dynamic>? ?? [];
+    final currentStopIndex = vehicle['currentStopIndex'] ?? 0;
+
+    return Positioned(
+      right: 0,
+      top: 0,
+      bottom: 0,
+      width: 350,
+      child: Container(
+        color: Colors.white,
+        child: Column(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: const Color(0xFF0D47A1),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.1),
+                    blurRadius: 4,
+                    offset: const Offset(0, 2),
+                  ),
+                ],
+              ),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(vehicleNumber,
+                            style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 18,
+                                fontWeight: FontWeight.bold)),
+                        const SizedBox(height: 4),
+                        Text(driverName,
+                            style: TextStyle(
+                                color: Colors.white.withOpacity(0.9),
+                                fontSize: 14)),
+                      ],
+                    ),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.close, color: Colors.white),
+                    onPressed: () => setState(() {
+                      _showDetailsPanel = false;
+                      _selectedVehicle = null;
+                      _isPlaybackMode = false;
+                    }),
+                  ),
+                ],
+              ),
+            ),
+            Expanded(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    if (driverPhone.isNotEmpty) ...[
+                      ElevatedButton.icon(
+                        onPressed: () {},
+                        icon: const Icon(Icons.phone, size: 18),
+                        label: Text(driverPhone),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.green,
+                          foregroundColor: Colors.white,
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                    ],
+                    // ✅ Share Live Location Button
+                    ElevatedButton.icon(
+                      onPressed: () => _shareWhatsAppLiveLocation(vehicle),
+                      icon: const Icon(Icons.share_location, size: 18),
+                      label: const Text('Share Live Location'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF25D366),
+                        foregroundColor: Colors.white,
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    _buildInfoRow('Status', _getStatusText(status)),
+                    const SizedBox(height: 12),
+                    _buildInfoRow('Progress',
+                        'Stop $currentStopIndex of ${stops.length}'),
+                    const SizedBox(height: 16),
+                    if (vehicle['locationHistory'] != null &&
+                        (vehicle['locationHistory'] as List).isNotEmpty) ...[
+                      const Divider(),
+                      const SizedBox(height: 8),
+                      Row(
+                        children: [
+                          const Text('Timeline Playback',
+                              style: TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 15)),
+                          const Spacer(),
+                          Switch(
+                            value: _isPlaybackMode,
+                            onChanged: (value) {
+                              setState(() => _isPlaybackMode = value);
+                              if (value) {
+                                _pollingTimer?.cancel();
+                              } else {
+                                _startPolling();
+                              }
+                            },
+                          ),
+                        ],
+                      ),
+                      if (_isPlaybackMode) ...[
+                        const SizedBox(height: 16),
+                        Row(
+                          children: [
+                            Text(_formatPlaybackTime(_playbackTime),
+                                style: const TextStyle(fontSize: 13)),
+                            const Spacer(),
+                            const Text('23:59',
+                                style: TextStyle(fontSize: 13)),
+                          ],
+                        ),
+                        Slider(
+                          value: _playbackTime,
+                          min: 0,
+                          max: 1439,
+                          divisions: 1439,
+                          onChanged: (value) {
+                            setState(() => _playbackTime = value);
+                            _loadPlaybackHistory(
+                              vehicle['vehicleId'],
+                              _formatPlaybackTime(value),
+                            );
+                          },
+                        ),
+                      ],
+                      const SizedBox(height: 8),
+                      const Divider(),
+                    ],
+                    const SizedBox(height: 16),
+                    const Text('Route Stops',
+                        style: TextStyle(
+                            fontWeight: FontWeight.bold, fontSize: 15)),
+                    const SizedBox(height: 12),
+                    ...stops.asMap().entries.map((entry) {
+                      return _buildStopItem(
+                        entry.value as Map<String, dynamic>,
+                        entry.key == currentStopIndex,
+                      );
+                    }),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildInfoRow(String label, String value) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SizedBox(
+          width: 80,
+          child: Text('$label:',
+              style: TextStyle(
+                  fontWeight: FontWeight.w600,
+                  color: Colors.grey.shade700,
+                  fontSize: 14)),
+        ),
+        Expanded(child: Text(value, style: const TextStyle(fontSize: 14))),
+      ],
+    );
+  }
+
+  Widget _buildStopItem(Map<String, dynamic> stop, bool isCurrent) {
+    final type = stop['type']?.toString() ?? '';
+    final status = stop['status']?.toString() ?? 'pending';
+    final customer = stop['customer'];
+    final customerName = customer?['name']?.toString() ?? 'Drop point';
+    final address = stop['location']?['address']?.toString() ?? '';
+    final estimatedTime = stop['estimatedTime']?.toString() ?? '';
+
+    Color statusColor;
+    IconData statusIcon;
+
+    if (status == 'completed') {
+      statusColor = Colors.green;
+      statusIcon = Icons.check_circle;
+    } else if (status == 'arrived') {
+      statusColor = Colors.orange;
+      statusIcon = Icons.access_time;
+    } else {
+      statusColor = Colors.grey;
+      statusIcon = Icons.circle_outlined;
+    }
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: isCurrent ? Colors.blue.shade50 : Colors.grey.shade50,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(
+          color: isCurrent ? Colors.blue : Colors.grey.shade300,
+          width: isCurrent ? 2 : 1,
+        ),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(statusIcon, color: statusColor, size: 20),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(customerName,
+                    style: const TextStyle(
+                        fontWeight: FontWeight.bold, fontSize: 14)),
+                if (address.isNotEmpty) ...[
+                  const SizedBox(height: 4),
+                  Text(address,
+                      style: TextStyle(
+                          fontSize: 12, color: Colors.grey.shade600),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis),
+                ],
+                if (estimatedTime.isNotEmpty) ...[
+                  const SizedBox(height: 4),
+                  Row(
+                    children: [
+                      Icon(Icons.schedule,
+                          size: 12, color: Colors.grey.shade600),
+                      const SizedBox(width: 4),
+                      Text(estimatedTime,
+                          style: TextStyle(
+                              fontSize: 12, color: Colors.grey.shade600)),
+                    ],
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildStatusTab(String value, String label, int count, Color color) {
+    final isSelected = _statusFilter == value;
+    return GestureDetector(
+      onTap: () {
+        setState(() => _statusFilter = value);
+        _loadLiveVehicles();
+      },
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        decoration: BoxDecoration(
+          border: Border(
+            bottom: BorderSide(
+              color: isSelected ? color : Colors.transparent,
+              width: 3,
+            ),
+          ),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                color: isSelected ? color : Colors.grey.shade600,
+              ),
+            ),
+            const SizedBox(width: 4),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+              decoration: BoxDecoration(
+                color: isSelected ? color : Colors.grey.shade300,
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Text(
+                '$count',
+                style: TextStyle(
+                  fontSize: 10,
+                  fontWeight: FontWeight.bold,
+                  color: isSelected ? Colors.white : Colors.grey.shade700,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ========================================================================
+  // DIALOGS
+  // ========================================================================
+
+  void _showFiltersDialog() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Filters'),
+        content: StatefulBuilder(
+          builder: (context, setDialogState) {
+            return Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text('Date:',
+                    style: TextStyle(fontWeight: FontWeight.bold)),
+                const SizedBox(height: 8),
+                InkWell(
+                  onTap: () async {
+                    final date = await showDatePicker(
+                      context: context,
+                      initialDate: _selectedDate,
+                      firstDate: DateTime.now()
+                          .subtract(const Duration(days: 6)),
+                      lastDate: DateTime.now(),
+                    );
+                    if (date != null) {
+                      setDialogState(() => _selectedDate = date);
+                    }
+                  },
+                  child: Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      border: Border.all(color: Colors.grey.shade300),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.calendar_today, size: 18),
+                        const SizedBox(width: 8),
+                        Text(DateFormat('MMM dd, yyyy')
+                            .format(_selectedDate)),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                const Text('Status:',
+                    style: TextStyle(fontWeight: FontWeight.bold)),
+                const SizedBox(height: 8),
+                DropdownButtonFormField<String>(
+                  value: _statusFilter,
+                  items: const [
+                    DropdownMenuItem(value: 'all', child: Text('All')),
+                    DropdownMenuItem(value: 'active', child: Text('Active')),
+                    DropdownMenuItem(value: 'idle', child: Text('Idle')),
+                    DropdownMenuItem(value: 'assigned', child: Text('Assigned')),
+                    DropdownMenuItem(value: 'unassigned', child: Text('Unassigned')),
+                    DropdownMenuItem(value: 'completed', child: Text('Completed')),
+                  ],
+                  onChanged: (value) =>
+                      setDialogState(() => _statusFilter = value!),
+                  decoration: const InputDecoration(
+                    border: OutlineInputBorder(),
+                    contentPadding:
+                        EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                const Text('Company:',
+                    style: TextStyle(fontWeight: FontWeight.bold)),
+                const SizedBox(height: 8),
+                DropdownButtonFormField<String>(
+                  value: _companyFilter,
+                  items: const [
+                    DropdownMenuItem(
+                        value: 'all', child: Text('All Companies')),
+                    DropdownMenuItem(value: 'tcs', child: Text('TCS')),
+                    DropdownMenuItem(
+                        value: 'infosys', child: Text('Infosys')),
+                    DropdownMenuItem(value: 'wipro', child: Text('Wipro')),
+                    DropdownMenuItem(
+                        value: 'amazon', child: Text('Amazon')),
+                  ],
+                  onChanged: (value) =>
+                      setDialogState(() => _companyFilter = value!),
+                  decoration: const InputDecoration(
+                    border: OutlineInputBorder(),
+                    contentPadding:
+                        EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  ),
+                ),
+              ],
+            );
+          },
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.pop(context);
+              setState(() {});
+              _loadLiveVehicles();
+            },
+            child: const Text('Apply'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showAlertsDialog() {
+    final offline = _alerts['offline'] as List<dynamic>? ?? [];
+    final routeDeviation =
+        _alerts['routeDeviation'] as List<dynamic>? ?? [];
+    final speeding = _alerts['speeding'] as List<dynamic>? ?? [];
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Row(
+          children: [
+            const Icon(Icons.warning_amber_rounded, color: Colors.orange),
+            const SizedBox(width: 8),
+            Text('Alerts ($_alertCount)'),
+          ],
+        ),
+        content: SizedBox(
+          width: double.maxFinite,
+          child: ListView(
+            shrinkWrap: true,
+            children: [
+              if (offline.isNotEmpty) ...[
+                const Text('🚨 Offline Vehicles',
+                    style: TextStyle(fontWeight: FontWeight.bold)),
+                const SizedBox(height: 8),
+                ...offline.map((alert) {
+                  final a = alert as Map<String, dynamic>;
+                  return ListTile(
+                    leading:
+                        const Icon(Icons.wifi_off, color: Colors.red),
+                    title: Text(a['vehicleNumber'] ?? 'Unknown'),
+                    subtitle: Text('Offline for ${a['duration']}',
+                        style: const TextStyle(fontSize: 12)),
+                    dense: true,
+                  );
+                }),
+                const Divider(),
+              ],
+              if (routeDeviation.isNotEmpty) ...[
+                const Text('⚠️ Route Deviations',
+                    style: TextStyle(fontWeight: FontWeight.bold)),
+                const SizedBox(height: 8),
+                ...routeDeviation.map((alert) {
+                  final a = alert as Map<String, dynamic>;
+                  return ListTile(
+                    leading:
+                        const Icon(Icons.route, color: Colors.orange),
+                    title: Text(a['vehicleNumber'] ?? 'Unknown'),
+                    subtitle: Text('${a['deviation']} km off route',
+                        style: const TextStyle(fontSize: 12)),
+                    dense: true,
+                  );
+                }),
+                const Divider(),
+              ],
+              if (speeding.isNotEmpty) ...[
+                const Text('⚡ Speeding Vehicles',
+                    style: TextStyle(fontWeight: FontWeight.bold)),
+                const SizedBox(height: 8),
+                ...speeding.map((alert) {
+                  final a = alert as Map<String, dynamic>;
+                  return ListTile(
+                    leading:
+                        const Icon(Icons.speed, color: Colors.red),
+                    title: Text(a['vehicleNumber'] ?? 'Unknown'),
+                    subtitle: Text('${a['speed']} km/h',
+                        style: const TextStyle(fontSize: 12)),
+                    dense: true,
+                  );
+                }),
+              ],
+              if (_alertCount == 0)
+                const Center(
+                  child: Padding(
+                    padding: EdgeInsets.all(16),
+                    child: Column(
+                      children: [
+                        Icon(Icons.check_circle,
+                            color: Colors.green, size: 48),
+                        SizedBox(height: 8),
+                        Text('No alerts'),
+                      ],
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Close'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ========================================================================
+  // UTILITIES
+  // ========================================================================
+
+  Color _getStatusColor(String? status) {
+    switch (status?.toLowerCase()) {
+      case 'active': return Colors.green;
+      case 'idle': return Colors.orange;
+      case 'assigned': return Colors.blue;
+      case 'unassigned': return Colors.grey;
+      case 'completed': return Colors.purple;
+      default: return Colors.grey;
+    }
+  }
+
+  String _getStatusText(String status) {
+    switch (status.toLowerCase()) {
+      case 'active': return 'Active';
+      case 'idle': return 'Idle';
+      case 'assigned': return 'Assigned';
+      case 'unassigned': return 'Unassigned';
+      case 'completed': return 'Completed';
+      default: return status;
+    }
+  }
+
+  String _formatPlaybackTime(double minutes) {
+    final hours = (minutes / 60).floor();
+    final mins = (minutes % 60).floor();
+    return '${hours.toString().padLeft(2, '0')}:${mins.toString().padLeft(2, '0')}';
+  }
+
+  // ========================================================================
+  // ✅ SHARE LIVE LOCATION HELPERS
+  // ========================================================================
+
+  Future<void> _shareWhatsAppLiveLocation(Map<String, dynamic> vehicle) async {
+    final tripId = vehicle['tripId']?.toString();
+    if (tripId == null || tripId.isEmpty) {
+      _showSnackBar('Trip ID not found');
+      return;
+    }
+
+    final liveUrl = '${ApiConfig.baseUrl}/live-track/$tripId';
+
+    final vehicleNumber = vehicle['vehicleNumber']?.toString() ?? 'N/A';
+    final driverName = vehicle['driverName']?.toString() ?? 'Driver';
+    final customerName = vehicle['currentStop']?['customer']?['name']?.toString() ?? 'Customer';
+
+    final message =
+        'Hello $customerName! 👋\n\n'
+        'Your trip with vehicle *$vehicleNumber* is now live. 🚗\n'
+        'Driver: *$driverName*\n\n'
+        '📍 Track your ride in real time:\n'
+        '$liveUrl\n\n'
+        'Thank you for choosing Abra Fleet!';
+
+    final customerPhone = vehicle['currentStop']?['customer']?['phone']?.toString() ?? '';
+    final driverPhone = vehicle['driverPhone']?.toString() ?? '';
+
+    if (customerPhone.isNotEmpty && driverPhone.isNotEmpty) {
+      showDialog(
+        context: context,
+        builder: (context) => AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF25D366).withOpacity(0.12),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Icon(Icons.share_location, color: Color(0xFF25D366), size: 22),
+              ),
+              const SizedBox(width: 10),
+              const Expanded(
+                child: Text('Share Live Location', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+              ),
+            ],
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text('Vehicle: $vehicleNumber', style: TextStyle(fontSize: 13, color: Colors.grey.shade600)),
+              const SizedBox(height: 12),
+              const Text('Send live tracking link to:', style: TextStyle(fontSize: 14)),
+              const SizedBox(height: 14),
+              _waOption(
+                icon: Icons.person,
+                color: Colors.blue,
+                label: 'Send to Customer',
+                name: customerName,
+                phone: customerPhone,
+                onTap: () {
+                  Navigator.pop(context);
+                  _openWhatsAppWithMessage(customerPhone, message);
+                },
+              ),
+              const SizedBox(height: 10),
+              _waOption(
+                icon: Icons.drive_eta,
+                color: Colors.green,
+                label: 'Send to Driver',
+                name: driverName,
+                phone: driverPhone,
+                onTap: () {
+                  Navigator.pop(context);
+                  _openWhatsAppWithMessage(driverPhone, message);
+                },
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancel'),
+            ),
+          ],
+        ),
+      );
+      return;
+    }
+
+    final phone = customerPhone.isNotEmpty ? customerPhone : driverPhone;
+    if (phone.isEmpty) {
+      _showSnackBar('No phone number available to share location');
+      return;
+    }
+    _openWhatsAppWithMessage(phone, message);
+  }
+
+  // ============================================================================
+// ASSIGN VEHICLE FROM MAP — called when admin picks a vehicle here
+// ============================================================================
+Future<void> _assignVehicleFromMap(Map<String, dynamic> vehicle) async {
+  if (_tripContext == null) return;
+
+  final vehicleId = vehicle['vehicleId']?.toString() ??
+      vehicle['_id']?.toString() ?? '';
+  final vehicleNumber = vehicle['vehicleNumber']?.toString() ?? 'Vehicle';
+  final driverName = vehicle['driverName']?.toString() ?? 'Driver';
+
+  if (vehicleId.isEmpty) {
+    _showSnackBar('Vehicle ID not found');
+    return;
+  }
+
+  // Confirm dialog
+  final confirm = await showDialog<bool>(
+    context: context,
+    builder: (ctx) => AlertDialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      title: Row(
+        children: [
+          Icon(
+            _tripContext!.isReassign ? Icons.swap_horiz : Icons.assignment_turned_in,
+            color: _tripContext!.isReassign
+                ? const Color(0xFFE67E22)
+                : const Color(0xFF0D47A1),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              _tripContext!.isReassign ? 'Reassign Vehicle' : 'Assign Vehicle',
+              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+            ),
+          ),
+        ],
+      ),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Trip info
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: Colors.blue.shade50,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: Colors.blue.shade200),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text('TRIP', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.blue)),
+                const SizedBox(height: 4),
+                Text(_tripContext!.tripNumber,
+                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                Text('👤 ${_tripContext!.customerName}',
+                    style: const TextStyle(fontSize: 13)),
+                Text('📍 ${_tripContext!.pickupAddress}',
+                    style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis),
+              ],
+            ),
+          ),
+          const SizedBox(height: 12),
+          const Icon(Icons.arrow_downward, color: Colors.grey),
+          const SizedBox(height: 8),
+          // Vehicle info
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: Colors.green.shade50,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: Colors.green.shade200),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text('VEHICLE', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.green)),
+                const SizedBox(height: 4),
+                Text(vehicleNumber,
+                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                Text('👨‍✈️ $driverName',
+                    style: const TextStyle(fontSize: 13)),
+              ],
+            ),
+          ),
+          const SizedBox(height: 12),
+          Text(
+            _tripContext!.isReassign
+                ? 'The new driver will be notified immediately.'
+                : 'The driver will be notified to Accept or Decline.',
+            style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+          ),
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(ctx, false),
+          child: const Text('Cancel'),
+        ),
+        ElevatedButton(
+          onPressed: () => Navigator.pop(ctx, true),
+          style: ElevatedButton.styleFrom(
+            backgroundColor: _tripContext!.isReassign
+                ? const Color(0xFFE67E22)
+                : const Color(0xFF0D47A1),
+            foregroundColor: Colors.white,
+          ),
+          child: Text(_tripContext!.isReassign ? 'Reassign' : 'Assign'),
+        ),
+      ],
+    ),
+  );
+
+  if (confirm != true) return;
+
+  setState(() => _isAssigning = true);
+
+  try {
+    final prefs = await SharedPreferences.getInstance();
+    final token = prefs.getString('jwt_token');
+    if (token == null) {
+      _showSnackBar('Not authenticated');
+      setState(() => _isAssigning = false);
+      return;
+    }
+
+    final response = await http.post(
+      Uri.parse(
+          '${ApiConfig.baseUrl}/api/client-trips/${_tripContext!.tripId}/reassign-vehicle'),
+      headers: {
+        'Authorization': 'Bearer $token',
+        'Content-Type': 'application/json',
+      },
+      body: json.encode({'vehicleId': vehicleId}),
+    );
+
+    setState(() => _isAssigning = false);
+
+    if (response.statusCode == 200) {
+      final data = json.decode(response.body);
+      if (data['success'] == true) {
+        // Success dialog then pop back to Trip Operations
+        if (mounted) {
+          await showDialog(
+            context: context,
+            barrierDismissible: false,
+            builder: (ctx) => AlertDialog(
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(16)),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(20),
+                    decoration: BoxDecoration(
+                      color: Colors.green.shade50,
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(Icons.check_circle,
+                        color: Colors.green.shade600, size: 60),
+                  ),
+                  const SizedBox(height: 16),
+                  Text(
+                    _tripContext!.isReassign
+                        ? 'Vehicle Reassigned!'
+                        : 'Vehicle Assigned!',
+                    style: const TextStyle(
+                        fontSize: 18, fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Trip ${_tripContext!.tripNumber} has been assigned to\n$vehicleNumber.',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(fontSize: 14, color: Colors.grey.shade600),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    '🔔 $driverName has been notified.',
+                    style: const TextStyle(
+                        fontSize: 13, color: Colors.green),
+                    textAlign: TextAlign.center,
+                  ),
+                ],
+              ),
+              actions: [
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton(
+                    onPressed: () {
+                      Navigator.pop(ctx); // close dialog
+                      Navigator.pop(context, true); // go back to Trip Operations with result=true
+                    },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.green,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10)),
+                    ),
+                    child: const Text('Done — Back to Trips',
+                        style: TextStyle(fontSize: 15)),
+                  ),
+                ),
+              ],
+            ),
+          );
+        }
+      } else {
+        _showSnackBar(data['message'] ?? 'Assignment failed');
+      }
+    } else {
+      final data = json.decode(response.body);
+      _showSnackBar(data['message'] ?? 'Failed: ${response.statusCode}');
+    }
+  } catch (e) {
+    setState(() => _isAssigning = false);
+    _showSnackBar('Error: $e');
+  }
+}
+
+  Future<void> _openWhatsAppWithMessage(String phone, String message) async {
+    final cleaned = phone.replaceAll(RegExp(r'[^\d+]'), '');
+    final number = cleaned.startsWith('+') ? cleaned : '+91$cleaned';
+    final encoded = Uri.encodeComponent(message);
+    final uri = Uri.parse('https://wa.me/$number?text=$encoded');
+    try {
+      if (await canLaunchUrl(uri)) {
+        await launchUrl(uri, mode: LaunchMode.externalApplication);
+      } else {
+        _showSnackBar('Could not open WhatsApp');
+      }
+    } catch (e) {
+      _showSnackBar('WhatsApp error: $e');
+    }
+  }
+
+  Widget _waOption({
+    required IconData icon,
+    required Color color,
+    required String label,
+    required String name,
+    required String phone,
+    required VoidCallback onTap,
+  }) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: color.withOpacity(0.05),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: color.withOpacity(0.3)),
+        ),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: color.withOpacity(0.12),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(icon, color: color, size: 20),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(label, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: color)),
+                  Text(name, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
+                  Text(phone, style: TextStyle(fontSize: 13, color: Colors.grey.shade600)),
+                ],
+              ),
+            ),
+            Icon(Icons.arrow_forward_ios, color: color, size: 16),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showSnackBar(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message), duration: const Duration(seconds: 3)),
+    );
+  }
+}
+
+// ============================================================================
+// ALERT BANNER WIDGET
+// Slides in from top, auto-dismisses after 5 seconds
+// Works on ANY screen while app is open
+// ============================================================================
+
+class _AlertBanner extends StatefulWidget {
+  final String title;
+  final String message;
+  final Color color;
+  final IconData icon;
+  final VoidCallback onDismiss;
+  final VoidCallback onTap;
+
+  const _AlertBanner({
+    required this.title,
+    required this.message,
+    required this.color,
+    required this.icon,
+    required this.onDismiss,
+    required this.onTap,
+  });
+
+  @override
+  State<_AlertBanner> createState() => _AlertBannerState();
+}
+
+class _AlertBannerState extends State<_AlertBanner>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _controller;
+  late Animation<Offset> _slideAnimation;
+  late Animation<double> _fadeAnimation;
+  Timer? _autoDismissTimer;
+
+  @override
+  void initState() {
+    super.initState();
+
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 400),
+    );
+
+    _slideAnimation = Tween<Offset>(
+      begin: const Offset(0, -1.5),
+      end: Offset.zero,
+    ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeOut));
+
+    _fadeAnimation =
+        Tween<double>(begin: 0, end: 1).animate(_controller);
+
+    _controller.forward();
+
+    // Auto dismiss after 5 seconds
+    _autoDismissTimer = Timer(const Duration(seconds: 5), _dismiss);
+  }
+
+  void _dismiss() {
+    _controller.reverse().then((_) => widget.onDismiss());
+  }
+
+  @override
+  void dispose() {
+    _autoDismissTimer?.cancel();
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final topPadding = MediaQuery.of(context).viewPadding.top;
+
+    return Positioned(
+      top: topPadding + 8,
+      left: 12,
+      right: 12,
+      child: FadeTransition(
+        opacity: _fadeAnimation,
+        child: SlideTransition(
+          position: _slideAnimation,
+          child: Material(
+            elevation: 8,
+            borderRadius: BorderRadius.circular(12),
+            child: GestureDetector(
+              onTap: widget.onTap,
+              child: Container(
+                decoration: BoxDecoration(
+                  color: widget.color,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 16, vertical: 12),
+                  child: Row(
+                    children: [
+                      // Icon
+                      Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withOpacity(0.2),
+                          shape: BoxShape.circle,
+                        ),
+                        child: Icon(widget.icon,
+                            color: Colors.white, size: 22),
+                      ),
+                      const SizedBox(width: 12),
+
+                      // Text
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              widget.title,
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 14,
+                              ),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              widget.message,
+                              style: TextStyle(
+                                color: Colors.white.withOpacity(0.9),
+                                fontSize: 12,
+                              ),
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+
+                      // Tap hint + close button
+                      Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          GestureDetector(
+                            onTap: _dismiss,
+                            child: const Icon(Icons.close,
+                                color: Colors.white, size: 18),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            'Tap for details',
+                            style: TextStyle(
+                              color: Colors.white.withOpacity(0.8),
+                              fontSize: 10,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}

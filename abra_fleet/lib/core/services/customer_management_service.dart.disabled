@@ -1,0 +1,581 @@
+// ============================================================================
+// DISABLED SERVICE - NOT IN USE
+// ============================================================================
+// This service has been disabled because CustomerService is being used instead.
+// CustomerService is actively integrated with CustomerProvider and admin dashboard.
+// This file contains advanced features but is not integrated anywhere in the app.
+// 
+// To re-enable: Remove this comment block and the .disabled extension from filename
+// ============================================================================
+
+/*
+DISABLED - CustomerService is being used instead
+
+import 'dart:convert';
+import 'package:http/http.dart' as http;
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:abra_fleet/app/config/api_config.dart';
+
+class CustomerManagementService {
+  static final String _baseUrl = ApiConfig.baseUrl;
+
+  Future<String> _getAuthToken() async {
+    final prefs = await SharedPreferences.getInstance();
+    final token = prefs.getString('jwt_token');
+    if (token != null && token.isNotEmpty) {
+      return token;
+    }
+    throw Exception('User not authenticated');
+  }
+
+  Map<String, String> get _headers => {
+    'Content-Type': 'application/json',
+  };
+
+  Future<Map<String, String>> get _authHeaders async {
+    final token = await _getAuthToken();
+    return {
+      'Authorization': 'Bearer $token',
+      'Content-Type': 'application/json',
+    };
+  }
+
+  // ============================================================================
+  // CUSTOMER CRUD OPERATIONS
+  // ============================================================================
+
+  /// Get all customers with filtering and pagination
+  Future<Map<String, dynamic>> getAllCustomers({
+    int page = 1,
+    int limit = 50,
+    String? status,
+    String? search,
+    String? organization,
+    String? department,
+    bool fullDetails = false,
+  }) async {
+    try {
+      final headers = await _authHeaders;
+      
+      // Build query parameters
+      final queryParams = <String, String>{
+        'page': page.toString(),
+        'limit': limit.toString(),
+        'fullDetails': fullDetails.toString(),
+      };
+      
+      if (status != null && status.isNotEmpty) queryParams['status'] = status;
+      if (search != null && search.isNotEmpty) queryParams['search'] = search;
+      if (organization != null && organization.isNotEmpty) queryParams['organization'] = organization;
+      if (department != null && department.isNotEmpty) queryParams['department'] = department;
+      
+      final uri = Uri.parse('$_baseUrl/admin/customers/unified').replace(queryParameters: queryParams);
+      
+      final response = await http.get(uri, headers: headers);
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        if (data['success']) {
+          return data;
+        }
+      }
+      throw Exception('Failed to fetch customers: ${response.body}');
+    } catch (e) {
+      throw Exception('Error fetching customers: $e');
+    }
+  }
+
+  /// Get customer by ID
+  Future<Map<String, dynamic>> getCustomerById(String customerId) async {
+    try {
+      final headers = await _authHeaders;
+      final response = await http.get(
+        Uri.parse('$_baseUrl/admin/customers/unified/$customerId'),
+        headers: headers,
+      );
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        if (data['success']) {
+          return data['data'];
+        }
+      }
+      throw Exception('Failed to fetch customer: ${response.body}');
+    } catch (e) {
+      throw Exception('Error fetching customer: $e');
+    }
+  }
+
+  /// Create new customer (Admin function)
+  Future<Map<String, dynamic>> createCustomer({
+    required String name,
+    required String email,
+    String? phone,
+    String? companyName,
+    String? department,
+    String? branch,
+    String? employeeId,
+    String? password,
+    String status = 'active',
+  }) async {
+    try {
+      final headers = await _authHeaders;
+      final body = {
+        'name': name,
+        'email': email,
+        'phone': phone,
+        'companyName': companyName,
+        'department': department,
+        'branch': branch,
+        'employeeId': employeeId,
+        'password': password,
+        'status': status,
+      };
+
+      final response = await http.post(
+        Uri.parse('$_baseUrl/admin/customers/unified'),
+        headers: headers,
+        body: json.encode(body),
+      );
+
+      if (response.statusCode == 201) {
+        final data = json.decode(response.body);
+        if (data['success']) {
+          return data;
+        }
+      }
+      throw Exception('Failed to create customer: ${response.body}');
+    } catch (e) {
+      throw Exception('Error creating customer: $e');
+    }
+  }
+
+  /// Update customer
+  Future<Map<String, dynamic>> updateCustomer(
+    String customerId,
+    Map<String, dynamic> updateData,
+  ) async {
+    try {
+      final headers = await _authHeaders;
+      final response = await http.put(
+        Uri.parse('$_baseUrl/admin/customers/unified/$customerId'),
+        headers: headers,
+        body: json.encode(updateData),
+      );
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        if (data['success']) {
+          return data;
+        }
+      }
+      throw Exception('Failed to update customer: ${response.body}');
+    } catch (e) {
+      throw Exception('Error updating customer: $e');
+    }
+  }
+
+  /// Delete customer (soft delete)
+  Future<bool> deleteCustomer(String customerId) async {
+    try {
+      final headers = await _authHeaders;
+      final response = await http.delete(
+        Uri.parse('$_baseUrl/admin/customers/unified/$customerId'),
+        headers: headers,
+      );
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        return data['success'] ?? false;
+      }
+      throw Exception('Failed to delete customer: ${response.body}');
+    } catch (e) {
+      throw Exception('Error deleting customer: $e');
+    }
+  }
+
+  // ============================================================================
+  // CUSTOMER ANALYTICS & REPORTS
+  // ============================================================================
+
+  /// Get customer dashboard stats
+  Future<Map<String, dynamic>> getCustomerStats(String customerId) async {
+    try {
+      final headers = await _authHeaders;
+      final response = await http.get(
+        Uri.parse('$_baseUrl/customer/stats/dashboard'),
+        headers: headers,
+      );
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        if (data['success']) {
+          return data['data'];
+        }
+      }
+      throw Exception('Failed to fetch customer stats: ${response.body}');
+    } catch (e) {
+      throw Exception('Error fetching customer stats: $e');
+    }
+  }
+
+  /// Get customer trip history
+  Future<List<dynamic>> getCustomerTrips(
+    String customerId, {
+    int page = 1,
+    int limit = 20,
+    String? status,
+  }) async {
+    try {
+      final headers = await _authHeaders;
+      
+      final queryParams = <String, String>{
+        'page': page.toString(),
+        'limit': limit.toString(),
+      };
+      
+      if (status != null && status.isNotEmpty) queryParams['status'] = status;
+      
+      final uri = Uri.parse('$_baseUrl/admin/customers/unified/$customerId/trips').replace(queryParameters: queryParams);
+      
+      final response = await http.get(uri, headers: headers);
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        if (data['success']) {
+          return data['trips'] ?? [];
+        }
+      }
+      throw Exception('Failed to fetch customer trips: ${response.body}');
+    } catch (e) {
+      throw Exception('Error fetching customer trips: $e');
+    }
+  }
+
+  /// Get customer monthly distance data
+  Future<Map<String, dynamic>> getCustomerMonthlyDistance(
+    String customerId, {
+    String? month,
+  }) async {
+    try {
+      final headers = await _authHeaders;
+      final url = month != null 
+        ? '$_baseUrl/customer/stats/monthly-distance?month=$month'
+        : '$_baseUrl/customer/stats/monthly-distance';
+        
+      final response = await http.get(
+        Uri.parse(url),
+        headers: headers,
+      );
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        if (data['success']) {
+          return data['data'];
+        }
+      }
+      throw Exception('Failed to fetch monthly distance data: ${response.body}');
+    } catch (e) {
+      throw Exception('Error fetching monthly distance data: $e');
+    }
+  }
+
+  // ============================================================================
+  // CUSTOMER TRACKING & TRIPS
+  // ============================================================================
+
+  /// Get customer active trips
+  Future<List<dynamic>> getCustomerActiveTrips(String customerId) async {
+    try {
+      final headers = await _authHeaders;
+      final response = await http.get(
+        Uri.parse('$_baseUrl/admin/customers/unified/$customerId/trips/active'),
+        headers: headers,
+      );
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        if (data['success']) {
+          return data['trips'] ?? [];
+        }
+      }
+      throw Exception('Failed to fetch active trips: ${response.body}');
+    } catch (e) {
+      throw Exception('Error fetching active trips: $e');
+    }
+  }
+
+  /// Track customer location
+  Future<Map<String, dynamic>> trackCustomer(String customerId) async {
+    try {
+      final headers = await _authHeaders;
+      final response = await http.get(
+        Uri.parse('$_baseUrl/admin/customers/unified/$customerId/track'),
+        headers: headers,
+      );
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        if (data['success']) {
+          return data['tracking'];
+        }
+      }
+      throw Exception('Failed to track customer: ${response.body}');
+    } catch (e) {
+      throw Exception('Error tracking customer: $e');
+    }
+  }
+
+  // ============================================================================
+  // BULK OPERATIONS
+  // ============================================================================
+
+  /// Bulk import customers from CSV
+  Future<Map<String, dynamic>> bulkImportCustomers(List<Map<String, dynamic>> customersData) async {
+    try {
+      final headers = await _authHeaders;
+      final response = await http.post(
+        Uri.parse('$_baseUrl/admin/customers/unified/bulk-import'),
+        headers: headers,
+        body: json.encode({'customers': customersData}),
+      );
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        if (data['success']) {
+          return data;
+        }
+      }
+      throw Exception('Failed to bulk import customers: ${response.body}');
+    } catch (e) {
+      throw Exception('Error bulk importing customers: $e');
+    }
+  }
+
+  /// Export customers to CSV format
+  Future<List<Map<String, dynamic>>> exportCustomers({
+    String? status,
+    String? organization,
+    String? department,
+  }) async {
+    try {
+      final headers = await _authHeaders;
+      
+      final queryParams = <String, String>{};
+      if (status != null && status.isNotEmpty) queryParams['status'] = status;
+      if (organization != null && organization.isNotEmpty) queryParams['organization'] = organization;
+      if (department != null && department.isNotEmpty) queryParams['department'] = department;
+      
+      final uri = Uri.parse('$_baseUrl/admin/customers/unified/export').replace(queryParameters: queryParams);
+      
+      final response = await http.get(uri, headers: headers);
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        if (data['success']) {
+          return List<Map<String, dynamic>>.from(data['customers']);
+        }
+      }
+      throw Exception('Failed to export customers: ${response.body}');
+    } catch (e) {
+      throw Exception('Error exporting customers: $e');
+    }
+  }
+
+  // ============================================================================
+  // SEARCH & FILTERING
+  // ============================================================================
+
+  /// Search customers with advanced filters
+  Future<Map<String, dynamic>> searchCustomers({
+    String? query,
+    String? status,
+    String? organization,
+    String? department,
+    String? branch,
+    DateTime? createdAfter,
+    DateTime? createdBefore,
+    int page = 1,
+    int limit = 50,
+  }) async {
+    try {
+      final headers = await _authHeaders;
+      
+      final queryParams = <String, String>{
+        'page': page.toString(),
+        'limit': limit.toString(),
+      };
+      
+      if (query != null && query.isNotEmpty) queryParams['search'] = query;
+      if (status != null && status.isNotEmpty) queryParams['status'] = status;
+      if (organization != null && organization.isNotEmpty) queryParams['organization'] = organization;
+      if (department != null && department.isNotEmpty) queryParams['department'] = department;
+      if (branch != null && branch.isNotEmpty) queryParams['branch'] = branch;
+      if (createdAfter != null) queryParams['createdAfter'] = createdAfter.toIso8601String();
+      if (createdBefore != null) queryParams['createdBefore'] = createdBefore.toIso8601String();
+      
+      final uri = Uri.parse('$_baseUrl/admin/customers/unified/search').replace(queryParameters: queryParams);
+      
+      final response = await http.get(uri, headers: headers);
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        if (data['success']) {
+          return data;
+        }
+      }
+      throw Exception('Failed to search customers: ${response.body}');
+    } catch (e) {
+      throw Exception('Error searching customers: $e');
+    }
+  }
+
+  // ============================================================================
+  // CUSTOMER-CLIENT ASSIGNMENT
+  // ============================================================================
+
+  /// Assign customer to client
+  Future<bool> assignCustomerToClient(String customerId, String clientId) async {
+    try {
+      final headers = await _authHeaders;
+      final response = await http.post(
+        Uri.parse('$_baseUrl/admin/customers/unified/$customerId/assign-client'),
+        headers: headers,
+        body: json.encode({'clientId': clientId}),
+      );
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        return data['success'] ?? false;
+      }
+      throw Exception('Failed to assign customer to client: ${response.body}');
+    } catch (e) {
+      throw Exception('Error assigning customer to client: $e');
+    }
+  }
+
+  /// Remove customer from client
+  Future<bool> removeCustomerFromClient(String customerId) async {
+    try {
+      final headers = await _authHeaders;
+      final response = await http.delete(
+        Uri.parse('$_baseUrl/admin/customers/unified/$customerId/remove-client'),
+        headers: headers,
+      );
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        return data['success'] ?? false;
+      }
+      throw Exception('Failed to remove customer from client: ${response.body}');
+    } catch (e) {
+      throw Exception('Error removing customer from client: $e');
+    }
+  }
+
+  // ============================================================================
+  // UTILITY METHODS
+  // ============================================================================
+
+  /// Get customers statistics summary
+  Future<Map<String, dynamic>> getCustomersSummary() async {
+    try {
+      final headers = await _authHeaders;
+      final response = await http.get(
+        Uri.parse('$_baseUrl/admin/customers/unified/summary'),
+        headers: headers,
+      );
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        if (data['success']) {
+          return data['summary'];
+        }
+      }
+      throw Exception('Failed to fetch customers summary: ${response.body}');
+    } catch (e) {
+      throw Exception('Error fetching customers summary: $e');
+    }
+  }
+
+  /// Validate customer email availability
+  Future<bool> isEmailAvailable(String email) async {
+    try {
+      final headers = await _authHeaders;
+      final response = await http.get(
+        Uri.parse('$_baseUrl/admin/customers/unified/validate-email?email=$email'),
+        headers: headers,
+      );
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        return data['available'] ?? false;
+      }
+      return false;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  /// Validate employee ID availability
+  Future<bool> isEmployeeIdAvailable(String employeeId) async {
+    try {
+      final headers = await _authHeaders;
+      final response = await http.get(
+        Uri.parse('$_baseUrl/admin/customers/unified/validate-employee-id?employeeId=$employeeId'),
+        headers: headers,
+      );
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        return data['available'] ?? false;
+      }
+      return false;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  /// Get departments list
+  Future<List<String>> getDepartments() async {
+    try {
+      final headers = await _authHeaders;
+      final response = await http.get(
+        Uri.parse('$_baseUrl/admin/customers/unified/departments'),
+        headers: headers,
+      );
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        if (data['success']) {
+          return List<String>.from(data['departments']);
+        }
+      }
+      return [];
+    } catch (e) {
+      return [];
+    }
+  }
+
+  /// Get branches list
+  Future<List<String>> getBranches() async {
+    try {
+      final headers = await _authHeaders;
+      final response = await http.get(
+        Uri.parse('$_baseUrl/admin/customers/unified/branches'),
+        headers: headers,
+      );
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        if (data['success']) {
+          return List<String>.from(data['branches']);
+        }
+      }
+      return [];
+    } catch (e) {
+      return [];
+    }
+  }
+}
+*/

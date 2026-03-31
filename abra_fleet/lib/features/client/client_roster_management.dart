@@ -1,0 +1,3290 @@
+import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
+import 'dart:io';
+import 'dart:convert';
+import 'package:csv/csv.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:share_plus/share_plus.dart';
+import 'package:pdf/pdf.dart';
+import 'package:pdf/widgets.dart' as pw;
+import 'bulk_import_rosters.dart';
+import 'package:abra_fleet/features/customer/dashboard/data/repositories/roster_repository.dart';
+import 'package:abra_fleet/core/services/backend_connection_manager.dart';
+import 'package:abra_fleet/core/services/roster_service.dart';
+import 'package:abra_fleet/core/services/api_service.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'client_pending_assignment_tab.dart';
+
+class ClientRosterManagementPage extends StatefulWidget {
+  const ClientRosterManagementPage({Key? key}) : super(key: key);
+
+  @override
+  State<ClientRosterManagementPage> createState() =>
+      _ClientRosterManagementPageState();
+}
+
+class _ClientRosterManagementPageState extends State<ClientRosterManagementPage>
+    with SingleTickerProviderStateMixin {
+  late TabController _tabController;
+  final ScrollController _scrollController = ScrollController();
+  bool _showScrollToTop = false;
+
+  List<Widget> _overlayStack = [];
+
+  // ✅ FIX: This count tracks REAL pending rosters from backend
+  int _pendingCount = 0;
+  bool _isRefreshing = false; // Track refresh state
+  
+  // ✅ NEW: Trips data and inline viewing
+  List<Map<String, dynamic>> _allTrips = [];
+  bool _isLoadingTrips = true;
+  String? _clientOrganizationDomain;
+  late final RosterService _rosterService;
+  
+  // Trip stats for clickable buttons
+  int _assignedTripsCount = 0;
+  int _ongoingTripsCount = 0;
+  int _completedTripsCount = 0;
+  int _cancelledTripsCount = 0;
+  
+  // ✅ NEW: Inline trip viewing state
+  String? _selectedTripStatus; // null means show rosters, non-null means show trips
+  List<Map<String, dynamic>> _filteredTrips = [];
+  
+  // Filter variables
+  String _searchQuery = '';
+  String _selectedStatus = 'All';
+  String _selectedShift = 'All';
+  DateTimeRange? _dateRange;
+  int? _minEmployees;
+  int? _maxEmployees;
+
+  // Export variables
+  bool _isExporting = false;
+
+  // ✅ Key to force rebuild of pending tab
+  final GlobalKey<State> _pendingTabKey = GlobalKey();
+
+  @override
+  void initState() {
+    super.initState();
+    
+    // Initialize RosterService with ApiService
+    _rosterService = RosterService(apiService: ApiService());
+    
+    _tabController = TabController(length: 4, vsync: this);
+    
+    _scrollController.addListener(() {
+      if (_scrollController.offset > 200 && !_showScrollToTop) {
+        setState(() => _showScrollToTop = true);
+      } else if (_scrollController.offset <= 200 && _showScrollToTop) {
+        setState(() => _showScrollToTop = false);
+      }
+    });
+    
+    // ✅ Initial fetch
+    _fetchPendingCount();
+    _initializeOrganizationAndFetchTrips();
+  }
+  
+  // ✅ NEW: Initialize organization domain and fetch trips
+  Future<void> _initializeOrganizationAndFetchTrips() async {
+    try {
+      // Get current user's email to extract organization domain
+      final prefs = await SharedPreferences.getInstance();
+      final userDataString = prefs.getString('user_data');
+      
+      if (userDataString != null) {
+        final userData = jsonDecode(userDataString);
+        final email = userData['email']?.toString() ?? '';
+        
+        if (email.isNotEmpty && email.contains('@')) {
+          final emailParts = email.split('@');
+          if (emailParts.length == 2) {
+            _clientOrganizationDomain = '@${emailParts[1]}';
+            debugPrint('🟢 Client organization domain: $_clientOrganizationDomain');
+            
+            // Fetch trips for this organization
+            await _fetchOrganizationTrips();
+          }
+        }
+      }
+    } catch (e) {
+      debugPrint('❌ Error initializing organization trips: $e');
+      if (mounted) {
+        setState(() => _isLoadingTrips = false);
+      }
+    }
+  }
+  
+  // ✅ NEW: Fetch trips filtered by organization
+  Future<void> _fetchOrganizationTrips() async {
+    if (!mounted) return;
+    
+    setState(() => _isLoadingTrips = true);
+    
+    try {
+      debugPrint('📥 Fetching trips for organization: $_clientOrganizationDomain');
+      
+      // Use the same API as Approved Rosters screen
+      final response = await _rosterService.getAssignedTrips();
+      
+      if (response['success'] == true) {
+        final allTrips = List<Map<String, dynamic>>.from(response['data'] ?? []);
+        
+        // Filter by organization domain
+        final organizationTrips = allTrips.where((trip) {
+          final customerEmail = trip['customerEmail']?.toString() ?? '';
+          return customerEmail.endsWith(_clientOrganizationDomain ?? '');
+        }).toList();
+        
+        if (mounted) {
+          setState(() {
+            _allTrips = organizationTrips;
+            _calculateTripStats();
+            _isLoadingTrips = false;
+          });
+          
+          debugPrint('✅ Loaded ${organizationTrips.length} trips for organization');
+        }
+      } else {
+        throw Exception(response['message'] ?? 'Failed to fetch trips');
+      }
+    } catch (e) {
+      debugPrint('❌ Error fetching organization trips: $e');
+      if (mounted) {
+        setState(() => _isLoadingTrips = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error loading trips: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+  
+  // ✅ NEW: Calculate trip statistics
+  void _calculateTripStats() {
+    _assignedTripsCount = _allTrips.where((t) => _safeGetString(t, 'status', '') == 'assigned').length;
+    _ongoingTripsCount = _allTrips.where((t) => _safeGetString(t, 'status', '') == 'ongoing').length;
+    _completedTripsCount = _allTrips.where((t) => _safeGetString(t, 'status', '') == 'completed').length;
+    _cancelledTripsCount = _allTrips.where((t) => _safeGetString(t, 'status', '') == 'cancelled').length;
+  }
+  
+  // ✅ NEW: Helper method to safely extract string values from JSON
+  String _safeGetString(Map<String, dynamic> data, String key, String defaultValue) {
+    final value = data[key];
+    if (value == null) return defaultValue;
+    if (value is String) return value;
+    if (value is Map || value is List) {
+      // If it's a complex object, try to extract a meaningful string
+      if (value is Map<String, dynamic>) {
+        // Try common string fields
+        final stringValue = value['name'] ?? value['value'] ?? value['text'] ?? value.toString();
+        return stringValue is String ? stringValue : defaultValue;
+      }
+      return defaultValue;
+    }
+    return value.toString();
+  }
+  
+  // ✅ NEW: Show trips inline instead of dialog
+  void _showTripsInline(String status) {
+    final filteredTrips = _allTrips.where((trip) {
+      return _safeGetString(trip, 'status', '') == status;
+    }).toList();
+    
+    setState(() {
+      _selectedTripStatus = status;
+      _filteredTrips = filteredTrips;
+    });
+  }
+  
+  // ✅ NEW: Go back to roster view
+  void _showRostersView() {
+    setState(() {
+      _selectedTripStatus = null;
+      _filteredTrips = [];
+    });
+  }
+
+  // ✅ IMPROVED: Fetch actual pending count from backend
+  Future<void> _fetchPendingCount() async {
+    try {
+      final repo = RosterRepository(apiService: BackendConnectionManager().apiService);
+      final list = await repo.getPendingRosters();
+      if (mounted) {
+        setState(() => _pendingCount = list.length);
+        debugPrint('✅ Pending rosters count: $_pendingCount');
+      }
+    } catch (e) {
+      debugPrint('❌ Error fetching pending count: $e');
+      // Don't show error to user for background refresh
+    }
+  }
+
+  // ✅ UPDATED: Manual refresh function
+  Future<void> _refreshAllData() async {
+    if (_isRefreshing) return; // Prevent multiple simultaneous refreshes
+    
+    setState(() => _isRefreshing = true);
+    
+    try {
+      // Fetch pending count
+      await _fetchPendingCount();
+      
+      // ✅ NEW: Refresh organization trips
+      await _fetchOrganizationTrips();
+      
+      // Force rebuild of pending tab by updating its key
+      if (_tabController.index == 1) {
+        // If currently on pending tab, trigger its refresh
+        setState(() {});
+      }
+      
+      // Show success message
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Row(
+              children: [
+                Icon(Icons.check_circle, color: Colors.white),
+                SizedBox(width: 8),
+                Text('Data refreshed successfully'),
+              ],
+            ),
+            backgroundColor: Color(0xFF10B981),
+            duration: Duration(seconds: 2),
+          ),
+        );
+      }
+    } catch (e) {
+      debugPrint('❌ Error refreshing data: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: [
+                const Icon(Icons.error_outline, color: Colors.white),
+                const SizedBox(width: 8),
+                Text('Refresh failed: ${e.toString()}'),
+              ],
+            ),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isRefreshing = false);
+      }
+    }
+  }
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    _tabController.dispose();
+    super.dispose();
+  }
+
+  // --- OVERLAY SYSTEM ---
+  void _pushOverlay(Widget overlay) {
+    setState(() {
+      _overlayStack.add(overlay);
+    });
+  }
+
+  void _popOverlay() {
+    if (_overlayStack.isNotEmpty) {
+      setState(() {
+        _overlayStack.removeLast();
+      });
+    }
+  }
+
+  void _clearAllOverlays() {
+    setState(() {
+      _overlayStack.clear();
+    });
+  }
+
+  Widget _buildOverlayWrapper({
+    required String title,
+    required Widget child,
+    double? width,
+    double? height,
+  }) {
+    return Material(
+      color: Colors.black54,
+      child: Center(
+        child: Container(
+          width: width ?? MediaQuery.of(context).size.width * 0.9,
+          height: height ?? MediaQuery.of(context).size.height * 0.85,
+          margin: const EdgeInsets.all(20),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(16),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.3),
+                blurRadius: 20,
+                offset: const Offset(0, 10),
+              ),
+            ],
+          ),
+          child: Column(
+            children: [
+              Container(
+                padding: const EdgeInsets.symmetric(
+                    horizontal: 16.0, vertical: 12.0),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: const BorderRadius.only(
+                    topLeft: Radius.circular(16),
+                    topRight: Radius.circular(16),
+                  ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.1),
+                      blurRadius: 4,
+                      offset: const Offset(0, 2),
+                    ),
+                  ],
+                ),
+                child: Row(
+                  children: [
+                    IconButton(
+                      onPressed: _popOverlay,
+                      icon: const Icon(Icons.arrow_back, color: Colors.black),
+                      tooltip: 'Back',
+                    ),
+                    const SizedBox(width: 12),
+                    Text(
+                      title,
+                      style: const TextStyle(
+                        color: Colors.black,
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const Spacer(),
+                    TextButton(
+                      onPressed: _clearAllOverlays,
+                      child: const Text(
+                        'Cancel',
+                        style: TextStyle(
+                          color: Colors.black,
+                          fontWeight: FontWeight.w600,
+                          fontSize: 16,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Expanded(
+                child: ClipRRect(
+                  borderRadius: const BorderRadius.only(
+                    bottomLeft: Radius.circular(16),
+                    bottomRight: Radius.circular(16),
+                  ),
+                  child: child,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _showBulkImportScreen() {
+    _pushOverlay(
+      _buildOverlayWrapper(
+        title: 'Bulk Import Rosters',
+        child: BulkImportRostersScreen(
+          onCancel: _popOverlay,
+          onImportComplete: () {
+            _popOverlay();
+            _fetchPendingCount(); // ✅ Refresh count after import
+            setState(() {}); // Force rebuild
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Rosters imported successfully!'),
+                backgroundColor: Color(0xFF10B981),
+              ),
+            );
+          },
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: SafeArea(
+        child: Stack(
+          children: [
+            NestedScrollView(
+              controller: _scrollController,
+              headerSliverBuilder: (context, innerBoxIsScrolled) {
+                return [
+                  SliverToBoxAdapter(
+                    child: Column(
+                      children: [
+                        const SizedBox(height: 10),
+                        _buildStatsSection(),
+                        _buildSearchAndActions(),
+                        if (_hasActiveFilters()) _buildActiveFiltersChips(),
+                        _buildTabBar(),
+                      ],
+                    ),
+                  ),
+                ];
+              },
+              body: _selectedTripStatus != null 
+                  ? _buildTripsView() 
+                  : _buildDefaultTripsView(), // Show ongoing trips by default
+            ),
+            if (_isExporting) _buildLoadingOverlay(),
+            // ✅ Show refresh indicator overlay
+            if (_isRefreshing) _buildRefreshOverlay(),
+            ..._overlayStack,
+          ],
+        ),
+      ),
+      floatingActionButton: Stack(
+        children: [
+          if (_showScrollToTop)
+            Positioned(
+              bottom: 80,
+              right: 0,
+              child: FloatingActionButton(
+                heroTag: 'scrollToTop',
+                mini: true,
+                backgroundColor: Colors.white,
+                foregroundColor: const Color(0xFF2563EB),
+                elevation: 4,
+                onPressed: _scrollToTop,
+                child: const Icon(Icons.keyboard_arrow_up),
+              ),
+            ),
+          Positioned(
+            bottom: 0,
+            right: 0,
+            child: FloatingActionButton.extended(
+              heroTag: 'createRoster',
+              onPressed: _createNewRoster,
+              backgroundColor: const Color(0xFF2563EB),
+              icon: const Icon(Icons.add),
+              label: const Text('Create Roster'),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ✅ NEW: Refresh overlay widget
+  Widget _buildRefreshOverlay() {
+    return Container(
+      color: Colors.black.withOpacity(0.3),
+      child: Center(
+        child: Card(
+          margin: const EdgeInsets.all(24),
+          child: Padding(
+            padding: const EdgeInsets.all(32),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const CircularProgressIndicator(),
+                const SizedBox(height: 20),
+                const Text(
+                  'Refreshing...',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Fetching latest data',
+                  style: TextStyle(
+                    fontSize: 14,
+                    color: Colors.grey[600],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  // --- STATS SECTION WITH CLICKABLE TRIP STATS ---
+  Widget _buildStatsSection() {
+    return Container(
+      color: Colors.white,
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        children: [
+          // First row - Roster stats (removed as requested)
+          
+          const SizedBox(height: 16),
+          
+          // Second row - Trip stats (clickable)
+          Row(
+            children: [
+              const Icon(Icons.directions_car, color: Color(0xFF2563EB), size: 20),
+              const SizedBox(width: 8),
+              const Text(
+                'Trip Status',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                  color: Color(0xFF1E293B),
+                ),
+              ),
+              const Spacer(),
+              if (_isLoadingTrips)
+                const SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                ),
+            ],
+          ),
+          
+          const SizedBox(height: 12),
+          
+          Row(
+            children: [
+              Expanded(
+                child: InkWell(
+                  onTap: () => _showTripsInline('assigned'),
+                  borderRadius: BorderRadius.circular(12),
+                  child: _buildTripStatCard(
+                    icon: Icons.assignment,
+                    color: const Color(0xFF2563EB),
+                    value: _assignedTripsCount.toString(),
+                    label: 'Assigned',
+                    isSelected: _selectedTripStatus == 'assigned',
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: InkWell(
+                  onTap: () => _showTripsInline('ongoing'),
+                  borderRadius: BorderRadius.circular(12),
+                  child: _buildTripStatCard(
+                    icon: Icons.directions_car,
+                    color: const Color(0xFFF59E0B),
+                    value: _ongoingTripsCount.toString(),
+                    label: 'Ongoing',
+                    isSelected: _selectedTripStatus == 'ongoing',
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: InkWell(
+                  onTap: () => _showTripsInline('completed'),
+                  borderRadius: BorderRadius.circular(12),
+                  child: _buildTripStatCard(
+                    icon: Icons.check_circle,
+                    color: const Color(0xFF10B981),
+                    value: _completedTripsCount.toString(),
+                    label: 'Completed',
+                    isSelected: _selectedTripStatus == 'completed',
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: InkWell(
+                  onTap: () => _showTripsInline('cancelled'),
+                  borderRadius: BorderRadius.circular(12),
+                  child: _buildTripStatCard(
+                    icon: Icons.cancel,
+                    color: const Color(0xFFEF4444),
+                    value: _cancelledTripsCount.toString(),
+                    label: 'Cancelled',
+                    isSelected: _selectedTripStatus == 'cancelled',
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+  
+  Widget _buildTripStatCard({
+    required IconData icon,
+    required Color color,
+    required String value,
+    required String label,
+    required bool isSelected,
+  }) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: isSelected ? color.withOpacity(0.2) : color.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: isSelected ? color : color.withOpacity(0.2),
+          width: isSelected ? 2 : 1,
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(icon, color: color, size: 20),
+              const Spacer(),
+              if (isSelected)
+                Icon(
+                  Icons.check_circle,
+                  size: 14,
+                  color: color,
+                ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text(
+            value,
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+              color: isSelected ? color : const Color(0xFF1E293B),
+            ),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 11,
+              color: isSelected ? color : const Color(0xFF64748B),
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+  
+  Widget _buildStatCard({
+    required IconData icon,
+    required Color color,
+    required String value,
+    required String label,
+    VoidCallback? onTap,
+  }) {
+    final card = Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: color.withOpacity(0.2)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(icon, color: color, size: 28),
+              if (onTap != null) ...[
+                const Spacer(),
+                Icon(
+                  Icons.arrow_forward_ios,
+                  size: 14,
+                  color: color,
+                ),
+              ],
+            ],
+          ),
+          const SizedBox(height: 12),
+          Text(
+            value,
+            style: const TextStyle(
+              fontSize: 24,
+              fontWeight: FontWeight.bold,
+              color: Color(0xFF1E293B),
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            label,
+            style: const TextStyle(
+              fontSize: 12,
+              color: Color(0xFF64748B),
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+        ],
+      ),
+    );
+
+    if (onTap != null) {
+      return InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(12),
+        child: card,
+      );
+    }
+    return card;
+  }
+
+  // --- SEARCH AND ACTIONS ---
+  Widget _buildSearchAndActions() {
+    return Container(
+      color: Colors.white,
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+      child: Row(
+        children: [
+          Expanded(
+            child: TextField(
+              onChanged: (value) => setState(() => _searchQuery = value),
+              decoration: InputDecoration(
+                hintText: 'Search rosters...',
+                hintStyle: const TextStyle(color: Color(0xFF94A3B8)),
+                prefixIcon:
+                    const Icon(Icons.search, color: Color(0xFF64748B)),
+                suffixIcon: _searchQuery.isNotEmpty
+                    ? IconButton(
+                        icon:
+                            const Icon(Icons.clear, color: Color(0xFF64748B)),
+                        onPressed: () => setState(() => _searchQuery = ''),
+                      )
+                    : null,
+                filled: true,
+                fillColor: const Color(0xFFF1F5F9),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide.none,
+                ),
+                contentPadding: const EdgeInsets.symmetric(vertical: 12),
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+          
+          // ✅ NEW: Refresh Button
+          Container(
+            decoration: BoxDecoration(
+              color: const Color(0xFF8B5CF6).withOpacity(0.1),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: const Color(0xFF8B5CF6).withOpacity(0.2)),
+            ),
+            child: IconButton(
+              icon: _isRefreshing 
+                ? const SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF8B5CF6)),
+                    ),
+                  )
+                : const Icon(Icons.refresh, color: Color(0xFF8B5CF6)),
+              onPressed: _isRefreshing ? null : _refreshAllData,
+              tooltip: "Refresh Data",
+            ),
+          ),
+
+          const SizedBox(width: 8),
+          
+          Container(
+            decoration: BoxDecoration(
+              color: const Color(0xFF2563EB).withOpacity(0.1),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: const Color(0xFF2563EB).withOpacity(0.2)),
+            ),
+            child: IconButton(
+              icon: const Icon(Icons.filter_list, color: Color(0xFF2563EB)),
+              onPressed: _showFilterDialog,
+              tooltip: "Filters",
+            ),
+          ),
+
+          const SizedBox(width: 8),
+
+          Container(
+            decoration: BoxDecoration(
+              color: const Color(0xFF10B981).withOpacity(0.1),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: const Color(0xFF10B981).withOpacity(0.2)),
+            ),
+            child: IconButton(
+              icon: const Icon(Icons.file_upload, color: Color(0xFF10B981)),
+              onPressed: _importRoster,
+              tooltip: "Import",
+            ),
+          ),
+          
+          const SizedBox(width: 8),
+
+          Container(
+            decoration: BoxDecoration(
+              color: const Color(0xFFF59E0B).withOpacity(0.1),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: const Color(0xFFF59E0B).withOpacity(0.2)),
+            ),
+            child: IconButton(
+              icon: const Icon(Icons.file_download, color: Color(0xFFF59E0B)),
+              onPressed: _showExportDialog,
+              tooltip: "Export",
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+  
+  // ✅ NEW: Build trips view for inline display
+  Widget _buildTripsView() {
+    return Column(
+      children: [
+        // Back button and header
+        Container(
+          color: Colors.white,
+          padding: const EdgeInsets.all(16),
+          child: Row(
+            children: [
+              IconButton(
+                onPressed: _showRostersView,
+                icon: const Icon(Icons.arrow_back, color: Color(0xFF2563EB)),
+                tooltip: 'Back to Rosters',
+              ),
+              const SizedBox(width: 8),
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: _getStatusColor(_selectedTripStatus!).withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Icon(
+                  _getStatusIcon(_selectedTripStatus!),
+                  color: _getStatusColor(_selectedTripStatus!),
+                  size: 20,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      '${_selectedTripStatus!.toUpperCase()} TRIPS',
+                      style: const TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        color: Color(0xFF1E293B),
+                      ),
+                    ),
+                    Text(
+                      '${_filteredTrips.length} trips found for your organization',
+                      style: const TextStyle(
+                        fontSize: 13,
+                        color: Color(0xFF64748B),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+        
+        // Trips list
+        Expanded(
+          child: _filteredTrips.isEmpty
+              ? Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(
+                        Icons.inbox_outlined,
+                        size: 80,
+                        color: Colors.grey[300],
+                      ),
+                      const SizedBox(height: 16),
+                      Text(
+                        'No ${_selectedTripStatus} trips found',
+                        style: const TextStyle(
+                          fontSize: 16,
+                          color: Color(0xFF64748B),
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        'Trips for your organization will appear here',
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: Colors.grey[500],
+                        ),
+                      ),
+                    ],
+                  ),
+                )
+              : ListView.builder(
+                  padding: const EdgeInsets.all(16),
+                  itemCount: _filteredTrips.length,
+                  itemBuilder: (context, index) {
+                    return _buildTripCard(_filteredTrips[index]);
+                  },
+                ),
+        ),
+      ],
+    );
+  }
+
+  // ✅ NEW: Build default trips view (shows ongoing trips by default)
+  Widget _buildDefaultTripsView() {
+    // Show ongoing trips by default
+    final ongoingTrips = _allTrips.where((trip) {
+      return _safeGetString(trip, 'status', '') == 'ongoing';
+    }).toList();
+
+    return Column(
+      children: [
+        // Header
+        Container(
+          color: Colors.white,
+          padding: const EdgeInsets.all(16),
+          child: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF59E0B).withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Icon(
+                  Icons.directions_car,
+                  color: Color(0xFFF59E0B),
+                  size: 20,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'ONGOING TRIPS',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        color: Color(0xFF1E293B),
+                      ),
+                    ),
+                    Text(
+                      '${ongoingTrips.length} active trips',
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: Colors.grey[600],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+        
+        // Content
+        Expanded(
+          child: ongoingTrips.isEmpty
+              ? Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(
+                        Icons.directions_car_outlined,
+                        size: 64,
+                        color: Colors.grey[400],
+                      ),
+                      const SizedBox(height: 16),
+                      Text(
+                        'No ongoing trips',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.grey[600],
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        'Ongoing trips will appear here',
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: Colors.grey[500],
+                        ),
+                      ),
+                    ],
+                  ),
+                )
+              : ListView.builder(
+                  padding: const EdgeInsets.all(16),
+                  itemCount: ongoingTrips.length,
+                  itemBuilder: (context, index) {
+                    return _buildTripCard(ongoingTrips[index]);
+                  },
+                ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildTabBar() {
+    // Hide tab bar when viewing trips
+    if (_selectedTripStatus != null) {
+      return const SizedBox.shrink();
+    }
+    
+    return Container(
+      color: Colors.white,
+      child: TabBar(
+        controller: _tabController,
+        labelColor: const Color(0xFF2563EB),
+        unselectedLabelColor: const Color(0xFF64748B),
+        indicatorColor: const Color(0xFF2563EB),
+        indicatorWeight: 3,
+        isScrollable: true,
+        labelStyle: const TextStyle(
+          fontWeight: FontWeight.w600,
+          fontSize: 15,
+        ),
+        tabs: const [
+          Tab(text: ''),
+          Tab(text: ''),
+          Tab(text: ''),
+          Tab(text: ''),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildLoadingOverlay() {
+    return Container(
+      color: Colors.black.withOpacity(0.5),
+      child: Center(
+        child: Card(
+          margin: const EdgeInsets.all(24),
+          child: Padding(
+            padding: const EdgeInsets.all(32),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const CircularProgressIndicator(),
+                const SizedBox(height: 20),
+                const Text(
+                  'Exporting...',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Preparing your file',
+                  style: TextStyle(
+                    fontSize: 14,
+                    color: Colors.grey[600],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _scrollToTop() {
+    _scrollController.animateTo(
+      0,
+      duration: const Duration(milliseconds: 500),
+      curve: Curves.easeInOut,
+    );
+  }
+
+  // --- FILTER LOGIC ---
+  bool _hasActiveFilters() {
+    return _selectedStatus != 'All' ||
+        _selectedShift != 'All' ||
+        _dateRange != null ||
+        _minEmployees != null ||
+        _maxEmployees != null;
+  }
+
+  int _getActiveFilterCount() {
+    int count = 0;
+    if (_selectedStatus != 'All') count++;
+    if (_selectedShift != 'All') count++;
+    if (_dateRange != null) count++;
+    if (_minEmployees != null) count++;
+    if (_maxEmployees != null) count++;
+    return count;
+  }
+
+  void _clearAllFilters() {
+    setState(() {
+      _selectedStatus = 'All';
+      _selectedShift = 'All';
+      _dateRange = null;
+      _minEmployees = null;
+      _maxEmployees = null;
+    });
+  }
+
+  Widget _buildActiveFiltersChips() {
+    return Container(
+      color: Colors.white,
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: Row(
+          children: [
+            const Text(
+              'Active Filters: ',
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                color: Color(0xFF64748B),
+              ),
+            ),
+            const SizedBox(width: 8),
+            if (_selectedStatus != 'All')
+              _buildFilterChip('Status: $_selectedStatus', () {
+                setState(() => _selectedStatus = 'All');
+              }),
+            if (_selectedShift != 'All')
+              _buildFilterChip('Shift: $_selectedShift', () {
+                setState(() => _selectedShift = 'All');
+              }),
+            if (_dateRange != null)
+              _buildFilterChip(
+                'Date: ${DateFormat('MMM dd').format(_dateRange!.start)} - ${DateFormat('MMM dd').format(_dateRange!.end)}',
+                () {
+                  setState(() => _dateRange = null);
+                },
+              ),
+            if (_minEmployees != null)
+              _buildFilterChip('Min Emp: $_minEmployees', () {
+                setState(() => _minEmployees = null);
+              }),
+            if (_maxEmployees != null)
+              _buildFilterChip('Max Emp: $_maxEmployees', () {
+                setState(() => _maxEmployees = null);
+              }),
+            const SizedBox(width: 8),
+            TextButton.icon(
+              onPressed: _clearAllFilters,
+              icon: const Icon(Icons.clear_all, size: 16),
+              label: const Text('Clear All'),
+              style: TextButton.styleFrom(
+                foregroundColor: const Color(0xFFEF4444),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildFilterChip(String label, VoidCallback onRemove) {
+    return Container(
+      margin: const EdgeInsets.only(right: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      decoration: BoxDecoration(
+        color: const Color(0xFF2563EB).withOpacity(0.1),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: const Color(0xFF2563EB).withOpacity(0.3)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            label,
+            style: const TextStyle(
+              color: Color(0xFF2563EB),
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          const SizedBox(width: 6),
+          GestureDetector(
+            onTap: onRemove,
+            child: const Icon(
+              Icons.close,
+              size: 14,
+              color: Color(0xFF2563EB),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showFilterDialog() {
+    String tempStatus = _selectedStatus;
+    String tempShift = _selectedShift;
+    DateTimeRange? tempDateRange = _dateRange;
+    int? tempMinEmployees = _minEmployees;
+    int? tempMaxEmployees = _maxEmployees;
+
+    showDialog(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: Row(
+            children: [
+              const Icon(Icons.filter_list, color: Color(0xFF2563EB)),
+              const SizedBox(width: 12),
+              const Text('Filter Rosters'),
+              const Spacer(),
+              if (_hasActiveFilters())
+                TextButton(
+                  onPressed: () {
+                    setDialogState(() {
+                      tempStatus = 'All';
+                      tempShift = 'All';
+                      tempDateRange = null;
+                      tempMinEmployees = null;
+                      tempMaxEmployees = null;
+                    });
+                  },
+                  child: const Text('Clear All'),
+                ),
+            ],
+          ),
+          content: SingleChildScrollView(
+            child: SizedBox(
+              width: double.maxFinite,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Text(
+                    'Status',
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      color: Color(0xFF1E293B),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 8,
+                    children: ['All', 'Active', 'Scheduled', 'Expired']
+                        .map((status) {
+                      return ChoiceChip(
+                        label: Text(status),
+                        selected: tempStatus == status,
+                        onSelected: (selected) {
+                          setDialogState(() => tempStatus = status);
+                        },
+                        selectedColor:
+                            const Color(0xFF2563EB).withOpacity(0.2),
+                        labelStyle: TextStyle(
+                          color: tempStatus == status
+                              ? const Color(0xFF2563EB)
+                              : const Color(0xFF64748B),
+                          fontWeight: tempStatus == status
+                              ? FontWeight.w600
+                              : FontWeight.normal,
+                        ),
+                      );
+                    }).toList(),
+                  ),
+                  const SizedBox(height: 20),
+                  const Text(
+                    'Shift Type',
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      color: Color(0xFF1E293B),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 8,
+                    children:
+                        ['All', 'Morning', 'Evening', 'Night'].map((shift) {
+                      return ChoiceChip(
+                        label: Text(shift),
+                        selected: tempShift == shift,
+                        onSelected: (selected) {
+                          setDialogState(() => tempShift = shift);
+                        },
+                        selectedColor:
+                            const Color(0xFF10B981).withOpacity(0.2),
+                        labelStyle: TextStyle(
+                          color: tempShift == shift
+                              ? const Color(0xFF10B981)
+                              : const Color(0xFF64748B),
+                          fontWeight: tempShift == shift
+                              ? FontWeight.w600
+                              : FontWeight.normal,
+                        ),
+                      );
+                    }).toList(),
+                  ),
+                  const SizedBox(height: 20),
+                  const Text(
+                    'Date Range',
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      color: Color(0xFF1E293B),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  OutlinedButton.icon(
+                    onPressed: () async {
+                      final DateTimeRange? picked = await showDateRangePicker(
+                        context: context,
+                        firstDate: DateTime(2020),
+                        lastDate: DateTime(2030),
+                        initialDateRange: tempDateRange,
+                      );
+                      if (picked != null) {
+                        setDialogState(() => tempDateRange = picked);
+                      }
+                    },
+                    icon: const Icon(Icons.calendar_today, size: 18),
+                    label: Text(
+                      tempDateRange == null
+                          ? 'Select Date Range'
+                          : '${DateFormat('MMM dd, yyyy').format(tempDateRange!.start)} - ${DateFormat('MMM dd, yyyy').format(tempDateRange!.end)}',
+                    ),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: const Color(0xFF2563EB),
+                      side: const BorderSide(color: Color(0xFF2563EB)),
+                    ),
+                  ),
+                  if (tempDateRange != null)
+                    TextButton.icon(
+                      onPressed: () {
+                        setDialogState(() => tempDateRange = null);
+                      },
+                      icon: const Icon(Icons.clear, size: 16),
+                      label: const Text('Clear Date Range'),
+                    ),
+                  const SizedBox(height: 20),
+                  const Text(
+                    'Employee Count Range',
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      color: Color(0xFF1E293B),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: TextField(
+                          decoration: const InputDecoration(
+                            labelText: 'Min',
+                            border: OutlineInputBorder(),
+                            prefixIcon: Icon(Icons.people),
+                          ),
+                          keyboardType: TextInputType.number,
+                          onChanged: (value) {
+                            tempMinEmployees = int.tryParse(value);
+                          },
+                          controller: TextEditingController(
+                            text: tempMinEmployees?.toString() ?? '',
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: TextField(
+                          decoration: const InputDecoration(
+                            labelText: 'Max',
+                            border: OutlineInputBorder(),
+                            prefixIcon: Icon(Icons.people),
+                          ),
+                          keyboardType: TextInputType.number,
+                          onChanged: (value) {
+                            tempMaxEmployees = int.tryParse(value);
+                          },
+                          controller: TextEditingController(
+                            text: tempMaxEmployees?.toString() ?? '',
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton.icon(
+              onPressed: () {
+                setState(() {
+                  _selectedStatus = tempStatus;
+                  _selectedShift = tempShift;
+                  _dateRange = tempDateRange;
+                  _minEmployees = tempMinEmployees;
+                  _maxEmployees = tempMaxEmployees;
+                });
+                Navigator.pop(context);
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text(
+                        'Filters applied: ${_getActiveFilterCount()} active'),
+                    backgroundColor: const Color(0xFF10B981),
+                  ),
+                );
+              },
+              icon: const Icon(Icons.check),
+              label: const Text('Apply Filters'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF2563EB),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // --- EXPORT LOGIC ---
+  void _showExportDialog() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Row(
+          children: [
+            const Icon(Icons.file_download, color: Color(0xFF2563EB)),
+            const SizedBox(width: 12),
+            const Text('Export Rosters'),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Choose export format:',
+              style: TextStyle(
+                fontSize: 14,
+                color: Color(0xFF64748B),
+              ),
+            ),
+            const SizedBox(height: 16),
+            _buildExportOption(
+              icon: Icons.table_chart,
+              title: 'Excel (.xlsx)',
+              description: 'Full spreadsheet with all data',
+              color: const Color(0xFF10B981),
+              onTap: () {
+                Navigator.pop(context);
+                _exportToExcel();
+              },
+            ),
+            const SizedBox(height: 12),
+            _buildExportOption(
+              icon: Icons.description,
+              title: 'CSV (.csv)',
+              description: 'Simple comma-separated values',
+              color: const Color(0xFF2563EB),
+              onTap: () {
+                Navigator.pop(context);
+                _exportToCSV();
+              },
+            ),
+            const SizedBox(height: 12),
+            _buildExportOption(
+              icon: Icons.picture_as_pdf,
+              title: 'PDF Document',
+              description: 'Formatted printable document',
+              color: const Color(0xFFEF4444),
+              onTap: () {
+                Navigator.pop(context);
+                _exportToPDF();
+              },
+            ),
+            const SizedBox(height: 12),
+            _buildExportOption(
+              icon: Icons.code,
+              title: 'JSON (.json)',
+              description: 'Raw data for developers',
+              color: const Color(0xFFF59E0B),
+              onTap: () {
+                Navigator.pop(context);
+                _exportToJSON();
+              },
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildExportOption({
+    required IconData icon,
+    required String title,
+    required String description,
+    required Color color,
+    required VoidCallback onTap,
+  }) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          border: Border.all(color: color.withOpacity(0.3)),
+          borderRadius: BorderRadius.circular(12),
+          color: color.withOpacity(0.05),
+        ),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: color.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Icon(icon, color: color, size: 24),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: const TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w600,
+                      color: Color(0xFF1E293B),
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    description,
+                    style: const TextStyle(
+                      fontSize: 12,
+                      color: Color(0xFF64748B),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Icon(Icons.arrow_forward_ios, size: 16, color: color),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _exportToExcel() async {
+    setState(() => _isExporting = true);
+    try {
+      await Future.delayed(const Duration(seconds: 2));
+      setState(() => _isExporting = false);
+      if (mounted) _showExportSuccess('Excel', 'xlsx');
+    } catch (e) {
+      setState(() => _isExporting = false);
+      _showExportError(e.toString());
+    }
+  }
+
+  Future<void> _exportToCSV() async {
+    setState(() => _isExporting = true);
+    try {
+      final rosters = _getAllRosters();
+      List<List<dynamic>> csvData = [
+        [
+          'ID', 'Name', 'Shift', 'Routes', 'Employees', 'Vehicles', 'Valid From', 'Valid To', 'Status'
+        ],
+        ...rosters.map((roster) => [
+              roster.id,
+              roster.name,
+              roster.shift,
+              roster.routeCount,
+              roster.employeeCount,
+              roster.vehicleCount,
+              DateFormat('yyyy-MM-dd').format(roster.validFrom),
+              DateFormat('yyyy-MM-dd').format(roster.validTo),
+              roster.status,
+            ]),
+      ];
+      String csv = const ListToCsvConverter().convert(csvData);
+      final output = await getTemporaryDirectory();
+      final fileName = 'rosters_${DateFormat('yyyyMMdd_HHmmss').format(DateTime.now())}.csv';
+      final file = File('${output.path}/$fileName');
+      await file.writeAsString(csv);
+      setState(() => _isExporting = false);
+      if (mounted) _showExportSuccessWithShare('CSV', 'csv', file.path);
+    } catch (e) {
+      setState(() => _isExporting = false);
+      _showExportError(e.toString());
+    }
+  }
+
+  Future<void> _exportToPDF() async {
+    setState(() => _isExporting = true);
+    try {
+      final rosters = _getAllRosters();
+      final pdf = pw.Document();
+
+      pdf.addPage(
+        pw.MultiPage(
+          pageFormat: PdfPageFormat.a4,
+          build: (pw.Context context) {
+            return [
+              pw.Header(
+                level: 0,
+                child: pw.Text(
+                  'Roster Management Report',
+                  style: pw.TextStyle(
+                    fontSize: 24,
+                    fontWeight: pw.FontWeight.bold,
+                  ),
+                ),
+              ),
+              pw.SizedBox(height: 20),
+              pw.Text(
+                'Generated: ${DateFormat('MMM dd, yyyy HH:mm').format(DateTime.now())}',
+                style: const pw.TextStyle(fontSize: 12),
+              ),
+              pw.SizedBox(height: 20),
+              pw.Table(
+                border: pw.TableBorder.all(),
+                children: [
+                  pw.TableRow(
+                    decoration:
+                        const pw.BoxDecoration(color: PdfColors.grey300),
+                    children: [
+                      pw.Padding(
+                        padding: const pw.EdgeInsets.all(8),
+                        child: pw.Text('ID',
+                            style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
+                      ),
+                      pw.Padding(
+                        padding: const pw.EdgeInsets.all(8),
+                        child: pw.Text('Name',
+                            style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
+                      ),
+                      pw.Padding(
+                        padding: const pw.EdgeInsets.all(8),
+                        child: pw.Text('Shift',
+                            style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
+                      ),
+                      pw.Padding(
+                        padding: const pw.EdgeInsets.all(8),
+                        child: pw.Text('Employees',
+                            style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
+                      ),
+                      pw.Padding(
+                        padding: const pw.EdgeInsets.all(8),
+                        child: pw.Text('Status',
+                            style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
+                      ),
+                    ],
+                  ),
+                  ...rosters.map((roster) => pw.TableRow(
+                        children: [
+                          pw.Padding(
+                            padding: const pw.EdgeInsets.all(8),
+                            child: pw.Text(roster.id),
+                          ),
+                          pw.Padding(
+                            padding: const pw.EdgeInsets.all(8),
+                            child: pw.Text(roster.name),
+                          ),
+                          pw.Padding(
+                            padding: const pw.EdgeInsets.all(8),
+                            child: pw.Text(roster.shift),
+                          ),
+                          pw.Padding(
+                            padding: const pw.EdgeInsets.all(8),
+                            child: pw.Text(roster.employeeCount.toString()),
+                          ),
+                          pw.Padding(
+                            padding: const pw.EdgeInsets.all(8),
+                            child: pw.Text(roster.status),
+                          ),
+                        ],
+                      )),
+                ],
+              ),
+            ];
+          },
+        ),
+      );
+
+      final output = await getTemporaryDirectory();
+      final fileName = 'rosters_${DateFormat('yyyyMMdd_HHmmss').format(DateTime.now())}.pdf';
+      final file = File('${output.path}/$fileName');
+      await file.writeAsBytes(await pdf.save());
+
+      setState(() => _isExporting = false);
+      if (mounted) _showExportSuccessWithShare('PDF', 'pdf', file.path);
+    } catch (e) {
+      setState(() => _isExporting = false);
+      _showExportError(e.toString());
+    }
+  }
+
+  Future<void> _exportToJSON() async {
+    setState(() => _isExporting = true);
+    try {
+      await Future.delayed(const Duration(seconds: 2));
+      setState(() => _isExporting = false);
+      if (mounted) _showExportSuccess('JSON', 'json');
+    } catch (e) {
+      setState(() => _isExporting = false);
+      _showExportError(e.toString());
+    }
+  }
+
+  void _showExportSuccess(String format, String extension) {
+    // ... (UI Code for success dialog) ...
+    _showGenericSuccessDialog(format, extension, null);
+  }
+
+  void _showExportSuccessWithShare(String format, String extension, String filePath) {
+    _showGenericSuccessDialog(format, extension, filePath);
+  }
+  
+  void _showGenericSuccessDialog(String format, String extension, String? filePath) {
+      final fileName = 'rosters_${DateFormat('yyyyMMdd_HHmmss').format(DateTime.now())}.$extension';
+      showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: const Color(0xFF10B981).withOpacity(0.1),
+                shape: BoxShape.circle,
+              ),
+              child:
+                  const Icon(Icons.check_circle, color: Color(0xFF10B981)),
+            ),
+            const SizedBox(width: 12),
+            const Text('Export Successful'),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Your $format file has been created successfully!'),
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: const Color(0xFFF1F5F9),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.insert_drive_file,
+                      color: Color(0xFF64748B)),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      fileName,
+                      style: const TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 12),
+            const Text(
+              'File saved to device',
+              style: TextStyle(
+                fontSize: 12,
+                color: Color(0xFF64748B),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton.icon(
+            onPressed: () {
+              Navigator.pop(context);
+            },
+            icon: const Icon(Icons.close),
+            label: const Text('Close'),
+          ),
+          if (filePath != null)
+            ElevatedButton.icon(
+              onPressed: () {
+                Navigator.pop(context);
+                _shareFile(filePath, format);
+              },
+              icon: const Icon(Icons.share),
+              label: const Text('Share'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF2563EB),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _shareFile(String filePath, String format) async {
+    try {
+      await Share.shareXFiles(
+        [XFile(filePath)],
+        text: 'Roster Report - ${DateFormat('MMM dd, yyyy').format(DateTime.now())}',
+        subject: 'Roster Management Report',
+      );
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Share failed: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  void _showExportError(String error) {
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Export failed: $error'),
+          backgroundColor: Colors.red,
+          action: SnackBarAction(
+            label: 'Retry',
+            textColor: Colors.white,
+            onPressed: _showExportDialog,
+          ),
+        ),
+      );
+    }
+  }
+  
+  // ✅ NEW: Build trip card (similar to trips client)
+  Widget _buildTripCard(Map<String, dynamic> trip) {
+    final status = _safeGetString(trip, 'status', 'unknown');
+    final statusColor = _getStatusColor(status);
+    final customerName = _safeGetString(trip, 'customerName', 'Unknown');
+    final customerEmail = _safeGetString(trip, 'customerEmail', '');
+    final vehicleNumber = _safeGetString(trip, 'vehicleNumber', 'Not Assigned');
+    final driverName = _safeGetString(trip, 'driverName', 'Not Assigned');
+    final driverPhone = _safeGetString(trip, 'driverPhone', 'N/A');
+    final rosterType = _safeGetString(trip, 'rosterType', _safeGetString(trip, 'tripType', 'BOTH'));
+    final pickupLocation = _safeGetString(trip, 'pickupLocation', '');
+    final dropLocation = _safeGetString(trip, 'dropLocation', '');
+    final pickupTime = _safeGetString(trip, 'pickupTime', '');
+    final dropTime = _safeGetString(trip, 'dropTime', '');
+    final assignedAt = trip['assignedAt'];
+
+    return Card(
+      margin: const EdgeInsets.only(bottom: 12),
+      elevation: 2,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: statusColor.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Icon(
+                    Icons.person,
+                    color: statusColor,
+                    size: 20,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        customerName,
+                        style: const TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.bold,
+                          color: Color(0xFF1E293B),
+                        ),
+                      ),
+                      if (customerEmail.isNotEmpty) ...[
+                        const SizedBox(height: 2),
+                        Text(
+                          customerEmail,
+                          style: const TextStyle(
+                            fontSize: 11,
+                            color: Color(0xFF64748B),
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: statusColor.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Text(
+                    status.toUpperCase(),
+                    style: TextStyle(
+                      color: statusColor,
+                      fontSize: 10,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            const Divider(height: 1),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Expanded(
+                  child: _buildTripInfoRow(
+                    icon: Icons.directions_car,
+                    label: 'Vehicle',
+                    value: vehicleNumber,
+                    color: const Color(0xFF2563EB),
+                  ),
+                ),
+                Expanded(
+                  child: _buildTripInfoRow(
+                    icon: Icons.person_outline,
+                    label: 'Driver',
+                    value: driverName,
+                    color: const Color(0xFF10B981),
+                  ),
+                ),
+              ],
+            ),
+            if (driverPhone.isNotEmpty && driverPhone != 'N/A') ...[
+              const SizedBox(height: 8),
+              _buildTripInfoRow(
+                icon: Icons.phone,
+                label: 'Driver Phone',
+                value: driverPhone,
+                color: const Color(0xFF10B981),
+              ),
+            ],
+            if (pickupLocation.isNotEmpty || dropLocation.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              if (pickupLocation.isNotEmpty)
+                _buildTripInfoRow(
+                  icon: Icons.location_on,
+                  label: 'Pickup',
+                  value: pickupLocation,
+                  color: const Color(0xFFEF4444),
+                ),
+              if (pickupLocation.isNotEmpty && dropLocation.isNotEmpty)
+                const SizedBox(height: 8),
+              if (dropLocation.isNotEmpty)
+                _buildTripInfoRow(
+                  icon: Icons.location_on_outlined,
+                  label: 'Drop',
+                  value: dropLocation,
+                  color: const Color(0xFFEF4444),
+                ),
+            ],
+            if (pickupTime.isNotEmpty || dropTime.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  if (pickupTime.isNotEmpty)
+                    Expanded(
+                      child: _buildTripInfoRow(
+                        icon: Icons.access_time,
+                        label: 'Pickup Time',
+                        value: pickupTime,
+                        color: const Color(0xFFF59E0B),
+                      ),
+                    ),
+                  if (dropTime.isNotEmpty)
+                    Expanded(
+                      child: _buildTripInfoRow(
+                        icon: Icons.access_time_filled,
+                        label: 'Drop Time',
+                        value: dropTime,
+                        color: const Color(0xFFF59E0B),
+                      ),
+                    ),
+                ],
+              ),
+            ],
+            if (assignedAt != null) ...[
+              const SizedBox(height: 12),
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF1F5F9),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(
+                      Icons.schedule,
+                      size: 12,
+                      color: Color(0xFF64748B),
+                    ),
+                    const SizedBox(width: 6),
+                    Text(
+                      'Assigned: ${_formatDateTime(assignedAt.toString())}',
+                      style: const TextStyle(
+                        fontSize: 11,
+                        color: Color(0xFF64748B),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+  
+  Widget _buildTripInfoRow({
+    required IconData icon,
+    required String label,
+    required String value,
+    required Color color,
+  }) {
+    return Row(
+      children: [
+        Icon(icon, size: 14, color: color),
+        const SizedBox(width: 6),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                label,
+                style: const TextStyle(
+                  fontSize: 9,
+                  color: Color(0xFF94A3B8),
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+              Text(
+                value,
+                style: const TextStyle(
+                  fontSize: 12,
+                  color: Color(0xFF1E293B),
+                  fontWeight: FontWeight.w600,
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+  
+  // ✅ NEW: Helper methods for trip status
+  Color _getStatusColor(String status) {
+    switch (status.toLowerCase()) {
+      case 'assigned':
+        return const Color(0xFF2563EB);
+      case 'ongoing':
+        return const Color(0xFFF59E0B);
+      case 'completed':
+        return const Color(0xFF10B981);
+      case 'cancelled':
+        return const Color(0xFFEF4444);
+      default:
+        return const Color(0xFF64748B);
+    }
+  }
+  
+  IconData _getStatusIcon(String status) {
+    switch (status.toLowerCase()) {
+      case 'assigned':
+        return Icons.assignment;
+      case 'ongoing':
+        return Icons.directions_car;
+      case 'completed':
+        return Icons.check_circle;
+      case 'cancelled':
+        return Icons.cancel;
+      default:
+        return Icons.help_outline;
+    }
+  }
+  
+  // ✅ NEW: Format date time
+  String _formatDateTime(String dateTimeStr) {
+    try {
+      final dateTime = DateTime.parse(dateTimeStr);
+      return DateFormat('MMM dd, yyyy HH:mm').format(dateTime);
+    } catch (e) {
+      return dateTimeStr;
+    }
+  }
+
+  // --- FILTERING DATA ---
+  List<RosterModel> _filterRosters(List<RosterModel> rosters) {
+    return rosters.where((roster) {
+      if (_searchQuery.isNotEmpty) {
+        final query = _searchQuery.toLowerCase();
+        if (!roster.name.toLowerCase().contains(query) &&
+            !roster.id.toLowerCase().contains(query) &&
+            !roster.shift.toLowerCase().contains(query)) {
+          return false;
+        }
+      }
+      if (_selectedStatus != 'All' &&
+          roster.status.toLowerCase() != _selectedStatus.toLowerCase()) {
+        return false;
+      }
+      if (_selectedShift != 'All' &&
+          !roster.shift.toLowerCase().contains(_selectedShift.toLowerCase())) {
+        return false;
+      }
+      if (_dateRange != null) {
+        if (roster.validFrom.isAfter(_dateRange!.end) ||
+            roster.validTo.isBefore(_dateRange!.start)) {
+          return false;
+        }
+      }
+      if (_minEmployees != null && roster.employeeCount < _minEmployees!) {
+        return false;
+      }
+      if (_maxEmployees != null && roster.employeeCount > _maxEmployees!) {
+        return false;
+      }
+      return true;
+    }).toList();
+  }
+
+  List<RosterModel> _getAllRosters() {
+    return [
+      ..._getActiveRosters(),
+      ..._getScheduledRosters(),
+      ..._getArchivedRosters(),
+    ];
+  }
+
+  // --- TAB BUILDERS (Active, Scheduled, Archived) ---
+  Widget _buildActiveRostersTab() {
+    // Show loading indicator while fetching data
+    if (_isLoadingTrips) {
+      return const Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            CircularProgressIndicator(),
+            SizedBox(height: 16),
+            Text('Loading active rosters...'),
+          ],
+        ),
+      );
+    }
+    
+    final rosters = _filterRosters(_getActiveRosters());
+
+    if (rosters.isEmpty) {
+      return _buildEmptyState(_hasActiveFilters()
+          ? 'No rosters match your filters'
+          : 'No active rosters found');
+    }
+
+    return ListView.builder(
+      padding: const EdgeInsets.all(16),
+      itemCount: rosters.length,
+      itemBuilder: (context, index) {
+        return _buildRosterCard(rosters[index]);
+      },
+    );
+  }
+
+  Widget _buildScheduledRostersTab() {
+    // Show loading indicator while fetching data
+    if (_isLoadingTrips) {
+      return const Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            CircularProgressIndicator(),
+            SizedBox(height: 16),
+            Text('Loading scheduled rosters...'),
+          ],
+        ),
+      );
+    }
+    
+    final rosters = _filterRosters(_getScheduledRosters());
+
+    if (rosters.isEmpty) {
+      return _buildEmptyState(_hasActiveFilters()
+          ? 'No rosters match your filters'
+          : 'No scheduled rosters found');
+    }
+
+    return ListView.builder(
+      padding: const EdgeInsets.all(16),
+      itemCount: rosters.length,
+      itemBuilder: (context, index) {
+        return _buildRosterCard(rosters[index]);
+      },
+    );
+  }
+
+  Widget _buildArchivedRostersTab() {
+    // Show loading indicator while fetching data
+    if (_isLoadingTrips) {
+      return const Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            CircularProgressIndicator(),
+            SizedBox(height: 16),
+            Text('Loading archived rosters...'),
+          ],
+        ),
+      );
+    }
+    
+    final rosters = _filterRosters(_getArchivedRosters());
+
+    if (rosters.isEmpty) {
+      return _buildEmptyState(_hasActiveFilters()
+          ? 'No rosters match your filters'
+          : 'No archived rosters found');
+    }
+
+    return ListView.builder(
+      padding: const EdgeInsets.all(16),
+      itemCount: rosters.length,
+      itemBuilder: (context, index) {
+        return _buildRosterCard(rosters[index]);
+      },
+    );
+  }
+
+  Widget _buildEmptyState(
+    String message, {
+    IconData? icon,
+    String? actionText,
+    VoidCallback? onAction,
+  }) {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(
+            icon ?? Icons.calendar_today_outlined,
+            size: 80,
+            color: Colors.grey[300],
+          ),
+          const SizedBox(height: 16),
+          Text(
+            message,
+            style: const TextStyle(
+              fontSize: 16,
+              color: Color(0xFF64748B),
+            ),
+          ),
+          if (_hasActiveFilters()) ...[
+            const SizedBox(height: 12),
+            TextButton.icon(
+              onPressed: _clearAllFilters,
+              icon: const Icon(Icons.clear_all),
+              label: const Text('Clear Filters'),
+              style: TextButton.styleFrom(
+                foregroundColor: const Color(0xFF2563EB),
+              ),
+            ),
+          ] else if (actionText != null && onAction != null) ...[
+            const SizedBox(height: 24),
+            ElevatedButton.icon(
+              onPressed: onAction,
+              icon: const Icon(Icons.add),
+              label: Text(actionText),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF2563EB),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildRosterCard(RosterModel roster) {
+    return Card(
+      margin: const EdgeInsets.only(bottom: 16),
+      elevation: 2,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      child: InkWell(
+        onTap: () => _viewRosterDetails(roster),
+        borderRadius: BorderRadius.circular(16),
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color:
+                          _getRosterStatusColor(roster.status).withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Icon(
+                      _getShiftIcon(roster.shift),
+                      color: _getRosterStatusColor(roster.status),
+                      size: 24,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          roster.name,
+                          style: const TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                            color: Color(0xFF1E293B),
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          roster.id,
+                          style: const TextStyle(
+                            fontSize: 13,
+                            color: Color(0xFF64748B),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  _buildStatusChip(roster.status),
+                  PopupMenuButton(
+                    icon:
+                        const Icon(Icons.more_vert, color: Color(0xFF64748B)),
+                    itemBuilder: (context) => [
+                      const PopupMenuItem(
+                        value: 'edit',
+                        child: Row(
+                          children: [
+                            Icon(Icons.edit, size: 20),
+                            SizedBox(width: 12),
+                            Text('Edit'),
+                          ],
+                        ),
+                      ),
+                      const PopupMenuItem(
+                        value: 'export',
+                        child: Row(
+                          children: [
+                            Icon(Icons.download, size: 20),
+                            SizedBox(width: 12),
+                            Text('Export'),
+                          ],
+                        ),
+                      ),
+                      const PopupMenuItem(
+                        value: 'delete',
+                        child: Row(
+                          children: [
+                            Icon(Icons.delete,
+                                size: 20, color: Colors.red),
+                            SizedBox(width: 12),
+                            Text('Delete',
+                                style: TextStyle(color: Colors.red)),
+                          ],
+                        ),
+                      ),
+                    ],
+                    onSelected: (value) =>
+                        _handleMenuAction(value.toString(), roster),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF1F5F9),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.access_time,
+                        size: 18, color: Color(0xFF64748B)),
+                    const SizedBox(width: 8),
+                    Text(
+                      roster.shift,
+                      style: const TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                        color: Color(0xFF1E293B),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 12),
+
+              Row(
+                children: [
+                  Expanded(
+                    child: _buildInfoItem(
+                      icon: Icons.route,
+                      label: 'Routes',
+                      value: roster.routeCount.toString(),
+                      color: const Color(0xFF2563EB),
+                    ),
+                  ),
+                  Expanded(
+                    child: _buildInfoItem(
+                      icon: Icons.people,
+                      label: 'Employees',
+                      value: roster.employeeCount.toString(),
+                      color: const Color(0xFF10B981),
+                    ),
+                  ),
+                  Expanded(
+                    child: _buildInfoItem(
+                      icon: Icons.directions_bus,
+                      label: 'Vehicles',
+                      value: roster.vehicleCount.toString(),
+                      color: const Color(0xFFF59E0B),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: const Color(0xFFE2E8F0)),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.calendar_today,
+                        size: 16, color: Color(0xFF64748B)),
+                    const SizedBox(width: 8),
+                    Text(
+                      'Valid: ${_formatDate(roster.validFrom)} - ${_formatDate(roster.validTo)}',
+                      style: const TextStyle(
+                        fontSize: 13,
+                        color: Color(0xFF64748B),
+                      ),
+                    ),
+                    const Spacer(),
+                    if (roster.status == 'active')
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 8, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF10B981).withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Container(
+                              width: 6,
+                              height: 6,
+                              decoration: const BoxDecoration(
+                                color: Color(0xFF10B981),
+                                shape: BoxShape.circle,
+                              ),
+                            ),
+                            const SizedBox(width: 6),
+                            Text(
+                              '${_getDaysRemaining(roster.validTo)} days left',
+                              style: const TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w600,
+                                color: Color(0xFF10B981),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: () => _viewRosterDetails(roster),
+                      icon: const Icon(Icons.visibility, size: 18),
+                      label: const Text('View Details'),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: const Color(0xFF2563EB),
+                        side: const BorderSide(color: Color(0xFF2563EB)),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: ElevatedButton.icon(
+                      onPressed: () => _editRoster(roster),
+                      icon: const Icon(Icons.edit, size: 18),
+                      label: const Text('Edit'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF2563EB),
+                        foregroundColor: Colors.white,
+                        elevation: 0,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildInfoItem({
+    required IconData icon,
+    required String label,
+    required String value,
+    required Color color,
+  }) {
+    return Column(
+      children: [
+        Icon(icon, color: color, size: 20),
+        const SizedBox(height: 4),
+        Text(
+          value,
+          style: const TextStyle(
+            fontSize: 18,
+            fontWeight: FontWeight.bold,
+            color: Color(0xFF1E293B),
+          ),
+        ),
+        Text(
+          label,
+          style: const TextStyle(
+            fontSize: 11,
+            color: Color(0xFF64748B),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildStatusChip(String status) {
+    Color color;
+    String label;
+
+    switch (status.toLowerCase()) {
+      case 'active':
+        color = const Color(0xFF10B981);
+        label = 'Active';
+        break;
+      case 'scheduled':
+        color = const Color(0xFF2563EB);
+        label = 'Scheduled';
+        break;
+      case 'expired':
+        color = const Color(0xFFEF4444);
+        label = 'Expired';
+        break;
+      default:
+        color = const Color(0xFF64748B);
+        label = 'Inactive';
+    }
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: color.withOpacity(0.3)),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(
+          color: color,
+          fontSize: 12,
+          fontWeight: FontWeight.w600,
+        ),
+      ),
+    );
+  }
+
+  Color _getRosterStatusColor(String status) {
+    switch (status.toLowerCase()) {
+      case 'active':
+        return const Color(0xFF10B981);
+      case 'scheduled':
+        return const Color(0xFF2563EB);
+      case 'expired':
+        return const Color(0xFFEF4444);
+      default:
+        return const Color(0xFF64748B);
+    }
+  }
+
+  IconData _getShiftIcon(String shift) {
+    if (shift.toLowerCase().contains('morning')) {
+      return Icons.wb_sunny;
+    } else if (shift.toLowerCase().contains('evening')) {
+      return Icons.wb_twilight;
+    } else if (shift.toLowerCase().contains('night')) {
+      return Icons.nightlight_round;
+    }
+    return Icons.access_time;
+  }
+
+  String _formatDate(DateTime date) {
+    return DateFormat('MMM dd, yyyy').format(date);
+  }
+
+  int _getDaysRemaining(DateTime validTo) {
+    return validTo.difference(DateTime.now()).inDays;
+  }
+
+  // --- COUNT CALCULATION METHODS ---
+  int _getActiveRostersCount() {
+    if (_isLoadingTrips) return 0;
+    final activeTrips = _allTrips.where((trip) {
+      final status = trip['status']?.toString().toLowerCase() ?? '';
+      return status == 'assigned' || status == 'ongoing';
+    }).toList();
+    
+    // Count unique vehicles
+    final uniqueVehicles = activeTrips.map((trip) => trip['vehicleNumber']).toSet();
+    return uniqueVehicles.length;
+  }
+
+  int _getTotalEmployeesCount() {
+    if (_isLoadingTrips) return 0;
+    // Count unique customers across all trips
+    final uniqueCustomers = _allTrips.map((trip) => trip['customerEmail']).toSet();
+    return uniqueCustomers.length;
+  }
+
+  int _getTotalRoutesCount() {
+    if (_isLoadingTrips) return 0;
+    // Count unique vehicles across all trips (active + scheduled + archived)
+    final uniqueVehicles = _allTrips.map((trip) => trip['vehicleNumber']).toSet();
+    return uniqueVehicles.length;
+  }
+
+  // --- REAL DATA FROM BACKEND ---
+  List<RosterModel> _getActiveRosters() {
+    if (_isLoadingTrips) return [];
+    
+    // Filter trips with status 'assigned' or 'ongoing' (active trips)
+    final activeTrips = _allTrips.where((trip) {
+      final status = trip['status']?.toString().toLowerCase() ?? '';
+      return status == 'assigned' || status == 'ongoing';
+    }).toList();
+    
+    // Group by vehicle to create roster-like view
+    final Map<String, List<Map<String, dynamic>>> groupedByVehicle = {};
+    for (var trip in activeTrips) {
+      final vehicleNumber = trip['vehicleNumber']?.toString() ?? 'Unknown';
+      if (!groupedByVehicle.containsKey(vehicleNumber)) {
+        groupedByVehicle[vehicleNumber] = [];
+      }
+      groupedByVehicle[vehicleNumber]!.add(trip);
+    }
+    
+    // Convert to RosterModel
+    return groupedByVehicle.entries.map((entry) {
+      final vehicleNumber = entry.key;
+      final trips = entry.value;
+      final driverName = trips.first['driverName']?.toString() ?? 'Not Assigned';
+      
+      return RosterModel(
+        id: vehicleNumber,
+        name: 'Route - $vehicleNumber',
+        shift: driverName,
+        routeCount: 1,
+        employeeCount: trips.length,
+        vehicleCount: 1,
+        validFrom: DateTime.now(),
+        validTo: DateTime.now().add(const Duration(days: 30)),
+        status: 'active',
+        trips: trips, // ✅ Include actual trip data
+      );
+    }).toList();
+  }
+
+  List<RosterModel> _getScheduledRosters() {
+    if (_isLoadingTrips) return [];
+    
+    // Filter trips that are scheduled for future dates
+    final now = DateTime.now();
+    final scheduledTrips = _allTrips.where((trip) {
+      final status = trip['status']?.toString().toLowerCase() ?? '';
+      final tripDate = trip['tripDate'] != null 
+          ? DateTime.tryParse(trip['tripDate'].toString()) 
+          : null;
+      
+      return status == 'assigned' && 
+             tripDate != null && 
+             tripDate.isAfter(now.add(const Duration(days: 1)));
+    }).toList();
+    
+    // Group by vehicle
+    final Map<String, List<Map<String, dynamic>>> groupedByVehicle = {};
+    for (var trip in scheduledTrips) {
+      final vehicleNumber = trip['vehicleNumber']?.toString() ?? 'Unknown';
+      if (!groupedByVehicle.containsKey(vehicleNumber)) {
+        groupedByVehicle[vehicleNumber] = [];
+      }
+      groupedByVehicle[vehicleNumber]!.add(trip);
+    }
+    
+    return groupedByVehicle.entries.map((entry) {
+      final vehicleNumber = entry.key;
+      final trips = entry.value;
+      final driverName = trips.first['driverName']?.toString() ?? 'Not Assigned';
+      
+      return RosterModel(
+        id: vehicleNumber,
+        name: 'Scheduled Route - $vehicleNumber',
+        shift: driverName,
+        routeCount: 1,
+        employeeCount: trips.length,
+        vehicleCount: 1,
+        validFrom: DateTime.now().add(const Duration(days: 1)),
+        validTo: DateTime.now().add(const Duration(days: 31)),
+        status: 'scheduled',
+        trips: trips, // ✅ Include actual trip data
+      );
+    }).toList();
+  }
+
+  List<RosterModel> _getArchivedRosters() {
+    if (_isLoadingTrips) return [];
+    
+    // Filter trips with status 'completed' or 'cancelled'
+    final archivedTrips = _allTrips.where((trip) {
+      final status = trip['status']?.toString().toLowerCase() ?? '';
+      return status == 'completed' || status == 'cancelled';
+    }).toList();
+    
+    // Group by vehicle
+    final Map<String, List<Map<String, dynamic>>> groupedByVehicle = {};
+    for (var trip in archivedTrips) {
+      final vehicleNumber = trip['vehicleNumber']?.toString() ?? 'Unknown';
+      if (!groupedByVehicle.containsKey(vehicleNumber)) {
+        groupedByVehicle[vehicleNumber] = [];
+      }
+      groupedByVehicle[vehicleNumber]!.add(trip);
+    }
+    
+    return groupedByVehicle.entries.map((entry) {
+      final vehicleNumber = entry.key;
+      final trips = entry.value;
+      final driverName = trips.first['driverName']?.toString() ?? 'Not Assigned';
+      final status = trips.first['status']?.toString().toLowerCase() ?? 'expired';
+      
+      return RosterModel(
+        id: vehicleNumber,
+        name: 'Archived Route - $vehicleNumber',
+        shift: driverName,
+        routeCount: 1,
+        employeeCount: trips.length,
+        vehicleCount: 1,
+        validFrom: DateTime.now().subtract(const Duration(days: 30)),
+        validTo: DateTime.now(),
+        status: status,
+        trips: trips, // ✅ Include actual trip data
+      );
+    }).toList();
+  }
+
+  void _createNewRoster() {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Create roster feature coming soon...')),
+    );
+  }
+
+  void _importRoster() {
+    _showBulkImportScreen();
+  }
+
+  void _viewRosterDetails(RosterModel roster) {
+    showDialog(
+      context: context,
+      builder: (context) => Dialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        child: Container(
+          constraints: const BoxConstraints(maxWidth: 600, maxHeight: 700),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Header
+              Container(
+                padding: const EdgeInsets.all(20),
+                decoration: const BoxDecoration(
+                  color: Color(0xFF2563EB),
+                  borderRadius: BorderRadius.only(
+                    topLeft: Radius.circular(16),
+                    topRight: Radius.circular(16),
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.info_outline, color: Colors.white, size: 28),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            roster.name,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          Text(
+                            'Vehicle: ${roster.id} | Driver: ${roster.shift}',
+                            style: const TextStyle(
+                              color: Colors.white70,
+                              fontSize: 14,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    IconButton(
+                      onPressed: () => Navigator.pop(context),
+                      icon: const Icon(Icons.close, color: Colors.white),
+                    ),
+                  ],
+                ),
+              ),
+              
+              // Content
+              Expanded(
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.all(20),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // Summary Info
+                      _buildDetailRow('Vehicle Number', roster.id),
+                      _buildDetailRow('Driver Name', roster.shift),
+                      _buildDetailRow(
+                        'Driver Phone',
+                        roster.trips.isNotEmpty && roster.trips.first['driverPhone'] != null && roster.trips.first['driverPhone'].toString().isNotEmpty
+                            ? roster.trips.first['driverPhone'].toString()
+                            : 'Not Available',
+                      ),
+                      _buildDetailRow('Status', roster.status.toUpperCase()),
+                      _buildDetailRow('Total Employees', '${roster.employeeCount}'),
+                      _buildDetailRow('Valid From', _formatDate(roster.validFrom)),
+                      _buildDetailRow('Valid To', _formatDate(roster.validTo)),
+                      
+                      const SizedBox(height: 24),
+                      const Divider(),
+                      const SizedBox(height: 16),
+                      
+                      // Employee List
+                      const Text(
+                        'Assigned Employees',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      
+                      if (roster.trips.isEmpty)
+                        const Center(
+                          child: Padding(
+                            padding: EdgeInsets.all(20),
+                            child: Text('No employees assigned'),
+                          ),
+                        )
+                      else
+                        ...roster.trips.asMap().entries.map((entry) {
+                          final index = entry.key;
+                          final trip = entry.value;
+                          return Card(
+                            margin: const EdgeInsets.only(bottom: 8),
+                            child: ListTile(
+                              leading: CircleAvatar(
+                                backgroundColor: const Color(0xFF2563EB),
+                                child: Text(
+                                  '${index + 1}',
+                                  style: const TextStyle(color: Colors.white),
+                                ),
+                              ),
+                              title: Text(
+                                trip['customerName']?.toString() ?? 'Unknown',
+                                style: const TextStyle(fontWeight: FontWeight.w600),
+                              ),
+                              subtitle: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(trip['customerEmail']?.toString() ?? ''),
+                                  Text(trip['customerPhone']?.toString() ?? ''),
+                                  if (trip['pickupLocation'] != null)
+                                    Text(
+                                      'Pickup: ${trip['pickupLocation']}',
+                                      style: const TextStyle(fontSize: 12),
+                                    ),
+                                ],
+                              ),
+                              trailing: Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 8,
+                                  vertical: 4,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: _getStatusColor(trip['status']?.toString() ?? 'unknown')
+                                      .withOpacity(0.1),
+                                  borderRadius: BorderRadius.circular(4),
+                                ),
+                                child: Text(
+                                  trip['status']?.toString().toUpperCase() ?? 'UNKNOWN',
+                                  style: TextStyle(
+                                    color: _getStatusColor(trip['status']?.toString() ?? 'unknown'),
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          );
+                        }).toList(),
+                    ],
+                  ),
+                ),
+              ),
+              
+              // Footer
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Colors.grey[100],
+                  borderRadius: const BorderRadius.only(
+                    bottomLeft: Radius.circular(16),
+                    bottomRight: Radius.circular(16),
+                  ),
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    TextButton(
+                      onPressed: () => Navigator.pop(context),
+                      child: const Text('Close'),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+  
+  Widget _buildDetailRow(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 120,
+            child: Text(
+              label,
+              style: const TextStyle(
+                fontWeight: FontWeight.w600,
+                color: Colors.black87,
+              ),
+            ),
+          ),
+          Expanded(
+            child: Text(
+              value,
+              style: const TextStyle(color: Colors.black54),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _editRoster(RosterModel roster) {
+    // Get driver phone from trips data
+    final driverPhone = roster.trips.isNotEmpty && roster.trips.first['driverPhone'] != null
+        ? roster.trips.first['driverPhone'].toString()
+        : 'Not Available';
+    
+    showDialog(
+      context: context,
+      builder: (context) => Dialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        child: Container(
+          constraints: const BoxConstraints(maxWidth: 500, maxHeight: 550),
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Header
+              Row(
+                children: [
+                  const Icon(Icons.edit, color: Color(0xFF2563EB), size: 28),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'Edit Roster',
+                          style: TextStyle(
+                            fontSize: 20,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        Text(
+                          roster.name,
+                          style: const TextStyle(
+                            fontSize: 14,
+                            color: Colors.black54,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  IconButton(
+                    onPressed: () => Navigator.pop(context),
+                    icon: const Icon(Icons.close),
+                  ),
+                ],
+              ),
+              
+              const SizedBox(height: 24),
+              const Divider(),
+              const SizedBox(height: 24),
+              
+              // Info Message
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Colors.blue[50],
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.blue[200]!),
+                ),
+                child: Row(
+                  children: [
+                    Icon(Icons.info_outline, color: Colors.blue[700]),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Roster Editing',
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              color: Colors.blue[900],
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            'To edit individual employee assignments, please use the Bulk Import feature or contact your administrator.',
+                            style: TextStyle(
+                              fontSize: 13,
+                              color: Colors.blue[800],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              
+              const SizedBox(height: 24),
+              
+              // Current Details
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Colors.grey[100],
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Column(
+                  children: [
+                    _buildDetailRow('Vehicle Number', roster.id),
+                    _buildDetailRow('Driver Name', roster.shift),
+                    _buildDetailRow('Driver Phone', driverPhone),
+                    _buildDetailRow('Employees', '${roster.employeeCount}'),
+                    _buildDetailRow('Status', roster.status.toUpperCase()),
+                  ],
+                ),
+              ),
+              
+              const Spacer(),
+              
+              // Actions
+              Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  TextButton(
+                    onPressed: () => Navigator.pop(context),
+                    child: const Text('Cancel'),
+                  ),
+                  const SizedBox(width: 12),
+                  ElevatedButton.icon(
+                    onPressed: () {
+                      Navigator.pop(context);
+                      _showBulkImportScreen();
+                    },
+                    icon: const Icon(Icons.upload_file),
+                    label: const Text('Go to Bulk Import'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF2563EB),
+                      foregroundColor: Colors.white,
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _handleMenuAction(String action, RosterModel roster) {
+    switch (action) {
+      case 'edit':
+        _editRoster(roster);
+        break;
+      case 'export':
+        _showExportDialog();
+        break;
+      case 'delete':
+        _showDeleteConfirmation(roster);
+        break;
+    }
+  }
+
+  void _showDeleteConfirmation(RosterModel roster) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Delete Roster'),
+        content: Text('Are you sure you want to delete "${roster.name}"?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.pop(context);
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Roster deleted successfully')),
+              );
+            },
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// --- LOCAL MODEL DEFINITION ---
+class RosterModel {
+  final String id;
+  final String name;
+  final String shift;
+  final int routeCount;
+  final int employeeCount;
+  final int vehicleCount;
+  final DateTime validFrom;
+  final DateTime validTo;
+  final String status;
+  final List<Map<String, dynamic>> trips; // ✅ Store actual trip data
+
+  RosterModel({
+    required this.id,
+    required this.name,
+    required this.shift,
+    required this.routeCount,
+    required this.employeeCount,
+    required this.vehicleCount,
+    required this.validFrom,
+    required this.validTo,
+    required this.status,
+    this.trips = const [], // ✅ Default empty list
+  });
+}

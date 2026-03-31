@@ -1,0 +1,192 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // ==================== HELPER FUNCTIONS ====================
+    function isAdminByEmail() {
+      return request.auth != null && request.auth.token.email == 'admin@abrafleet.com';
+    }
+    
+    function isAdminByRole() {
+      return request.auth != null && 
+             exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+             get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    }
+    
+    function isAdmin() {
+      return isAdminByEmail() || isAdminByRole();
+    }
+    
+    function getUserData() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+    
+    function isClient() {
+      return request.auth != null && 
+             exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+             getUserData().role == 'client';
+    }
+    
+    function isCustomer() {
+      return request.auth != null && 
+             exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+             getUserData().role == 'customer';
+    }
+    
+    function getMyEmailDomain() {
+      return getUserData().email.split('@')[1];
+    }
+    
+    function getDocEmailDomain(email) {
+      return email.split('@')[1];
+    }
+    
+    function isSameOrganization(email) {
+      return getDocEmailDomain(email) == getMyEmailDomain();
+    }
+    
+    function isOwner(userId) {
+      return request.auth != null && request.auth.uid == userId;
+    }
+    
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    // ==================== USERS COLLECTION ====================
+    match /users/{userId} {
+      // ✅ Admin: Full access to everything
+      allow read, write: if isAdmin();
+      
+      // ✅ CRITICAL FIX: Allow authenticated users to query for admin users
+      // This is needed during customer registration to send notifications
+      allow read: if isAuthenticated() && resource.data.role == 'admin';
+      
+      // ✅ Users: Can always read their own document
+      allow read: if isAuthenticated() && request.auth.uid == userId;
+      
+      // ✅ DRIVER FIX: Allow drivers to read their own profile by email lookup
+      allow read: if isAuthenticated() && 
+                     resource.data.role == 'driver' && 
+                     resource.data.email == request.auth.token.email;
+      
+      // ✅ Client can read ALL customer documents
+      allow read: if isClient() && resource.data.role == 'customer';
+      
+      // ✅ Client: Can create customer employees in their organization
+      allow create: if isClient() && 
+                       request.resource.data.role == 'customer' &&
+                       isSameOrganization(request.resource.data.email);
+      
+      // ✅ Client: Can update customer employees in their organization
+      allow update: if isClient() && 
+                       resource.data.role == 'customer' &&
+                       isSameOrganization(resource.data.email) &&
+                       request.resource.data.role == 'customer' &&
+                       isSameOrganization(request.resource.data.email);
+      
+      // ✅ Client: Can delete customer employees in their organization
+      allow delete: if isClient() && 
+                       resource.data.role == 'customer' &&
+                       isSameOrganization(resource.data.email);
+      
+      // ✅ Users: Can update their own profile (but not change role)
+      allow update: if isAuthenticated() && 
+                       request.auth.uid == userId && 
+                       request.resource.data.role == resource.data.role;
+      
+      // ✅ DRIVER UPDATE FIX: Allow drivers to update their own profile by email lookup
+      allow update: if isAuthenticated() && 
+                       resource.data.role == 'driver' && 
+                       resource.data.email == request.auth.token.email &&
+                       request.resource.data.role == 'driver';
+      
+      // ✅ New customer signup: Can create their own account
+      allow create: if isAuthenticated() && 
+                       request.auth.uid == userId &&
+                       request.resource.data.role == 'customer';
+    }
+    
+    // ==================== ROSTERS COLLECTION ====================
+    match /rosters/{rosterId} {
+      allow read, write: if isAdmin();
+      allow read, create, update, delete: if isClient();
+      allow read: if isCustomer() && resource.data.employeeEmail == request.auth.token.email;
+    }
+    
+    // ==================== OTHER COLLECTIONS ====================
+    match /bookings/{bookingId} {
+      allow read, write: if isAdmin();
+      allow read: if isAuthenticated() && resource.data.customerId == request.auth.uid;
+      allow create: if isAuthenticated() && request.resource.data.customerId == request.auth.uid;
+      allow update: if isAuthenticated() && 
+                       resource.data.customerId == request.auth.uid && 
+                       resource.data.status == 'pending';
+      allow read: if isAuthenticated() && 
+                     'driverId' in resource.data && 
+                     resource.data.driverId == request.auth.uid;
+      allow update: if isAuthenticated() && 
+                       'driverId' in resource.data && 
+                       resource.data.driverId == request.auth.uid && 
+                       request.resource.data.keys().hasOnly(['status', 'updatedAt']);
+    }
+    
+    match /vehicles/{vehicleId} {
+      allow read, write: if isAdmin();
+      allow read: if isAuthenticated();
+    }
+    
+    match /driver_locations/{driverId} {
+      allow read, write: if isAdmin();
+      allow write: if isAuthenticated() && request.auth.uid == driverId;
+      allow read: if isAuthenticated();
+    }
+    
+    match /notifications/{notificationId} {
+      allow read, write: if isAdmin();
+      allow read: if isAuthenticated() && resource.data.userId == request.auth.uid;
+      allow update: if isAuthenticated() && 
+                       resource.data.userId == request.auth.uid && 
+                       request.resource.data.keys().hasOnly(['isRead', 'updatedAt']);
+      allow create: if isAdmin();
+    }
+    
+    match /reviews/{reviewId} {
+      allow read, delete: if isAdmin();
+      allow create: if isAuthenticated() && request.resource.data.customerId == request.auth.uid;
+      allow read: if isAuthenticated();
+      allow update: if isAuthenticated() && resource.data.customerId == request.auth.uid;
+    }
+    
+    match /settings/{settingId} {
+      allow read, write: if isAdmin();
+    }
+    
+    match /analytics/{document=**} {
+      allow read, write: if isAdmin();
+    }
+    
+    match /chats/{chatId} {
+      allow read, write: if isAdmin();
+      allow read, write: if isAuthenticated() && 
+                            'participants' in resource.data && 
+                            request.auth.uid in resource.data.participants;
+    }
+    
+    match /config/{configId} {
+      allow write: if isAdmin();
+      allow read: if true;
+    }
+    
+    match /drivers/{driverId} {
+      allow read: if isAdmin() || 
+                     (isAuthenticated() && request.auth.uid == resource.data.firebaseUid);
+      allow write: if isAdmin();
+    }
+    
+    // Catch-all: Admin can access everything
+    match /{document=**} {
+      allow read, write: if isAdmin();
+    }
+  }
+}

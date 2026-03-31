@@ -1,0 +1,316 @@
+[25-Feb-2026 10:53:10 UTC] PHP Warning:  require_once(database.php): Failed to open stream: No such file or directory in /home/royaldxd/abra-travels.com/hrm/hr-departments-list.php on line 10
+[25-Feb-2026 10:53:10 UTC] PHP Fatal error:  Uncaught Error: Failed opening required 'database.php' (include_path='.:/opt/cpanel/ea-php81/root/usr/share/pear') in /home/royaldxd/abra-travels.com/hrm/hr-departments-list.php:10
+Stack trace:
+#0 {main}
+  thrown in /home/royaldxd/abra-travels.com/hrm/hr-departments-list.php on line 10
+[25-Feb-2026 11:08:02 UTC] PHP Fatal error:  Uncaught mysqli_sql_exception: Access denied for user 'royaldxd_hrm_fleet_travels'@'localhost' (using password: YES) in /home/royaldxd/abra-travels.com/hrm/database.php:14
+Stack trace:
+#0 /home/royaldxd/abra-travels.com/hrm/database.php(14): mysqli_connect('localhost', 'royaldxd_hrm_fl...', 'Abragroup@123', 'royaldxd_hrm_fl...')
+#1 /home/royaldxd/abra-travels.com/hrm/database.php(25): conexion()
+#2 /home/royaldxd/abra-travels.com/hrm/hr-departments-list.php(10): require_once('/home/royaldxd/...')
+#3 {main}
+  thrown in /home/royaldxd/abra-travels.com/hrm/database.php on line 14
+[25-Feb-2026 11:10:46 UTC] PHP Fatal error:  Uncaught mysqli_sql_exception: Access denied for user 'royaldxd_hrm_fleet_travels'@'localhost' (using password: YES) in /home/royaldxd/abra-travels.com/hrm/database.php:14
+Stack trace:
+#0 /home/royaldxd/abra-travels.com/hrm/database.php(14): mysqli_connect('localhost', 'royaldxd_hrm_fl...', 'Abragroup@123', 'royaldxd_hrm_fl...')
+#1 /home/royaldxd/abra-travels.com/hrm/database.php(25): conexion()
+#2 /home/royaldxd/abra-travels.com/hrm/hr-departments-list.php(10): require_once('/home/royaldxd/...')
+#3 {main}
+  thrown in /home/royaldxd/abra-travels.com/hrm/database.php on line 14
+[25-Feb-2026 11:10:49 UTC] PHP Fatal error:  Uncaught mysqli_sql_exception: Access denied for user 'royaldxd_hrm_fleet_travels'@'localhost' (using password: YES) in /home/royaldxd/abra-travels.com/hrm/database.php:14
+Stack trace:
+#0 /home/royaldxd/abra-travels.com/hrm/database.php(14): mysqli_connect('localhost', 'royaldxd_hrm_fl...', 'Abragroup@123', 'royaldxd_hrm_fl...')
+#1 /home/royaldxd/abra-travels.com/hrm/database.php(25): conexion()
+#2 /home/royaldxd/abra-travels.com/hrm/hr-departments-list.php(10): require_once('/home/royaldxd/...')
+#3 {main}
+  thrown in /home/royaldxd/abra-travels.com/hrm/database.php on line 14
+[25-Feb-2026 17:17:38 Asia/Kolkata] PHP Fatal error:  Uncaught mysqli_sql_exception: Table 'royaldxd_hrm_fleet.hr_departments' doesn't exist in /home/royaldxd/abra-travels.com/hrm/hr-departments-list.php:467
+Stack trace:
+#0 /home/royaldxd/abra-travels.com/hrm/hr-departments-list.php(467): mysqli_query(Object(mysqli), 'SELECT d.*, \r\n ...')
+#1 {main}
+  thrown in /home/royaldxd/abra-travels.com/hrm/hr-departments-list.php on line 467
+[25-Feb-2026 17:29:12 Asia/Kolkata] PHP Warning:  Undefined array key "ge_cname" in /home/royaldxd/abra-travels.com/hrm/hr-departments-list.php on line 560
+[25-Feb-2026 17:29:29 Asia/Kolkata] PHP Warning:  Undefined array key "ge_cname" in /home/royaldxd/abra-travels.com/hrm/hr-departments-list.php on line 560
+[25-Feb-2026 17:29:38 Asia/Kolkata] PHP Warning:  Undefined array key "ge_cname" in /home/royaldxd/abra-travels.com/hrm/hr-departments-list.php on line 560
+[25-Feb-2026 17:29:53 Asia/Kolkata] PHP Warning:  Undefined array key "ge_cname" in /home/royaldxd/abra-travels.com/hrm/hr-departments-list.php on line 560
+[25-Feb-2026 17:29:57 Asia/Kolkata] PHP Warning:  Undefined array key "ge_cname" in /home/royaldxd/abra-travels.com/hrm/hr-departments-list.php on line 560
+[25-Feb-2026 17:30:02 Asia/Kolkata] PHP Warning:  Undefined array key "ge_cname" in /home/royaldxd/abra-travels.com/hrm/hr-departments-list.php on line 560
+[25-Feb-2026 17:30:20 Asia/Kolkata] PHP Warning:  Undefined array key "ge_cname" in /home/royaldxd/abra-travels.com/hrm/hr-departments-list.php on line 560
+[25-Feb-2026 17:30:26 Asia/Kolkata] PHP Warning:  Undefined array key "ge_cname" in /home/royaldxd/abra-travels.com/hrm/hr-departments-list.php on line 560
+[25-Feb-2026 17:30:44 Asia/Kolkata] PHP Warning:  Undefined array key "ge_cname" in /home/royaldxd/abra-travels.com/hrm/hr-departments-list.php on line 560
+[25-Feb-2026 17:30:48 Asia/Kolkata] PHP Warning:  Undefined array key "ge_cname" in /home/royaldxd/abra-travels.com/hrm/hr-departments-list.php on line 560
+[25-Feb-2026 17:31:26 Asia/Kolkata] PHP Warning:  Undefined array key "ge_cname" in /home/royaldxd/abra-travels.com/hrm/hr-departments-list.php on line 560
+[25-Feb-2026 17:31:28 Asia/Kolkata] PHP Warning:  Undefined array key "ge_cname" in /home/royaldxd/abra-travels.com/hrm/hr-departments-list.php on line 560
+[25-Feb-2026 17:31:51 Asia/Kolkata] PHP Warning:  Undefined array key "ge_cname" in /home/royaldxd/abra-travels.com/hrm/hr-departments-list.php on line 560
+[25-Feb-2026 17:31:53 Asia/Kolkata] PHP Warning:  Undefined array key "ge_cname" in /home/royaldxd/abra-travels.com/hrm/hr-departments-list.php on line 560
+[25-Feb-2026 17:31:54 Asia/Kolkata] PHP Warning:  Undefined array key "ge_cname" in /home/royaldxd/abra-travels.com/hrm/hr-departments-list.php on line 560
+[25-Feb-2026 17:31:55 Asia/Kolkata] PHP Warning:  Undefined array key "ge_cname" in /home/royaldxd/abra-travels.com/hrm/hr-departments-list.php on line 560
+[25-Feb-2026 17:31:56 Asia/Kolkata] PHP Warning:  Undefined array key "ge_cname" in /home/royaldxd/abra-travels.com/hrm/hr-departments-list.php on line 560
+[25-Feb-2026 17:32:03 Asia/Kolkata] PHP Warning:  Undefined array key "ge_cname" in /home/royaldxd/abra-travels.com/hrm/hr-departments-list.php on line 560
+[25-Feb-2026 17:32:29 Asia/Kolkata] PHP Warning:  Undefined array key "ge_cname" in /home/royaldxd/abra-travels.com/hrm/hr-departments-list.php on line 560
+[25-Feb-2026 18:00:52 Asia/Kolkata] PHP Warning:  Undefined array key "ge_cname" in /home/royaldxd/abra-travels.com/hrm/hr-departments-list.php on line 166
+[25-Feb-2026 18:01:06 Asia/Kolkata] PHP Warning:  Undefined array key "ge_cname" in /home/royaldxd/abra-travels.com/hrm/hr-departments-list.php on line 560
+[25-Feb-2026 19:51:58 Asia/Kolkata] PHP Fatal error:  Uncaught mysqli_sql_exception: Unknown column 'employee_id' in 'SELECT' in /home/royaldxd/abra-travels.com/hrm/hr-employees-list.php:42
+Stack trace:
+#0 /home/royaldxd/abra-travels.com/hrm/hr-employees-list.php(42): mysqli_query(Object(mysqli), '\r\n        SELEC...')
+#1 /home/royaldxd/abra-travels.com/hrm/hr-employees-list.php(162): runBirthdayCheck(Object(mysqli))
+#2 {main}
+  thrown in /home/royaldxd/abra-travels.com/hrm/hr-employees-list.php on line 42
+[25-Feb-2026 19:55:18 Asia/Kolkata] PHP Fatal error:  Uncaught mysqli_sql_exception: Unknown column 'employee_id' in 'SELECT' in /home/royaldxd/abra-travels.com/hrm/hr-employees-list.php:42
+Stack trace:
+#0 /home/royaldxd/abra-travels.com/hrm/hr-employees-list.php(42): mysqli_query(Object(mysqli), '\r\n        SELEC...')
+#1 /home/royaldxd/abra-travels.com/hrm/hr-employees-list.php(162): runBirthdayCheck(Object(mysqli))
+#2 {main}
+  thrown in /home/royaldxd/abra-travels.com/hrm/hr-employees-list.php on line 42
+[25-Feb-2026 19:55:20 Asia/Kolkata] PHP Fatal error:  Uncaught mysqli_sql_exception: Unknown column 'employee_id' in 'SELECT' in /home/royaldxd/abra-travels.com/hrm/hr-employees-list.php:42
+Stack trace:
+#0 /home/royaldxd/abra-travels.com/hrm/hr-employees-list.php(42): mysqli_query(Object(mysqli), '\r\n        SELEC...')
+#1 /home/royaldxd/abra-travels.com/hrm/hr-employees-list.php(162): runBirthdayCheck(Object(mysqli))
+#2 {main}
+  thrown in /home/royaldxd/abra-travels.com/hrm/hr-employees-list.php on line 42
+[25-Feb-2026 19:55:43 Asia/Kolkata] PHP Fatal error:  Uncaught mysqli_sql_exception: Unknown column 'employee_id' in 'SELECT' in /home/royaldxd/abra-travels.com/hrm/hr-employees-list.php:42
+Stack trace:
+#0 /home/royaldxd/abra-travels.com/hrm/hr-employees-list.php(42): mysqli_query(Object(mysqli), '\r\n        SELEC...')
+#1 /home/royaldxd/abra-travels.com/hrm/hr-employees-list.php(162): runBirthdayCheck(Object(mysqli))
+#2 {main}
+  thrown in /home/royaldxd/abra-travels.com/hrm/hr-employees-list.php on line 42
+[25-Feb-2026 19:55:44 Asia/Kolkata] PHP Fatal error:  Uncaught mysqli_sql_exception: Unknown column 'employee_id' in 'SELECT' in /home/royaldxd/abra-travels.com/hrm/hr-employees-list.php:42
+Stack trace:
+#0 /home/royaldxd/abra-travels.com/hrm/hr-employees-list.php(42): mysqli_query(Object(mysqli), '\r\n        SELEC...')
+#1 /home/royaldxd/abra-travels.com/hrm/hr-employees-list.php(162): runBirthdayCheck(Object(mysqli))
+#2 {main}
+  thrown in /home/royaldxd/abra-travels.com/hrm/hr-employees-list.php on line 42
+[25-Feb-2026 19:55:44 Asia/Kolkata] PHP Fatal error:  Uncaught mysqli_sql_exception: Unknown column 'employee_id' in 'SELECT' in /home/royaldxd/abra-travels.com/hrm/hr-employees-list.php:42
+Stack trace:
+#0 /home/royaldxd/abra-travels.com/hrm/hr-employees-list.php(42): mysqli_query(Object(mysqli), '\r\n        SELEC...')
+#1 /home/royaldxd/abra-travels.com/hrm/hr-employees-list.php(162): runBirthdayCheck(Object(mysqli))
+#2 {main}
+  thrown in /home/royaldxd/abra-travels.com/hrm/hr-employees-list.php on line 42
+[25-Feb-2026 19:55:44 Asia/Kolkata] PHP Fatal error:  Uncaught mysqli_sql_exception: Unknown column 'employee_id' in 'SELECT' in /home/royaldxd/abra-travels.com/hrm/hr-employees-list.php:42
+Stack trace:
+#0 /home/royaldxd/abra-travels.com/hrm/hr-employees-list.php(42): mysqli_query(Object(mysqli), '\r\n        SELEC...')
+#1 /home/royaldxd/abra-travels.com/hrm/hr-employees-list.php(162): runBirthdayCheck(Object(mysqli))
+#2 {main}
+  thrown in /home/royaldxd/abra-travels.com/hrm/hr-employees-list.php on line 42
+[25-Feb-2026 19:55:45 Asia/Kolkata] PHP Fatal error:  Uncaught mysqli_sql_exception: Unknown column 'employee_id' in 'SELECT' in /home/royaldxd/abra-travels.com/hrm/hr-employees-list.php:42
+Stack trace:
+#0 /home/royaldxd/abra-travels.com/hrm/hr-employees-list.php(42): mysqli_query(Object(mysqli), '\r\n        SELEC...')
+#1 /home/royaldxd/abra-travels.com/hrm/hr-employees-list.php(162): runBirthdayCheck(Object(mysqli))
+#2 {main}
+  thrown in /home/royaldxd/abra-travels.com/hrm/hr-employees-list.php on line 42
+[25-Feb-2026 19:55:45 Asia/Kolkata] PHP Fatal error:  Uncaught mysqli_sql_exception: Unknown column 'employee_id' in 'SELECT' in /home/royaldxd/abra-travels.com/hrm/hr-employees-list.php:42
+Stack trace:
+#0 /home/royaldxd/abra-travels.com/hrm/hr-employees-list.php(42): mysqli_query(Object(mysqli), '\r\n        SELEC...')
+#1 /home/royaldxd/abra-travels.com/hrm/hr-employees-list.php(162): runBirthdayCheck(Object(mysqli))
+#2 {main}
+  thrown in /home/royaldxd/abra-travels.com/hrm/hr-employees-list.php on line 42
+[25-Feb-2026 19:57:03 Asia/Kolkata] PHP Fatal error:  Uncaught mysqli_sql_exception: Unknown column 'employee_id' in 'SELECT' in /home/royaldxd/abra-travels.com/hrm/hr-employees-list.php:42
+Stack trace:
+#0 /home/royaldxd/abra-travels.com/hrm/hr-employees-list.php(42): mysqli_query(Object(mysqli), '\r\n        SELEC...')
+#1 /home/royaldxd/abra-travels.com/hrm/hr-employees-list.php(162): runBirthdayCheck(Object(mysqli))
+#2 {main}
+  thrown in /home/royaldxd/abra-travels.com/hrm/hr-employees-list.php on line 42
+[25-Feb-2026 19:57:04 Asia/Kolkata] PHP Fatal error:  Uncaught mysqli_sql_exception: Unknown column 'employee_id' in 'SELECT' in /home/royaldxd/abra-travels.com/hrm/hr-employees-list.php:42
+Stack trace:
+#0 /home/royaldxd/abra-travels.com/hrm/hr-employees-list.php(42): mysqli_query(Object(mysqli), '\r\n        SELEC...')
+#1 /home/royaldxd/abra-travels.com/hrm/hr-employees-list.php(162): runBirthdayCheck(Object(mysqli))
+#2 {main}
+  thrown in /home/royaldxd/abra-travels.com/hrm/hr-employees-list.php on line 42
+[25-Feb-2026 19:57:05 Asia/Kolkata] PHP Fatal error:  Uncaught mysqli_sql_exception: Unknown column 'employee_id' in 'SELECT' in /home/royaldxd/abra-travels.com/hrm/hr-employees-list.php:42
+Stack trace:
+#0 /home/royaldxd/abra-travels.com/hrm/hr-employees-list.php(42): mysqli_query(Object(mysqli), '\r\n        SELEC...')
+#1 /home/royaldxd/abra-travels.com/hrm/hr-employees-list.php(162): runBirthdayCheck(Object(mysqli))
+#2 {main}
+  thrown in /home/royaldxd/abra-travels.com/hrm/hr-employees-list.php on line 42
+[25-Feb-2026 19:57:05 Asia/Kolkata] PHP Fatal error:  Uncaught mysqli_sql_exception: Unknown column 'employee_id' in 'SELECT' in /home/royaldxd/abra-travels.com/hrm/hr-employees-list.php:42
+Stack trace:
+#0 /home/royaldxd/abra-travels.com/hrm/hr-employees-list.php(42): mysqli_query(Object(mysqli), '\r\n        SELEC...')
+#1 /home/royaldxd/abra-travels.com/hrm/hr-employees-list.php(162): runBirthdayCheck(Object(mysqli))
+#2 {main}
+  thrown in /home/royaldxd/abra-travels.com/hrm/hr-employees-list.php on line 42
+[25-Feb-2026 19:57:05 Asia/Kolkata] PHP Fatal error:  Uncaught mysqli_sql_exception: Unknown column 'employee_id' in 'SELECT' in /home/royaldxd/abra-travels.com/hrm/hr-employees-list.php:42
+Stack trace:
+#0 /home/royaldxd/abra-travels.com/hrm/hr-employees-list.php(42): mysqli_query(Object(mysqli), '\r\n        SELEC...')
+#1 /home/royaldxd/abra-travels.com/hrm/hr-employees-list.php(162): runBirthdayCheck(Object(mysqli))
+#2 {main}
+  thrown in /home/royaldxd/abra-travels.com/hrm/hr-employees-list.php on line 42
+[25-Feb-2026 19:57:05 Asia/Kolkata] PHP Fatal error:  Uncaught mysqli_sql_exception: Unknown column 'employee_id' in 'SELECT' in /home/royaldxd/abra-travels.com/hrm/hr-employees-list.php:42
+Stack trace:
+#0 /home/royaldxd/abra-travels.com/hrm/hr-employees-list.php(42): mysqli_query(Object(mysqli), '\r\n        SELEC...')
+#1 /home/royaldxd/abra-travels.com/hrm/hr-employees-list.php(162): runBirthdayCheck(Object(mysqli))
+#2 {main}
+  thrown in /home/royaldxd/abra-travels.com/hrm/hr-employees-list.php on line 42
+[25-Feb-2026 19:57:05 Asia/Kolkata] PHP Fatal error:  Uncaught mysqli_sql_exception: Unknown column 'employee_id' in 'SELECT' in /home/royaldxd/abra-travels.com/hrm/hr-employees-list.php:42
+Stack trace:
+#0 /home/royaldxd/abra-travels.com/hrm/hr-employees-list.php(42): mysqli_query(Object(mysqli), '\r\n        SELEC...')
+#1 /home/royaldxd/abra-travels.com/hrm/hr-employees-list.php(162): runBirthdayCheck(Object(mysqli))
+#2 {main}
+  thrown in /home/royaldxd/abra-travels.com/hrm/hr-employees-list.php on line 42
+[25-Feb-2026 19:59:33 Asia/Kolkata] Birthday Check: HR employee ABRA033 (Keerthi) not found
+[25-Feb-2026 19:59:33 Asia/Kolkata] PHP Warning:  Undefined array key "ge_cname" in /home/royaldxd/abra-travels.com/hrm/hr-employees-list.php on line 460
+[25-Feb-2026 14:29:38 UTC] PHP Warning:  Undefined array key "ge_timezone" in /home/royaldxd/abra-travels.com/hrm/hr-employees-add.php on line 16
+[25-Feb-2026 14:29:38 UTC] PHP Deprecated:  date_default_timezone_set(): Passing null to parameter #1 ($timezoneId) of type string is deprecated in /home/royaldxd/abra-travels.com/hrm/hr-employees-add.php on line 16
+[25-Feb-2026 14:29:38 UTC] PHP Notice:  date_default_timezone_set(): Timezone ID '' is invalid in /home/royaldxd/abra-travels.com/hrm/hr-employees-add.php on line 16
+[25-Feb-2026 14:29:38 UTC] PHP Warning:  Cannot modify header information - headers already sent by (output started at /home/royaldxd/abra-travels.com/hrm/hr-employees-add.php:16) in /home/royaldxd/abra-travels.com/hrm/library.php on line 4
+[25-Feb-2026 20:01:24 Asia/Kolkata] Birthday Check: HR employee ABRA033 (Keerthi) not found
+[25-Feb-2026 20:01:24 Asia/Kolkata] PHP Warning:  Undefined array key "ge_cname" in /home/royaldxd/abra-travels.com/hrm/hr-employees-list.php on line 460
+[25-Feb-2026 20:01:26 Asia/Kolkata] PHP Warning:  Undefined array key "ge_cname" in /home/royaldxd/abra-travels.com/hrm/hr-employees-add.php on line 464
+[25-Feb-2026 20:06:54 Asia/Kolkata] PHP Warning:  Undefined array key "ge_cname" in /home/royaldxd/abra-travels.com/hrm/hr-employees-add.php on line 464
+[25-Feb-2026 20:10:24 Asia/Kolkata] Birthday Check: HR employee ABRA033 (Keerthi) not found
+[25-Feb-2026 20:10:24 Asia/Kolkata] PHP Warning:  Undefined array key "ge_cname" in /home/royaldxd/abra-travels.com/hrm/hr-employees-list.php on line 460
+[25-Feb-2026 20:10:24 Asia/Kolkata] PHP Fatal error:  Uncaught mysqli_sql_exception: Table 'royaldxd_hrm_fleet.hr_employee_documents' doesn't exist in /home/royaldxd/abra-travels.com/hrm/hr-employees-list.php:1376
+Stack trace:
+#0 /home/royaldxd/abra-travels.com/hrm/hr-employees-list.php(1376): mysqli_query(Object(mysqli), 'SELECT COUNT(*)...')
+#1 {main}
+  thrown in /home/royaldxd/abra-travels.com/hrm/hr-employees-list.php on line 1376
+[25-Feb-2026 20:11:10 Asia/Kolkata] Birthday Check: HR employee ABRA033 (Keerthi) not found
+[25-Feb-2026 20:11:10 Asia/Kolkata] PHP Warning:  Undefined array key "ge_cname" in /home/royaldxd/abra-travels.com/hrm/hr-employees-list.php on line 460
+[25-Feb-2026 20:11:10 Asia/Kolkata] PHP Fatal error:  Uncaught mysqli_sql_exception: Table 'royaldxd_hrm_fleet.hr_employee_documents' doesn't exist in /home/royaldxd/abra-travels.com/hrm/hr-employees-list.php:1376
+Stack trace:
+#0 /home/royaldxd/abra-travels.com/hrm/hr-employees-list.php(1376): mysqli_query(Object(mysqli), 'SELECT COUNT(*)...')
+#1 {main}
+  thrown in /home/royaldxd/abra-travels.com/hrm/hr-employees-list.php on line 1376
+[25-Feb-2026 20:11:28 Asia/Kolkata] Birthday Check: HR employee ABRA033 (Keerthi) not found
+[25-Feb-2026 20:11:28 Asia/Kolkata] PHP Warning:  Undefined array key "ge_cname" in /home/royaldxd/abra-travels.com/hrm/hr-employees-list.php on line 460
+[25-Feb-2026 20:11:28 Asia/Kolkata] PHP Fatal error:  Uncaught mysqli_sql_exception: Table 'royaldxd_hrm_fleet.hr_employee_documents' doesn't exist in /home/royaldxd/abra-travels.com/hrm/hr-employees-list.php:1376
+Stack trace:
+#0 /home/royaldxd/abra-travels.com/hrm/hr-employees-list.php(1376): mysqli_query(Object(mysqli), 'SELECT COUNT(*)...')
+#1 {main}
+  thrown in /home/royaldxd/abra-travels.com/hrm/hr-employees-list.php on line 1376
+[25-Feb-2026 20:11:28 Asia/Kolkata] Birthday Check: HR employee ABRA033 (Keerthi) not found
+[25-Feb-2026 20:11:28 Asia/Kolkata] PHP Warning:  Undefined array key "ge_cname" in /home/royaldxd/abra-travels.com/hrm/hr-employees-list.php on line 460
+[25-Feb-2026 20:11:28 Asia/Kolkata] PHP Fatal error:  Uncaught mysqli_sql_exception: Table 'royaldxd_hrm_fleet.hr_employee_documents' doesn't exist in /home/royaldxd/abra-travels.com/hrm/hr-employees-list.php:1376
+Stack trace:
+#0 /home/royaldxd/abra-travels.com/hrm/hr-employees-list.php(1376): mysqli_query(Object(mysqli), 'SELECT COUNT(*)...')
+#1 {main}
+  thrown in /home/royaldxd/abra-travels.com/hrm/hr-employees-list.php on line 1376
+[25-Feb-2026 20:11:28 Asia/Kolkata] Birthday Check: HR employee ABRA033 (Keerthi) not found
+[25-Feb-2026 20:11:28 Asia/Kolkata] PHP Warning:  Undefined array key "ge_cname" in /home/royaldxd/abra-travels.com/hrm/hr-employees-list.php on line 460
+[25-Feb-2026 20:11:28 Asia/Kolkata] PHP Fatal error:  Uncaught mysqli_sql_exception: Table 'royaldxd_hrm_fleet.hr_employee_documents' doesn't exist in /home/royaldxd/abra-travels.com/hrm/hr-employees-list.php:1376
+Stack trace:
+#0 /home/royaldxd/abra-travels.com/hrm/hr-employees-list.php(1376): mysqli_query(Object(mysqli), 'SELECT COUNT(*)...')
+#1 {main}
+  thrown in /home/royaldxd/abra-travels.com/hrm/hr-employees-list.php on line 1376
+[25-Feb-2026 20:11:29 Asia/Kolkata] Birthday Check: HR employee ABRA033 (Keerthi) not found
+[25-Feb-2026 20:11:29 Asia/Kolkata] PHP Warning:  Undefined array key "ge_cname" in /home/royaldxd/abra-travels.com/hrm/hr-employees-list.php on line 460
+[25-Feb-2026 20:11:29 Asia/Kolkata] PHP Fatal error:  Uncaught mysqli_sql_exception: Table 'royaldxd_hrm_fleet.hr_employee_documents' doesn't exist in /home/royaldxd/abra-travels.com/hrm/hr-employees-list.php:1376
+Stack trace:
+#0 /home/royaldxd/abra-travels.com/hrm/hr-employees-list.php(1376): mysqli_query(Object(mysqli), 'SELECT COUNT(*)...')
+#1 {main}
+  thrown in /home/royaldxd/abra-travels.com/hrm/hr-employees-list.php on line 1376
+[25-Feb-2026 20:11:29 Asia/Kolkata] Birthday Check: HR employee ABRA033 (Keerthi) not found
+[25-Feb-2026 20:11:29 Asia/Kolkata] PHP Warning:  Undefined array key "ge_cname" in /home/royaldxd/abra-travels.com/hrm/hr-employees-list.php on line 460
+[25-Feb-2026 20:11:29 Asia/Kolkata] PHP Fatal error:  Uncaught mysqli_sql_exception: Table 'royaldxd_hrm_fleet.hr_employee_documents' doesn't exist in /home/royaldxd/abra-travels.com/hrm/hr-employees-list.php:1376
+Stack trace:
+#0 /home/royaldxd/abra-travels.com/hrm/hr-employees-list.php(1376): mysqli_query(Object(mysqli), 'SELECT COUNT(*)...')
+#1 {main}
+  thrown in /home/royaldxd/abra-travels.com/hrm/hr-employees-list.php on line 1376
+[25-Feb-2026 20:11:29 Asia/Kolkata] Birthday Check: HR employee ABRA033 (Keerthi) not found
+[25-Feb-2026 20:11:29 Asia/Kolkata] PHP Warning:  Undefined array key "ge_cname" in /home/royaldxd/abra-travels.com/hrm/hr-employees-list.php on line 460
+[25-Feb-2026 20:11:29 Asia/Kolkata] PHP Fatal error:  Uncaught mysqli_sql_exception: Table 'royaldxd_hrm_fleet.hr_employee_documents' doesn't exist in /home/royaldxd/abra-travels.com/hrm/hr-employees-list.php:1376
+Stack trace:
+#0 /home/royaldxd/abra-travels.com/hrm/hr-employees-list.php(1376): mysqli_query(Object(mysqli), 'SELECT COUNT(*)...')
+#1 {main}
+  thrown in /home/royaldxd/abra-travels.com/hrm/hr-employees-list.php on line 1376
+[25-Feb-2026 20:11:29 Asia/Kolkata] Birthday Check: HR employee ABRA033 (Keerthi) not found
+[25-Feb-2026 20:11:29 Asia/Kolkata] PHP Warning:  Undefined array key "ge_cname" in /home/royaldxd/abra-travels.com/hrm/hr-employees-list.php on line 460
+[25-Feb-2026 20:11:29 Asia/Kolkata] PHP Fatal error:  Uncaught mysqli_sql_exception: Table 'royaldxd_hrm_fleet.hr_employee_documents' doesn't exist in /home/royaldxd/abra-travels.com/hrm/hr-employees-list.php:1376
+Stack trace:
+#0 /home/royaldxd/abra-travels.com/hrm/hr-employees-list.php(1376): mysqli_query(Object(mysqli), 'SELECT COUNT(*)...')
+#1 {main}
+  thrown in /home/royaldxd/abra-travels.com/hrm/hr-employees-list.php on line 1376
+[25-Feb-2026 20:11:29 Asia/Kolkata] Birthday Check: HR employee ABRA033 (Keerthi) not found
+[25-Feb-2026 20:11:29 Asia/Kolkata] PHP Warning:  Undefined array key "ge_cname" in /home/royaldxd/abra-travels.com/hrm/hr-employees-list.php on line 460
+[25-Feb-2026 20:11:29 Asia/Kolkata] PHP Fatal error:  Uncaught mysqli_sql_exception: Table 'royaldxd_hrm_fleet.hr_employee_documents' doesn't exist in /home/royaldxd/abra-travels.com/hrm/hr-employees-list.php:1376
+Stack trace:
+#0 /home/royaldxd/abra-travels.com/hrm/hr-employees-list.php(1376): mysqli_query(Object(mysqli), 'SELECT COUNT(*)...')
+#1 {main}
+  thrown in /home/royaldxd/abra-travels.com/hrm/hr-employees-list.php on line 1376
+[25-Feb-2026 20:11:30 Asia/Kolkata] Birthday Check: HR employee ABRA033 (Keerthi) not found
+[25-Feb-2026 20:11:30 Asia/Kolkata] PHP Warning:  Undefined array key "ge_cname" in /home/royaldxd/abra-travels.com/hrm/hr-employees-list.php on line 460
+[25-Feb-2026 20:11:30 Asia/Kolkata] PHP Fatal error:  Uncaught mysqli_sql_exception: Table 'royaldxd_hrm_fleet.hr_employee_documents' doesn't exist in /home/royaldxd/abra-travels.com/hrm/hr-employees-list.php:1376
+Stack trace:
+#0 /home/royaldxd/abra-travels.com/hrm/hr-employees-list.php(1376): mysqli_query(Object(mysqli), 'SELECT COUNT(*)...')
+#1 {main}
+  thrown in /home/royaldxd/abra-travels.com/hrm/hr-employees-list.php on line 1376
+[25-Feb-2026 20:13:28 Asia/Kolkata] Birthday Check: HR employee ABRA033 (Keerthi) not found
+[25-Feb-2026 20:13:28 Asia/Kolkata] PHP Warning:  Undefined array key "ge_cname" in /home/royaldxd/abra-travels.com/hrm/hr-employees-list.php on line 460
+[25-Feb-2026 20:13:28 Asia/Kolkata] PHP Fatal error:  Uncaught mysqli_sql_exception: Table 'royaldxd_hrm_fleet.hr_employee_documents' doesn't exist in /home/royaldxd/abra-travels.com/hrm/hr-employees-list.php:1376
+Stack trace:
+#0 /home/royaldxd/abra-travels.com/hrm/hr-employees-list.php(1376): mysqli_query(Object(mysqli), 'SELECT COUNT(*)...')
+#1 {main}
+  thrown in /home/royaldxd/abra-travels.com/hrm/hr-employees-list.php on line 1376
+[25-Feb-2026 20:14:31 Asia/Kolkata] Birthday Check: HR employee ABRA033 (Keerthi) not found
+[25-Feb-2026 20:39:46 Asia/Kolkata] Birthday Check: HR employee ABRA033 (Keerthi) not found
+[25-Feb-2026 15:09:58 UTC] PHP Warning:  Undefined array key "ge_timezone" in /home/royaldxd/abra-travels.com/hrm/hr-employees-edit.php on line 16
+[25-Feb-2026 15:09:58 UTC] PHP Deprecated:  date_default_timezone_set(): Passing null to parameter #1 ($timezoneId) of type string is deprecated in /home/royaldxd/abra-travels.com/hrm/hr-employees-edit.php on line 16
+[25-Feb-2026 15:09:58 UTC] PHP Notice:  date_default_timezone_set(): Timezone ID '' is invalid in /home/royaldxd/abra-travels.com/hrm/hr-employees-edit.php on line 16
+[25-Feb-2026 15:09:58 UTC] PHP Warning:  Cannot modify header information - headers already sent by (output started at /home/royaldxd/abra-travels.com/hrm/hr-employees-edit.php:16) in /home/royaldxd/abra-travels.com/hrm/library.php on line 4
+[25-Feb-2026 20:40:53 Asia/Kolkata] PHP Warning:  Undefined array key "ge_cname" in /home/royaldxd/abra-travels.com/hrm/hr-employees-edit.php on line 275
+[25-Feb-2026 20:41:41 Asia/Kolkata] Birthday Check: HR employee ABRA033 (Keerthi) not found
+[25-Feb-2026 20:42:59 Asia/Kolkata] Birthday Check: HR employee ABRA033 (Keerthi) not found
+[25-Feb-2026 20:43:22 Asia/Kolkata] Birthday Check: HR employee ABRA033 (Keerthi) not found
+[25-Feb-2026 20:45:37 Asia/Kolkata] PHP Warning:  Undefined array key "ge_cname" in /home/royaldxd/abra-travels.com/hrm/hr-employees-edit.php on line 275
+[25-Feb-2026 20:46:21 Asia/Kolkata] PHP Warning:  Undefined array key "ge_cname" in /home/royaldxd/abra-travels.com/hrm/hr-employees-edit.php on line 275
+[25-Feb-2026 20:47:28 Asia/Kolkata] PHP Warning:  Undefined array key "ge_cname" in /home/royaldxd/abra-travels.com/hrm/hr-employees-edit.php on line 275
+[25-Feb-2026 20:47:32 Asia/Kolkata] Birthday Check: HR employee ABRA033 (Keerthi) not found
+[25-Feb-2026 15:17:34 UTC] PHP Parse error:  syntax error, unexpected identifier "error_reporting" in /home/royaldxd/abra-travels.com/hrm/hr-employees-add.php on line 6
+[25-Feb-2026 20:47:41 Asia/Kolkata] PHP Warning:  Undefined array key "ge_cname" in /home/royaldxd/abra-travels.com/hrm/hr-employees-add.php on line 464
+[25-Feb-2026 20:48:01 Asia/Kolkata] PHP Warning:  Undefined array key "ge_cname" in /home/royaldxd/abra-travels.com/hrm/hr-employees-add.php on line 464
+[25-Feb-2026 20:48:16 Asia/Kolkata] Birthday Check: HR employee ABRA033 (Keerthi) not found
+[25-Feb-2026 20:51:09 Asia/Kolkata] Birthday Check: HR employee ABRA033 (Keerthi) not found
+[25-Feb-2026 20:52:17 Asia/Kolkata] PHP Warning:  Undefined variable $user_emp_data in /home/royaldxd/abra-travels.com/hrm/hr-attendance-list.php on line 27
+[25-Feb-2026 20:52:17 Asia/Kolkata] PHP Warning:  Undefined variable $user_emp_data in /home/royaldxd/abra-travels.com/hrm/hr-attendance-list.php on line 38
+[25-Feb-2026 20:59:37 Asia/Kolkata] PHP Warning:  Undefined variable $user_emp_data in /home/royaldxd/abra-travels.com/hrm/hr-attendance-list.php on line 36
+[25-Feb-2026 21:02:26 Asia/Kolkata] Hire date column exists: YES
+[25-Feb-2026 21:09:07 Asia/Kolkata] PHP Fatal error:  Uncaught mysqli_sql_exception: Table 'royaldxd_hrm_fleet.performance_daily_self' doesn't exist in /home/royaldxd/abra-travels.com/hrm/hr-attendance-list.php:602
+Stack trace:
+#0 /home/royaldxd/abra-travels.com/hrm/hr-attendance-list.php(602): mysqli_query(Object(mysqli), 'SELECT id, tota...')
+#1 {main}
+  thrown in /home/royaldxd/abra-travels.com/hrm/hr-attendance-list.php on line 602
+[25-Feb-2026 21:32:07 Asia/Kolkata] PHP Deprecated:  number_format(): Passing null to parameter #1 ($num) of type float is deprecated in /home/royaldxd/abra-travels.com/hrm/hr-attendance-list.php on line 928
+[26-Feb-2026 09:10:40 Asia/Kolkata] PHP Deprecated:  number_format(): Passing null to parameter #1 ($num) of type float is deprecated in /home/royaldxd/abra-travels.com/hrm/hr-attendance-list.php on line 928
+[26-Feb-2026 09:11:30 Asia/Kolkata] PHP Warning:  Undefined array key "ge_cname" in /home/royaldxd/abra-travels.com/hrm/hr-departments-list.php on line 560
+[26-Feb-2026 09:26:44 Asia/Kolkata] PHP Deprecated:  number_format(): Passing null to parameter #1 ($num) of type float is deprecated in /home/royaldxd/abra-travels.com/hrm/hr-attendance-list.php on line 928
+[26-Feb-2026 09:28:34 Asia/Kolkata] PHP Deprecated:  number_format(): Passing null to parameter #1 ($num) of type float is deprecated in /home/royaldxd/abra-travels.com/hrm/hr-attendance-list.php on line 928
+[26-Feb-2026 10:30:09 Asia/Kolkata] Birthday Check: HR employee ABRA033 (Keerthi) not found
+[26-Feb-2026 10:30:22 Asia/Kolkata] PHP Warning:  Undefined array key "ge_cname" in /home/royaldxd/abra-travels.com/hrm/hr-employees-edit.php on line 275
+[26-Feb-2026 10:30:33 Asia/Kolkata] Birthday Check: HR employee ABRA033 (Keerthi) not found
+[26-Feb-2026 10:30:48 Asia/Kolkata] PHP Warning:  Undefined array key "ge_cname" in /home/royaldxd/abra-travels.com/hrm/hr-employees-edit.php on line 275
+[26-Feb-2026 10:31:12 Asia/Kolkata] Birthday Check: HR employee ABRA033 (Keerthi) not found
+[26-Feb-2026 10:34:50 Asia/Kolkata] PHP Warning:  Undefined array key "ge_cname" in /home/royaldxd/abra-travels.com/hrm/hr-employees-edit.php on line 275
+[26-Feb-2026 10:35:05 Asia/Kolkata] Birthday Check: HR employee ABRA033 (Keerthi) not found
+[26-Feb-2026 10:38:56 Asia/Kolkata] PHP Warning:  Undefined array key "ge_cname" in /home/royaldxd/abra-travels.com/hrm/hr-employees-edit.php on line 275
+[26-Feb-2026 10:39:00 Asia/Kolkata] Birthday Check: HR employee ABRA033 (Keerthi) not found
+[26-Feb-2026 10:50:19 Asia/Kolkata] PHP Warning:  Undefined array key "ge_cname" in /home/royaldxd/abra-travels.com/hrm/hr-employees-edit.php on line 275
+[26-Feb-2026 10:50:37 Asia/Kolkata] Birthday Check: HR employee ABRA033 (Keerthi) not found
+[26-Feb-2026 10:52:25 Asia/Kolkata] PHP Warning:  Undefined array key "ge_cname" in /home/royaldxd/abra-travels.com/hrm/hr-employees-edit.php on line 275
+[26-Feb-2026 12:16:00 Asia/Kolkata] Self review submission: employee_id=AT0001, dept=HR, pos=Hr Manager 1
+[26-Feb-2026 12:16:00 Asia/Kolkata] Loaded 0 questions for type=daily_self, dept=HR, pos=Hr Manager 1
+[26-Feb-2026 12:16:00 Asia/Kolkata] Inserted 0 answers for review_id=1, review_type=daily_self, department=HR, position=Hr Manager 1
+[26-Feb-2026 06:49:46 UTC] PHP Warning:  Undefined array key "ge_timezone" in /home/royaldxd/abra-travels.com/hrm/hr-kpq.php on line 15
+[26-Feb-2026 06:49:46 UTC] PHP Deprecated:  date_default_timezone_set(): Passing null to parameter #1 ($timezoneId) of type string is deprecated in /home/royaldxd/abra-travels.com/hrm/hr-kpq.php on line 15
+[26-Feb-2026 06:49:46 UTC] PHP Notice:  date_default_timezone_set(): Timezone ID '' is invalid in /home/royaldxd/abra-travels.com/hrm/hr-kpq.php on line 15
+[26-Feb-2026 06:49:46 UTC] PHP Warning:  Cannot modify header information - headers already sent by (output started at /home/royaldxd/abra-travels.com/hrm/hr-kpq.php:15) in /home/royaldxd/abra-travels.com/hrm/library.php on line 4
+[26-Feb-2026 15:14:46 Asia/Kolkata] Birthday Check: HR employee ABRA033 (Keerthi) not found
+[26-Feb-2026 15:14:52 Asia/Kolkata] PHP Warning:  Undefined array key "ge_cname" in /home/royaldxd/abra-travels.com/hrm/hr-departments-list.php on line 560
+[26-Feb-2026 15:15:02 Asia/Kolkata] PHP Warning:  Undefined array key "ge_cname" in /home/royaldxd/abra-travels.com/hrm/hr-departments-list.php on line 560
+[26-Feb-2026 15:15:17 Asia/Kolkata] Birthday Check: HR employee ABRA033 (Keerthi) not found
+[26-Feb-2026 16:39:34 Asia/Kolkata] Birthday Check: HR employee ABRA033 (Keerthi) not found
+[26-Feb-2026 16:39:45 Asia/Kolkata] Birthday Check: HR employee ABRA033 (Keerthi) not found
+[26-Feb-2026 16:40:07 Asia/Kolkata] Birthday Check: HR employee ABRA033 (Keerthi) not found
+[26-Feb-2026 16:40:24 Asia/Kolkata] Birthday Check: HR employee ABRA033 (Keerthi) not found
+[26-Feb-2026 16:40:38 Asia/Kolkata] PHP Warning:  Undefined array key "ge_cname" in /home/royaldxd/abra-travels.com/hrm/hr-employees-edit.php on line 275
+[26-Feb-2026 16:40:46 Asia/Kolkata] Birthday Check: HR employee ABRA033 (Keerthi) not found
+[26-Feb-2026 16:41:15 Asia/Kolkata] Birthday Check: HR employee ABRA033 (Keerthi) not found
+[26-Feb-2026 16:43:28 Asia/Kolkata] PHP Warning:  Undefined array key "ge_cname" in /home/royaldxd/abra-travels.com/hrm/hr-departments-list.php on line 560
+[26-Feb-2026 16:43:34 Asia/Kolkata] PHP Warning:  Undefined array key "ge_cname" in /home/royaldxd/abra-travels.com/hrm/hr-departments-list.php on line 560
+[28-Feb-2026 13:03:09 Asia/Kolkata] Birthday Check: HR employee ABRA033 (Keerthi) not found
+[28-Feb-2026 13:03:15 Asia/Kolkata] PHP Warning:  Undefined array key "ge_cname" in /home/royaldxd/abra-travels.com/hrm/hr-departments-list.php on line 560
+[28-Feb-2026 13:03:22 Asia/Kolkata] PHP Warning:  Undefined array key "ge_cname" in /home/royaldxd/abra-travels.com/hrm/hr-departments-list.php on line 560
+[28-Feb-2026 13:03:28 Asia/Kolkata] Birthday Check: HR employee ABRA033 (Keerthi) not found
+[02-Mar-2026 14:34:50 Asia/Kolkata] Birthday Check: HR employee ABRA033 (Keerthi) not found
+[02-Mar-2026 14:34:55 Asia/Kolkata] Birthday Check: HR employee ABRA033 (Keerthi) not found
+[02-Mar-2026 17:02:22 Asia/Kolkata] Birthday Check: HR employee ABRA033 (Keerthi) not found
+[02-Mar-2026 17:13:23 Asia/Kolkata] Birthday Check: HR employee ABRA033 (Keerthi) not found
+[02-Mar-2026 17:17:17 Asia/Kolkata] Birthday Check: HR employee ABRA033 (Keerthi) not found
