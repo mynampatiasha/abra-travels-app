@@ -11,12 +11,9 @@ workflows:
       - name: Flutter packages get
         script: |
           flutter packages pub get
-      - name: Flutter build iOS
+      - name: Flutter build IPA
         script: |
-          flutter build ios --release --no-codesign
-      - name: Build IPA
-        script: |
-          cd ios && pod install --repo-update && xcodebuild -workspace Runner.xcworkspace -scheme Runner -sdk iphoneos -configuration Release CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO CONFIGURATION_BUILD_DIR=$CM_BUILD_DIR/output clean archive
+          flutter build ipa --no-codesign
     artifacts:
-      - $CM_BUILD_DIR/output/*.app
+      - build/ios/ipa/*.ipa
       - /tmp/xcodebuild_logs/*.log
