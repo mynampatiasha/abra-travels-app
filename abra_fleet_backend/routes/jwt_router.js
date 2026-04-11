@@ -1480,6 +1480,78 @@ router.get('/users-without-passwords', async (req, res) => {
 
 
 // ============================================================================
+// DELETE ACCOUNT
+// ============================================================================
+
+/**
+ * DELETE /api/auth/delete-account - Permanently delete user account
+ * No recovery possible — removes the document from the collection entirely.
+ */
+router.delete('/delete-account', verifyJWT, async (req, res) => {
+  console.log('\n🗑️  DELETE ACCOUNT REQUEST');
+  console.log('─'.repeat(80));
+
+  try {
+    const userEmail = req.user?.email;
+
+    if (!userEmail) {
+      return res.status(401).json({
+        success: false,
+        error: 'Unauthorized',
+        message: 'User not authenticated'
+      });
+    }
+
+    console.log('   User email:', userEmail);
+
+    // Find user across all collections
+    const collections = ['admin_users', 'drivers', 'customers', 'clients', 'employee_admins'];
+    let user = null;
+    let userCollection = null;
+
+    for (const collectionName of collections) {
+      user = await req.db.collection(collectionName).findOne({
+        email: userEmail.toLowerCase()
+      });
+      if (user) {
+        userCollection = collectionName;
+        break;
+      }
+    }
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        error: 'User not found',
+        message: 'User account not found'
+      });
+    }
+
+    // Permanently delete the user document
+    await req.db.collection(userCollection).deleteOne({ _id: user._id });
+
+    console.log(`✅ Account permanently deleted: ${userEmail} from ${userCollection}`);
+    console.log('─'.repeat(80) + '\n');
+
+    res.json({
+      success: true,
+      message: 'Account permanently deleted'
+    });
+
+  } catch (error) {
+    console.error('❌ DELETE ACCOUNT ERROR:', error.message);
+    console.error('─'.repeat(80) + '\n');
+
+    res.status(500).json({
+      success: false,
+      error: 'Delete account failed',
+      message: 'An error occurred while deleting the account',
+      details: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+});
+
+// ============================================================================
 // EXPORT ROUTER AND MIDDLEWARE
 // ============================================================================
 

@@ -90,6 +90,7 @@ flutter:
     - assets/icon/
     - assets/images/
     - assets/logo.png
+    - assets/abra_t_logo.png
     - assets/image.png
     - assets/invoice.png
     - assets/recurring_invoice.png
@@ -110,6 +111,7 @@ flutter:
 flutter_launcher_icons:
   android: true
   ios: true
-  image_path: "assets/logo.png"
+  image_path: "assets/abra_t_logo.png"
+  remove_alpha_ios: true
   adaptive_icon_background: "#ffffff"
-  adaptive_icon_foreground: "assets/logo.png"
+  adaptive_icon_foreground: "assets/abra_t_logo.png"

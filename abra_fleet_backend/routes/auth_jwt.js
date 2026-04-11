@@ -459,4 +459,73 @@ router.post('/logout', (req, res) => {
   });
 });
 
+/**
+ * DELETE /api/auth/delete-account - Permanently delete the authenticated user's account
+ * No recovery possible after this action.
+ */
+router.delete('/delete-account', async (req, res) => {
+  console.log('\n🗑️ DELETE ACCOUNT REQUEST');
+  console.log('─'.repeat(80));
+
+  try {
+    const userEmail = req.user?.email;
+    const collectionName = req.user?.collectionName;
+
+    if (!userEmail) {
+      return res.status(401).json({
+        success: false,
+        error: 'Unauthorized',
+        message: 'User not authenticated'
+      });
+    }
+
+    console.log('   User email:', userEmail);
+    console.log('   Collection hint:', collectionName);
+
+    // Search all collections to find and delete the user
+    const collections = ['customers', 'drivers', 'clients', 'admin_users', 'employee_admins'];
+    let deleted = false;
+
+    for (const col of collections) {
+      const result = await req.db.collection(col).deleteOne({
+        email: userEmail.toLowerCase()
+      });
+
+      if (result.deletedCount > 0) {
+        console.log(`✅ User deleted from collection: ${col}`);
+        deleted = true;
+        break;
+      }
+    }
+
+    if (!deleted) {
+      console.log('❌ User not found in any collection');
+      return res.status(404).json({
+        success: false,
+        error: 'User not found',
+        message: 'Account not found'
+      });
+    }
+
+    console.log('✅ Account permanently deleted');
+    console.log('─'.repeat(80) + '\n');
+
+    res.json({
+      success: true,
+      message: 'Account permanently deleted'
+    });
+
+  } catch (error) {
+    console.error('❌ DELETE ACCOUNT ERROR:', error.message);
+    console.error('─'.repeat(80) + '\n');
+
+    res.status(500).json({
+      success: false,
+      error: 'Delete failed',
+      message: 'An error occurred while deleting the account',
+      details: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+});
+
 module.exports = router;

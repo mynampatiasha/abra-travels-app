@@ -438,6 +438,69 @@ class _ClientProfilePageState extends State<ClientProfilePage> {
     }
   }
 
+  Future<void> _deleteAccount() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Delete Account'),
+        content: const Text(
+          'Are you sure you want to permanently delete your account?\n\n'
+          'This action cannot be undone. You will not be able to log in with this email again.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: ElevatedButton.styleFrom(backgroundColor: ClientTheme.dangerRed),
+            child: const Text('Delete', style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true) return;
+
+    setState(() => _isLoading = true);
+
+    try {
+      if (_token == null || _token!.isEmpty) throw Exception('Not authenticated');
+
+      final response = await http.delete(
+        Uri.parse('${ApiConfig.baseUrl}/api/auth/delete-account'),
+        headers: {
+          'Authorization': 'Bearer $_token',
+          'Content-Type': 'application/json',
+        },
+      );
+
+      final responseData = jsonDecode(response.body);
+
+      if (response.statusCode == 200 && responseData['success'] == true) {
+        await _prefs?.clear();
+
+        if (mounted) {
+          Navigator.of(context).pushAndRemoveUntil(
+            MaterialPageRoute(builder: (_) => const WelcomeScreen()),
+            (route) => false,
+          );
+        }
+      } else {
+        throw Exception(responseData['message'] ?? 'Failed to delete account');
+      }
+    } catch (e) {
+      setState(() => _isLoading = false);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('Failed to delete account: $e'),
+          backgroundColor: ClientTheme.dangerRed,
+        ));
+      }
+    }
+  }
+
   Future<void> _handleLogout() async {
     try {
       final authRepo = Provider.of<AuthRepository>(context, listen: false);
@@ -683,6 +746,10 @@ class _ClientProfilePageState extends State<ClientProfilePage> {
 
                   // ── Logout button ────────────────────────────────────────────
                   _buildLogoutButton(),
+                  const SizedBox(height: 12),
+
+                  // ── Delete Account button ─────────────────────────────────────
+                  _buildDeleteAccountButton(),
                   const SizedBox(height: 20),
                 ],
               ),
@@ -1119,6 +1186,40 @@ class _ClientProfilePageState extends State<ClientProfilePage> {
               SizedBox(width: 10),
               Text('Logout',
                 style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: ClientTheme.dangerRed)),
+            ]),
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Delete Account button — solid red destructive style
+  Widget _buildDeleteAccountButton() {
+    return Container(
+      width: double.infinity,
+      decoration: BoxDecoration(
+        color: ClientTheme.dangerRed,
+        borderRadius: BorderRadius.circular(13),
+        boxShadow: [
+          BoxShadow(
+            color: ClientTheme.dangerRed.withOpacity(0.3),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: _deleteAccount,
+          borderRadius: BorderRadius.circular(13),
+          child: const Padding(
+            padding: EdgeInsets.symmetric(vertical: 16),
+            child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+              Icon(Icons.delete_forever, color: Colors.white, size: 20),
+              SizedBox(width: 10),
+              Text('Delete Account',
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: Colors.white)),
             ]),
           ),
         ),

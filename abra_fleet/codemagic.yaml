@@ -6,17 +6,36 @@ workflows:
       flutter: stable
       xcode: latest
       cocoapods: default
+      ios_signing:
+        distribution_type: app_store
+        bundle_identifier: com.example.abraFleet
     working_directory: abra_fleet
     scripts:
       - name: Flutter packages get
         script: |
           flutter packages pub get
-      - name: Flutter build iOS
+
+      - name: Generate app icons
         script: |
-          flutter build ios --release --no-codesign
+          dart run flutter_launcher_icons
+
+      - name: Pod install
+        script: |
+          cd ios && pod install --repo-update
+
+      - name: Set up code signing
+        script: |
+          xcode-project use-profiles
+
       - name: Build IPA
         script: |
-          cd ios && xcodebuild -workspace Runner.xcworkspace -scheme Runner -sdk iphoneos -configuration Release CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO CONFIGURATION_BUILD_DIR=$CM_BUILD_DIR/output clean archive
+          flutter build ipa --release
+
     artifacts:
-      - $CM_BUILD_DIR/output/*.app
+      - build/ios/ipa/*.ipa
       - /tmp/xcodebuild_logs/*.log
+
+    publishing:
+      app_store_connect:
+        auth: integration
+        submit_to_testflight: true

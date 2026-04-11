@@ -485,8 +485,66 @@ class _ProfileDriverPageState extends State<ProfileDriverPage> {
     }
   }
 
-  Future<void> _handleLogout(BuildContext context) async {
-    final authRepository = Provider.of<AuthRepository>(context, listen: false);
+  Future<void> _deleteAccount() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Delete Account'),
+        content: const Text(
+          'Are you sure you want to permanently delete your account?\n\n'
+          'This action cannot be undone. You will not be able to log in with this email again.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: ElevatedButton.styleFrom(backgroundColor: kDangerColor),
+            child: const Text('Delete', style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true) return;
+
+    try {
+      if (_token == null || _token!.isEmpty) throw Exception('Not authenticated');
+
+      final response = await http.delete(
+        Uri.parse('${ApiConfig.baseUrl}/api/auth/delete-account'),
+        headers: {
+          'Authorization': 'Bearer $_token',
+          'Content-Type': 'application/json',
+        },
+      );
+
+      final responseData = jsonDecode(response.body);
+
+      if (response.statusCode == 200 && responseData['success'] == true) {
+        await _prefs?.clear();
+        if (mounted) {
+          Navigator.of(context).pushAndRemoveUntil(
+            MaterialPageRoute(builder: (_) => const LoginScreen()),
+            (route) => false,
+          );
+        }
+      } else {
+        throw Exception(responseData['message'] ?? 'Failed to delete account');
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('Failed to delete account: $e'),
+          backgroundColor: kDangerColor,
+        ));
+      }
+    }
+  }
+
+  Future<void> _handleLogout(BuildContext context) async {    final authRepository = Provider.of<AuthRepository>(context, listen: false);
 
     final confirmLogout = await showDialog<bool>(
       context: context,
@@ -1015,6 +1073,19 @@ class _ProfileDriverPageState extends State<ProfileDriverPage> {
               label: const Text('Logout'),
               style: ElevatedButton.styleFrom(
                 backgroundColor: kDangerColor,
+                foregroundColor: Colors.white,
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton.icon(
+              icon: const Icon(Icons.delete_forever),
+              onPressed: _deleteAccount,
+              label: const Text('Delete Account'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.red[900],
                 foregroundColor: Colors.white,
               ),
             ),
