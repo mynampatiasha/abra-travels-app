@@ -9,7 +9,7 @@ const { calculateRosterDistances } = require('../utils/distance_calculator');
 const NotificationService = require('../services/notification_service');
 
 
-// ✅ ADD THIS HELPER FUNCTION
+// [OK] ADD THIS HELPER FUNCTION
 function isValidObjectId(id) {
   if (!id) return false;
   if (typeof id === 'string' && id.length !== 24) return false;
@@ -52,11 +52,11 @@ async function generateSequentialRosterId(db, rosterId) {
       { $set: { readableId: readableId } }
     );
 
-    console.log(`✅ Generated new roster ID: ${readableId} for ${rosterId}`);
+    console.log(`[OK] Generated new roster ID: ${readableId} for ${rosterId}`);
     return readableId;
 
   } catch (error) {
-    console.error('❌ Error generating roster ID:', error);
+    console.error('[ERROR] Error generating roster ID:', error);
     // Fallback to a simple format
     return `RST-${rosterId.toString().slice(-6).toUpperCase()}`;
   }
@@ -90,18 +90,18 @@ async function generateNewRosterId(db) {
     const sequenceNumber = counterResult.value.sequence;
     const readableId = `RST-${String(sequenceNumber).padStart(4, '0')}`;
 
-    console.log(`✅ Generated new roster ID for creation: ${readableId}`);
+    console.log(`[OK] Generated new roster ID for creation: ${readableId}`);
     return readableId;
 
   } catch (error) {
-    console.error('❌ Error generating new roster ID:', error);
+    console.error('[ERROR] Error generating new roster ID:', error);
     // Fallback to timestamp-based ID
     const timestamp = Date.now().toString().slice(-6);
     return `RST-${timestamp}`;
   }
 }
 
-// ✅ HELPER: Server-Side Geocoding (LENIENT - Best Effort)
+// [OK] HELPER: Server-Side Geocoding (LENIENT - Best Effort)
 // Tries to geocode address but returns approximate coordinates if exact geocoding fails
 async function geocodeAddress(address) {
   if (!address || typeof address !== 'string') return null;
@@ -118,19 +118,19 @@ async function geocodeAddress(address) {
 
     const data = await response.json();
     if (data && data.length > 0) {
-      console.log(`✅ Geocoded successfully: ${address}`);
+      console.log(`[OK] Geocoded successfully: ${address}`);
       return {
         latitude: parseFloat(data[0].lat),
         longitude: parseFloat(data[0].lon)
       };
     }
   } catch (error) {
-    console.warn(`⚠️  Geocoding API failed for: ${address}`, error.message);
+    console.warn(`[WARN]  Geocoding API failed for: ${address}`, error.message);
   }
 
-  // 🆕 LENIENT FALLBACK: Return approximate coordinates based on address text
+  // [INFO] LENIENT FALLBACK: Return approximate coordinates based on address text
   // This allows the system to work even when exact geocoding fails
-  console.log(`⚠️  Using approximate coordinates for: ${address}`);
+  console.log(`[WARN]  Using approximate coordinates for: ${address}`);
   
   // Generate approximate coordinates based on hash of address string
   // This ensures same address always gets same coordinates
@@ -155,7 +155,7 @@ async function geocodeAddress(address) {
   };
 }
 
-// ✅ HELPER: Reverse Geocoding
+// [OK] HELPER: Reverse Geocoding
 // Converts coordinates "13.005619, 77.663437" to readable address
 async function reverseGeocodeLocation(location) {
   if (!location || typeof location !== 'string') return location;
@@ -227,7 +227,7 @@ router.use((req, res, next) => {
 // @access  Private
 router.post('/customer/bulk', verifyToken, async (req, res) => {
   console.log('\n' + '='.repeat(80));
-  console.log('📦 BULK IMPORT STARTED');
+  console.log(' BULK IMPORT STARTED');
   console.log('='.repeat(80));
 
   try {
@@ -241,7 +241,7 @@ router.post('/customer/bulk', verifyToken, async (req, res) => {
       });
     }
 
-    console.log(`📊 Total rosters to process: ${rosters.length}`);
+    console.log(`[INFO] Total rosters to process: ${rosters.length}`);
 
     // Get admin/customer details (who is importing)
     let adminName = 'Unknown';
@@ -266,7 +266,7 @@ router.post('/customer/bulk', verifyToken, async (req, res) => {
       });
     }
 
-    console.log(`📊 Bulk import by ${adminName} from organization: ${adminOrganization}`);
+    console.log(`[INFO] Bulk import by ${adminName} from organization: ${adminOrganization}`);
 
     const successfulImports = [];
     const failedImports = [];
@@ -277,7 +277,7 @@ router.post('/customer/bulk', verifyToken, async (req, res) => {
       console.log(`\n--- Processing Row ${i + 1}/${rosters.length} ---`);
 
       try {
-        // 1️⃣ VALIDATE REQUIRED FIELDS
+        // 1. VALIDATE REQUIRED FIELDS
         if (!item.officeLocation || item.officeLocation.trim() === '') {
           throw new Error('Office location is required');
         }
@@ -295,7 +295,7 @@ router.post('/customer/bulk', verifyToken, async (req, res) => {
         console.log(`   Type: ${rosterType}`);
         console.log(`   Office: ${item.officeLocation}`);
 
-        // 2️⃣ GEOCODE OFFICE LOCATION (ALWAYS REQUIRED)
+        // 2. GEOCODE OFFICE LOCATION (ALWAYS REQUIRED)
         let officeCoords = null;
 
         // Check if Flutter already sent coordinates
@@ -303,10 +303,10 @@ router.post('/customer/bulk', verifyToken, async (req, res) => {
           item.officeLocationCoordinates.latitude &&
           item.officeLocationCoordinates.latitude !== 0) {
           officeCoords = item.officeLocationCoordinates;
-          console.log(`   ✅ Using provided office coords: ${officeCoords.latitude}, ${officeCoords.longitude}`);
+          console.log(`   [OK] Using provided office coords: ${officeCoords.latitude}, ${officeCoords.longitude}`);
         } else {
           // Geocode the address
-          console.log(`   🌍 Geocoding office location...`);
+          console.log(`    Geocoding office location...`);
           officeCoords = await geocodeAddress(item.officeLocation);
           await delay(1200); // Rate limit: 1.2 seconds between requests
         }
@@ -314,9 +314,9 @@ router.post('/customer/bulk', verifyToken, async (req, res) => {
         if (!officeCoords || officeCoords.latitude === 0) {
           throw new Error(`Could not geocode office location: "${item.officeLocation}". Please provide a valid address.`);
         }
-        console.log(`   ✅ Office coordinates confirmed: ${officeCoords.latitude}, ${officeCoords.longitude}`);
+        console.log(`   [OK] Office coordinates confirmed: ${officeCoords.latitude}, ${officeCoords.longitude}`);
 
-        // 3️⃣ GEOCODE PICKUP LOCATION (Required for 'login' or 'both')
+        // 3. GEOCODE PICKUP LOCATION (Required for 'login' or 'both')
         let pickupCoords = null;
 
         if (rosterType === 'login' || rosterType === 'both') {
@@ -325,10 +325,10 @@ router.post('/customer/bulk', verifyToken, async (req, res) => {
             item.loginPickupLocation.latitude &&
             item.loginPickupLocation.latitude !== 0) {
             pickupCoords = item.loginPickupLocation;
-            console.log(`   ✅ Using provided pickup coords: ${pickupCoords.latitude}, ${pickupCoords.longitude}`);
+            console.log(`   [OK] Using provided pickup coords: ${pickupCoords.latitude}, ${pickupCoords.longitude}`);
           } else if (item.loginPickupAddress && item.loginPickupAddress.trim() !== '') {
             // Geocode the address
-            console.log(`   🌍 Geocoding pickup: "${item.loginPickupAddress}"`);
+            console.log(`    Geocoding pickup: "${item.loginPickupAddress}"`);
             pickupCoords = await geocodeAddress(item.loginPickupAddress);
             await delay(1200);
           }
@@ -336,10 +336,10 @@ router.post('/customer/bulk', verifyToken, async (req, res) => {
           if (!pickupCoords || pickupCoords.latitude === 0) {
             throw new Error(`Pickup location required for ${rosterType} roster. Could not geocode: "${item.loginPickupAddress || 'No address provided'}". Please provide a valid address.`);
           }
-          console.log(`   ✅ Pickup coordinates confirmed: ${pickupCoords.latitude}, ${pickupCoords.longitude}`);
+          console.log(`   [OK] Pickup coordinates confirmed: ${pickupCoords.latitude}, ${pickupCoords.longitude}`);
         }
 
-        // 4️⃣ GEOCODE DROP LOCATION (Required for 'logout' or 'both')
+        // 4. GEOCODE DROP LOCATION (Required for 'logout' or 'both')
         let dropCoords = null;
 
         if (rosterType === 'logout' || rosterType === 'both') {
@@ -348,10 +348,10 @@ router.post('/customer/bulk', verifyToken, async (req, res) => {
             item.logoutDropLocation.latitude &&
             item.logoutDropLocation.latitude !== 0) {
             dropCoords = item.logoutDropLocation;
-            console.log(`   ✅ Using provided drop coords: ${dropCoords.latitude}, ${dropCoords.longitude}`);
+            console.log(`   [OK] Using provided drop coords: ${dropCoords.latitude}, ${dropCoords.longitude}`);
           } else if (item.logoutDropAddress && item.logoutDropAddress.trim() !== '') {
             // Geocode the address
-            console.log(`   🌍 Geocoding drop: "${item.logoutDropAddress}"`);
+            console.log(`    Geocoding drop: "${item.logoutDropAddress}"`);
             dropCoords = await geocodeAddress(item.logoutDropAddress);
             await delay(1200);
           }
@@ -359,18 +359,18 @@ router.post('/customer/bulk', verifyToken, async (req, res) => {
           if (!dropCoords || dropCoords.latitude === 0) {
             throw new Error(`Drop location required for ${rosterType} roster. Could not geocode: "${item.logoutDropAddress || 'No address provided'}". Please provide a valid address.`);
           }
-          console.log(`   ✅ Drop coordinates confirmed: ${dropCoords.latitude}, ${dropCoords.longitude}`);
+          console.log(`   [OK] Drop coordinates confirmed: ${dropCoords.latitude}, ${dropCoords.longitude}`);
         }
 
-        // 5️⃣ PREPARE ROSTER DATA
-        // ✅ FIX: Use employee email/name if available, otherwise fall back to admin
+        // 5. PREPARE ROSTER DATA
+        // [OK] FIX: Use employee email/name if available, otherwise fall back to admin
         const displayName = item.employeeData?.name || adminName;
         const displayEmail = item.employeeData?.email || adminEmail;
         const displayPhone = item.employeeData?.phone || '';
         const displayDepartment = item.employeeData?.department || '';
 
-        console.log(`   👤 Display Name: ${displayName}`);
-        console.log(`   📧 Display Email: ${displayEmail}`);
+        console.log(`   [USER] Display Name: ${displayName}`);
+        console.log(`   [INFO] Display Email: ${displayEmail}`);
 
         // 🔥 NEW: AUTO-CREATE USER IF DOESN'T EXIST
         let customerFirebaseUid = null;
@@ -378,7 +378,7 @@ router.post('/customer/bulk', verifyToken, async (req, res) => {
         let hrmEmployeeCreated = false;
 
         try {
-          console.log(`   🔍 Checking if user exists: ${displayEmail}`);
+          console.log(`   [INFO] Checking if user exists: ${displayEmail}`);
 
           // Check if user exists in MongoDB
           let existingUser = await req.db.collection('users').findOne({
@@ -386,20 +386,20 @@ router.post('/customer/bulk', verifyToken, async (req, res) => {
           });
 
           if (existingUser) {
-            console.log(`   ✅ User already exists in MongoDB: ${existingUser.name}`);
+            console.log(`   [OK] User already exists in MongoDB: ${existingUser.name}`);
             customerFirebaseUid = existingUser.firebaseUid;
           } else {
-            console.log(`   👤 User NOT found - creating new user account...`);
+            console.log(`   [USER] User NOT found - creating new user account...`);
 
             // Check if user exists in Firebase Auth
             let firebaseUser;
             try {
               firebaseUser = await admin.auth().getUserByEmail(displayEmail);
-              console.log(`   ℹ️  User exists in Firebase Auth: ${firebaseUser.uid}`);
+              console.log(`   [INFO]  User exists in Firebase Auth: ${firebaseUser.uid}`);
             } catch (fbError) {
               if (fbError.code === 'auth/user-not-found') {
                 // Create Firebase Auth user
-                console.log(`   🔐 Creating Firebase Auth user...`);
+                console.log(`   [INFO] Creating Firebase Auth user...`);
                 const tempPassword = 'Welcome@' + Math.random().toString(36).slice(-8);
 
                 firebaseUser = await admin.auth().createUser({
@@ -409,19 +409,19 @@ router.post('/customer/bulk', verifyToken, async (req, res) => {
                   emailVerified: false
                 });
 
-                console.log(`   ✅ Firebase Auth user created: ${firebaseUser.uid}`);
-                console.log(`   🔑 Temporary password: ${tempPassword}`);
+                console.log(`   [OK] Firebase Auth user created: ${firebaseUser.uid}`);
+                console.log(`   [INFO] Temporary password: ${tempPassword}`);
 
                 // Generate password reset link
                 try {
                   const passwordResetLink = await admin.auth().generatePasswordResetLink(displayEmail);
-                  console.log(`   📧 Password reset link generated`);
-                  console.log(`   🔗 Link: ${passwordResetLink.substring(0, 50)}...`);
+                  console.log(`   [INFO] Password reset link generated`);
+                  console.log(`   [LINK] Link: ${passwordResetLink.substring(0, 50)}...`);
 
                   // TODO: Send welcome email with password reset link
                   // await sendWelcomeEmail(displayEmail, displayName, passwordResetLink);
                 } catch (linkError) {
-                  console.warn(`   ⚠️  Could not generate password reset link: ${linkError.message}`);
+                  console.warn(`   [WARN]  Could not generate password reset link: ${linkError.message}`);
                 }
               } else {
                 throw fbError;
@@ -429,7 +429,7 @@ router.post('/customer/bulk', verifyToken, async (req, res) => {
             }
 
             // Create MongoDB user document
-            console.log(`   💾 Creating MongoDB user document...`);
+            console.log(`   [SAVE] Creating MongoDB user document...`);
             const mongoUser = {
               firebaseUid: firebaseUser.uid,
               email: displayEmail.toLowerCase().trim(),
@@ -448,20 +448,20 @@ router.post('/customer/bulk', verifyToken, async (req, res) => {
             };
 
             const insertResult = await req.db.collection('users').insertOne(mongoUser);
-            console.log(`   ✅ MongoDB user created: ${insertResult.insertedId}`);
+            console.log(`   [OK] MongoDB user created: ${insertResult.insertedId}`);
 
             customerFirebaseUid = firebaseUser.uid;
             userCreatedNow = true;
           }
 
           // 🔥 NEW: CREATE HRM EMPLOYEE RECORD
-          console.log(`   🏢 Checking if HRM employee record exists...`);
+          console.log(`    Checking if HRM employee record exists...`);
           const existingHrmEmployee = await req.db.collection('hr_employees').findOne({
             email: displayEmail.toLowerCase().trim()
           });
 
           if (!existingHrmEmployee && item.employeeData) {
-            console.log(`   👥 Creating HRM employee record...`);
+            console.log(`   [USERS] Creating HRM employee record...`);
             
             // Extract company domain from email
             const emailDomain = displayEmail.toLowerCase().split('@')[1];
@@ -499,17 +499,17 @@ router.post('/customer/bulk', verifyToken, async (req, res) => {
             };
 
             const hrmResult = await req.db.collection('hr_employees').insertOne(hrmEmployee);
-            console.log(`   ✅ HRM employee created: ${hrmResult.insertedId}`);
+            console.log(`   [OK] HRM employee created: ${hrmResult.insertedId}`);
             hrmEmployeeCreated = true;
           } else if (existingHrmEmployee) {
-            console.log(`   ℹ️  HRM employee already exists: ${existingHrmEmployee.name}`);
+            console.log(`   [INFO]  HRM employee already exists: ${existingHrmEmployee.name}`);
           } else {
-            console.log(`   ⚠️  No employee data provided - skipping HRM employee creation`);
+            console.log(`   [WARN]  No employee data provided - skipping HRM employee creation`);
           }
 
         } catch (userError) {
-          console.warn(`   ⚠️  User creation failed: ${userError.message}`);
-          console.warn(`   ℹ️  Continuing with roster creation without user link...`);
+          console.warn(`   [WARN]  User creation failed: ${userError.message}`);
+          console.warn(`   [INFO]  Continuing with roster creation without user link...`);
           // Continue with roster creation even if user creation fails
         }
 
@@ -523,16 +523,16 @@ router.post('/customer/bulk', verifyToken, async (req, res) => {
           fromTime: item.fromTime,
           toTime: item.toTime,
           notes: item.notes || '',
-          customerName: displayName,        // ✅ Use employee name
-          customerEmail: displayEmail,      // ✅ Use employee email
+          customerName: displayName,        // [OK] Use employee name
+          customerEmail: displayEmail,      // [OK] Use employee email
           customerId: customerFirebaseUid,  // 🔥 NEW: Link to Firebase user
           customerFirebaseUid: customerFirebaseUid, // 🔥 NEW: Store User ID
           createdBy: userId,                // Track who created it (admin)
           createdByAdmin: adminName,        // Track admin who imported
-          organizationName: adminOrganization, // ✅ Store organization for filtering
+          organizationName: adminOrganization, // [OK] Store organization for filtering
           employeeDetails: {
             ...(item.employeeData || {}),
-            companyName: adminOrganization  // ✅ Ensure organization is stored
+            companyName: adminOrganization  // [OK] Ensure organization is stored
           }
         };
 
@@ -548,7 +548,7 @@ router.post('/customer/bulk', verifyToken, async (req, res) => {
         }
 
         // 6️⃣ CHECK FOR DUPLICATES
-        console.log(`   🔍 Checking for duplicate rosters...`);
+        console.log(`   [INFO] Checking for duplicate rosters...`);
         const duplicateCheck = await req.db.collection('rosters').findOne({
           customerEmail: displayEmail,
           officeLocation: item.officeLocation,
@@ -562,21 +562,21 @@ router.post('/customer/bulk', verifyToken, async (req, res) => {
         });
 
         if (duplicateCheck) {
-          console.log(`   ⚠️  Duplicate roster found - skipping`);
+          console.log(`   [WARN]  Duplicate roster found - skipping`);
           throw new Error(`Duplicate roster: ${displayName} already has a roster for ${item.officeLocation} with same dates and times`);
         }
 
-        console.log(`   💾 Creating roster in database...`);
+        console.log(`   [SAVE] Creating roster in database...`);
 
         // 7️⃣ CREATE ROSTER
         const newRoster = await Roster.createCustomerRoster(rosterData, userId);
 
-        console.log(`   ✅ Row ${i + 1} imported successfully - ID: ${newRoster._id}`);
+        console.log(`   [OK] Row ${i + 1} imported successfully - ID: ${newRoster._id}`);
         if (userCreatedNow) {
-          console.log(`   🎉 New user account created for: ${displayName}`);
+          console.log(`   [OK] New user account created for: ${displayName}`);
         }
         if (hrmEmployeeCreated) {
-          console.log(`   👥 New HRM employee record created for: ${displayName}`);
+          console.log(`   [USERS] New HRM employee record created for: ${displayName}`);
         }
 
         successfulImports.push({
@@ -591,7 +591,7 @@ router.post('/customer/bulk', verifyToken, async (req, res) => {
         });
 
       } catch (err) {
-        console.error(`   ❌ Row ${i + 1} failed:`, err.message);
+        console.error(`   [ERROR] Row ${i + 1} failed:`, err.message);
         failedImports.push({
           index: i,
           error: err.message,
@@ -602,18 +602,18 @@ router.post('/customer/bulk', verifyToken, async (req, res) => {
     }
 
     console.log('\n' + '='.repeat(80));
-    console.log('📊 BULK IMPORT COMPLETED');
+    console.log('[INFO] BULK IMPORT COMPLETED');
     console.log('='.repeat(80));
-    console.log(`✅ Successful: ${successfulImports.length}`);
-    console.log(`❌ Failed: ${failedImports.length}`);
-    console.log(`📈 Success Rate: ${((successfulImports.length / rosters.length) * 100).toFixed(1)}%`);
+    console.log(`[OK] Successful: ${successfulImports.length}`);
+    console.log(`[ERROR] Failed: ${failedImports.length}`);
+    console.log(` Success Rate: ${((successfulImports.length / rosters.length) * 100).toFixed(1)}%`);
     
     // Calculate HRM employee statistics
     const newUsersCreated = successfulImports.filter(item => item.userCreated).length;
     const newHrmEmployeesCreated = successfulImports.filter(item => item.hrmEmployeeCreated).length;
     
-    console.log(`👤 New Users Created: ${newUsersCreated}`);
-    console.log(`👥 New HRM Employees Created: ${newHrmEmployeesCreated}`);
+    console.log(`[USER] New Users Created: ${newUsersCreated}`);
+    console.log(`[USERS] New HRM Employees Created: ${newHrmEmployeesCreated}`);
     console.log('='.repeat(80) + '\n');
 
     // Return response
@@ -637,7 +637,7 @@ router.post('/customer/bulk', verifyToken, async (req, res) => {
     });
 
   } catch (err) {
-    console.error('❌ FATAL ERROR in bulk import:', err);
+    console.error('[ERROR] FATAL ERROR in bulk import:', err);
     console.error(err.stack);
     res.status(500).json({
       success: false,
@@ -649,7 +649,7 @@ router.post('/customer/bulk', verifyToken, async (req, res) => {
 
 
 // routes/roster_router.js
-// ✅ FIXED: Check employees in the USERS collection, not rosters
+// [OK] FIXED: Check employees in the USERS collection, not rosters
 
 // @route   GET api/roster/customer/check-employee
 // @desc    Check if an employee exists in the system by email
@@ -666,16 +666,16 @@ router.get('/customer/check-employee', verifyToken, async (req, res) => {
     }
 
     const normalizedEmail = email.toLowerCase().trim();
-    console.log(`🔍 Checking if employee exists: ${normalizedEmail}`);
+    console.log(`[INFO] Checking if employee exists: ${normalizedEmail}`);
 
-    // ✅ FIX 1: Check in USERS collection (where employees are actually stored)
+    // [OK] FIX 1: Check in USERS collection (where employees are actually stored)
     const employeeInDB = await req.db.collection('users').findOne({
       email: normalizedEmail,
       role: 'customer' // Employees have role='customer'
     });
 
     if (employeeInDB) {
-      console.log(`✅ Employee FOUND in users collection: ${normalizedEmail}`);
+      console.log(`[OK] Employee FOUND in users collection: ${normalizedEmail}`);
       return res.json({
         success: true,
         exists: true,
@@ -691,7 +691,7 @@ router.get('/customer/check-employee', verifyToken, async (req, res) => {
     }
 
     // If not found, employee doesn't exist
-    console.log(`❌ Employee NOT FOUND: ${normalizedEmail}`);
+    console.log(`[ERROR] Employee NOT FOUND: ${normalizedEmail}`);
     return res.json({
       success: true,
       exists: false,
@@ -699,7 +699,7 @@ router.get('/customer/check-employee', verifyToken, async (req, res) => {
     });
 
   } catch (err) {
-    console.error('❌ Error checking employee:', err.message);
+    console.error('[ERROR] Error checking employee:', err.message);
     res.status(500).json({
       success: false,
       message: 'Server error while checking employee'
@@ -707,7 +707,7 @@ router.get('/customer/check-employee', verifyToken, async (req, res) => {
   }
 });
 
-// ✅ ENHANCED: Batch check multiple employees at once (more efficient)
+// [OK] ENHANCED: Batch check multiple employees at once (more efficient)
 // @route   POST api/roster/customer/check-employees-batch
 // @desc    Check multiple employees at once
 // @access  Private (Authenticated user)
@@ -722,12 +722,12 @@ router.post('/customer/check-employees-batch', verifyToken, async (req, res) => 
       });
     }
 
-    console.log(`🔍 Batch checking ${emails.length} employees...`);
+    console.log(`[INFO] Batch checking ${emails.length} employees...`);
 
     // Normalize all emails
     const normalizedEmails = emails.map(e => e.toLowerCase().trim());
 
-    // ✅ Single query to check all employees at once (MUCH faster)
+    // [OK] Single query to check all employees at once (MUCH faster)
     const existingEmployees = await req.db.collection('users').find({
       email: { $in: normalizedEmails },
       role: 'customer'
@@ -753,7 +753,7 @@ router.post('/customer/check-employees-batch', verifyToken, async (req, res) => 
     const existingCount = foundEmails.size;
     const newCount = normalizedEmails.length - existingCount;
 
-    console.log(`✅ Batch check complete:`);
+    console.log(`[OK] Batch check complete:`);
     console.log(`   - Existing: ${existingCount}`);
     console.log(`   - New: ${newCount}`);
 
@@ -768,7 +768,7 @@ router.post('/customer/check-employees-batch', verifyToken, async (req, res) => 
     });
 
   } catch (err) {
-    console.error('❌ Error in batch employee check:', err.message);
+    console.error('[ERROR] Error in batch employee check:', err.message);
     res.status(500).json({
       success: false,
       message: 'Server error while checking employees',
@@ -785,7 +785,7 @@ router.get('/active-trip/:userId', verifyToken, async (req, res) => {
   try {
     const { userId } = req.params;
 
-    console.log(`🔍 Checking for active trip for user: ${userId}`);
+    console.log(`[INFO] Checking for active trip for user: ${userId}`);
 
     // Find active trip for this customer (scheduled, ongoing, or in progress)
     const activeTrip = await req.db.collection('rosters').findOne({
@@ -794,7 +794,7 @@ router.get('/active-trip/:userId', verifyToken, async (req, res) => {
     });
 
     if (!activeTrip) {
-      console.log(`❌ No active trip found for user: ${userId}`);
+      console.log(`[ERROR] No active trip found for user: ${userId}`);
       return res.json({
         success: true,
         hasActiveTrip: false,
@@ -802,7 +802,7 @@ router.get('/active-trip/:userId', verifyToken, async (req, res) => {
       });
     }
 
-    console.log(`✅ Found active trip: ${activeTrip._id}`);
+    console.log(`[OK] Found active trip: ${activeTrip._id}`);
 
     // Return the active trip details in the format the app expects
     return res.json({
@@ -831,7 +831,7 @@ router.get('/active-trip/:userId', verifyToken, async (req, res) => {
     });
 
   } catch (err) {
-    console.error('❌ Error fetching active trip:', err.message);
+    console.error('[ERROR] Error fetching active trip:', err.message);
     res.status(500).json({
       success: false,
       message: 'Server error while fetching active trip',
@@ -860,14 +860,14 @@ router.get('/customer/check-duplicate', verifyToken, async (req, res) => {
       });
     }
 
-    console.log(`🔍 Checking roster duplicate for: ${employeeEmail} - ${fromDate} ${startTime} (${rosterType})`);
+    console.log(`[INFO] Checking roster duplicate for: ${employeeEmail} - ${fromDate} ${startTime} (${rosterType})`);
 
-    // ✅ FIX 1: Normalize inputs (lowercase email, trim whitespace)
+    // [OK] FIX 1: Normalize inputs (lowercase email, trim whitespace)
     const normalizedEmail = employeeEmail.toLowerCase().trim();
     const normalizedRosterType = rosterType.toLowerCase().trim();
     const normalizedStartTime = startTime.trim();
 
-    // ✅ FIX 2: Parse date and create a flexible date range (handles timezone issues)
+    // [OK] FIX 2: Parse date and create a flexible date range (handles timezone issues)
     const inputDate = new Date(fromDate);
 
     // Create start of day in UTC
@@ -886,12 +886,12 @@ router.get('/customer/check-duplicate', verifyToken, async (req, res) => {
       23, 59, 59, 999
     ));
 
-    console.log(`   📅 Date range: ${startOfDay.toISOString()} to ${endOfDay.toISOString()}`);
+    console.log(`   [INFO] Date range: ${startOfDay.toISOString()} to ${endOfDay.toISOString()}`);
 
-    // ✅ FIX 3: Comprehensive query that checks ALL possible field variations
+    // [OK] FIX 3: Comprehensive query that checks ALL possible field variations
     const query = {
       $and: [
-        // ✅ Employee email check (handles both field structures)
+        // [OK] Employee email check (handles both field structures)
         {
           $or: [
             { 'employeeDetails.email': normalizedEmail },
@@ -900,7 +900,7 @@ router.get('/customer/check-duplicate', verifyToken, async (req, res) => {
           ]
         },
 
-        // ✅ Date check (handles multiple field names and timezone variations)
+        // [OK] Date check (handles multiple field names and timezone variations)
         {
           $or: [
             // Check startDate field
@@ -927,7 +927,7 @@ router.get('/customer/check-duplicate', verifyToken, async (req, res) => {
           ]
         },
 
-        // ✅ Time check (exact match required)
+        // [OK] Time check (exact match required)
         {
           $or: [
             { 'startTime': normalizedStartTime },
@@ -936,10 +936,10 @@ router.get('/customer/check-duplicate', verifyToken, async (req, res) => {
           ]
         },
 
-        // ✅ Roster type check
+        // [OK] Roster type check
         { 'rosterType': normalizedRosterType },
 
-        // ✅ Not cancelled or rejected
+        // [OK] Not cancelled or rejected
         {
           'status': {
             $nin: ['cancelled', 'rejected', 'deleted']
@@ -952,7 +952,7 @@ router.get('/customer/check-duplicate', verifyToken, async (req, res) => {
     const existingRoster = await req.db.collection('rosters').findOne(query);
 
     if (existingRoster) {
-      console.log(`⚠️  DUPLICATE FOUND!`);
+      console.log(`[WARN]  DUPLICATE FOUND!`);
       console.log(`   Roster ID: ${existingRoster._id}`);
       console.log(`   Employee: ${normalizedEmail}`);
       console.log(`   Date: ${fromDate}`);
@@ -977,7 +977,7 @@ router.get('/customer/check-duplicate', verifyToken, async (req, res) => {
       });
     }
 
-    console.log(`✅ No duplicate found - roster can be created`);
+    console.log(`[OK] No duplicate found - roster can be created`);
     return res.json({
       success: true,
       exists: false,
@@ -985,7 +985,7 @@ router.get('/customer/check-duplicate', verifyToken, async (req, res) => {
     });
 
   } catch (err) {
-    console.error('❌ Error checking roster duplicate:', err.message);
+    console.error('[ERROR] Error checking roster duplicate:', err.message);
     console.error(err.stack);
 
     res.status(500).json({
@@ -996,7 +996,7 @@ router.get('/customer/check-duplicate', verifyToken, async (req, res) => {
   }
 });
 
-// ✅ ALSO ADD THIS HELPER METHOD to check multiple rosters at once (for batch processing)
+// [OK] ALSO ADD THIS HELPER METHOD to check multiple rosters at once (for batch processing)
 // @route   POST api/roster/customer/check-duplicates-batch
 // @desc    Check multiple rosters for duplicates in one request (more efficient)
 // @access  Private (Authenticated user)
@@ -1011,7 +1011,7 @@ router.post('/customer/check-duplicates-batch', verifyToken, async (req, res) =>
       });
     }
 
-    console.log(`🔍 Batch checking ${rosters.length} rosters for duplicates...`);
+    console.log(`[INFO] Batch checking ${rosters.length} rosters for duplicates...`);
 
     const results = [];
 
@@ -1087,7 +1087,7 @@ router.post('/customer/check-duplicates-batch', verifyToken, async (req, res) =>
     }
 
     const duplicatesCount = results.filter(r => r.exists).length;
-    console.log(`✅ Batch check complete: ${duplicatesCount} duplicates found out of ${rosters.length}`);
+    console.log(`[OK] Batch check complete: ${duplicatesCount} duplicates found out of ${rosters.length}`);
 
     return res.json({
       success: true,
@@ -1100,7 +1100,7 @@ router.post('/customer/check-duplicates-batch', verifyToken, async (req, res) =>
     });
 
   } catch (err) {
-    console.error('❌ Error in batch duplicate check:', err.message);
+    console.error('[ERROR] Error in batch duplicate check:', err.message);
     res.status(500).json({
       success: false,
       message: 'Server error while checking duplicates',
@@ -1114,14 +1114,14 @@ router.post('/customer/check-duplicates-batch', verifyToken, async (req, res) =>
 // @access  Private (Admin)
 // ============================================================================
 // FEATURES:
-// ✅ Groups by email domain, time, location, roster type, weekdays
-// ✅ Calculates distance from pickup → office (Haversine formula)
-// ✅ Sorts customers by distance (FARTHEST first, NEAREST last)
-// ✅ Assigns pickup sequence numbers (1, 2, 3...)
-// ✅ Calculates estimated pickup times (reverse from office time)
-// ✅ Calculates ready-by times (20 min before pickup)
-// ✅ Uses 24-hour time format ("07:25" not "07:25 AM")
-// ✅ All calculations happen BEFORE vehicle assignment
+// [OK] Groups by email domain, time, location, roster type, weekdays
+// [OK] Calculates distance from pickup → office (Haversine formula)
+// [OK] Sorts customers by distance (FARTHEST first, NEAREST last)
+// [OK] Assigns pickup sequence numbers (1, 2, 3...)
+// [OK] Calculates estimated pickup times (reverse from office time)
+// [OK] Calculates ready-by times (20 min before pickup)
+// [OK] Uses 24-hour time format ("07:25" not "07:25 AM")
+// [OK] All calculations happen BEFORE vehicle assignment
 // ============================================================================
 
 // @route   POST api/roster/admin/group-similar
@@ -1129,22 +1129,22 @@ router.post('/customer/check-duplicates-batch', verifyToken, async (req, res) =>
 // @access  Private (Admin)
 // ============================================================================
 // COMPLETE VERSION - ALL FEATURES INCLUDED
-// ✅ Groups by email domain, time, location, roster type, weekdays
-// ✅ Calculates distance from pickup → office (Haversine formula)
-// ✅ Sorts customers by distance (FARTHEST first, NEAREST last)
-// ✅ Assigns pickup sequence numbers (1, 2, 3...)
-// ✅ Calculates estimated pickup times (reverse from office time)
-// ✅ Calculates ready-by times (20 min before pickup)
-// ✅ Uses 24-hour time format ("07:25" not "07:25 AM")
-// ✅ All calculations happen BEFORE vehicle assignment
-// ✅ Stores distance data for later use
+// [OK] Groups by email domain, time, location, roster type, weekdays
+// [OK] Calculates distance from pickup → office (Haversine formula)
+// [OK] Sorts customers by distance (FARTHEST first, NEAREST last)
+// [OK] Assigns pickup sequence numbers (1, 2, 3...)
+// [OK] Calculates estimated pickup times (reverse from office time)
+// [OK] Calculates ready-by times (20 min before pickup)
+// [OK] Uses 24-hour time format ("07:25" not "07:25 AM")
+// [OK] All calculations happen BEFORE vehicle assignment
+// [OK] Stores distance data for later use
 // ============================================================================
 
 router.post('/admin/group-similar', verifyToken, async (req, res) => {
   try {
-    console.log('\n' + '🔍'.repeat(80));
+    console.log('\n' + '[INFO]'.repeat(80));
     console.log('ENHANCED SMART GROUPING - DISTANCE-BASED SEQUENCING WITH COMPLETE CALCULATIONS');
-    console.log('🔍'.repeat(80));
+    console.log('[INFO]'.repeat(80));
 
     // ========================================================================
     // STEP 1: Fetch pending rosters
@@ -1156,7 +1156,7 @@ router.post('/admin/group-similar', verifyToken, async (req, res) => {
       })
       .toArray();
 
-    console.log(`\n📋 Found ${pendingRosters.length} pending rosters`);
+    console.log(`\n[INFO] Found ${pendingRosters.length} pending rosters`);
 
     if (pendingRosters.length === 0) {
       return res.json({
@@ -1227,8 +1227,8 @@ router.post('/admin/group-similar', verifyToken, async (req, res) => {
       
       const totalMinutes = travelMinutes + bufferMinutes;
       
-      console.log(`      🕐 Time Calculation:`);
-      console.log(`         Travel time: ${travelMinutes} min (${cumulativeDistance.toFixed(1)} km × 3 min/km)`);
+      console.log(`      [TIMER] Time Calculation:`);
+      console.log(`         Travel time: ${travelMinutes} min (${cumulativeDistance.toFixed(1)} km  3 min/km)`);
       console.log(`         Buffer time: ${bufferMinutes} min`);
       console.log(`         Total: ${totalMinutes} min before office time`);
       
@@ -1240,7 +1240,7 @@ router.post('/admin/group-similar', verifyToken, async (req, res) => {
       const pickupHours = String(pickupDateTime.getHours()).padStart(2, '0');
       const pickupMinutes = String(pickupDateTime.getMinutes()).padStart(2, '0');
       
-      return `${pickupHours}:${pickupMinutes}`; // ✅ 24-hour format
+      return `${pickupHours}:${pickupMinutes}`; // [OK] 24-hour format
     }
 
     /**
@@ -1257,7 +1257,7 @@ router.post('/admin/group-similar', verifyToken, async (req, res) => {
       const readyHours = String(readyDateTime.getHours()).padStart(2, '0');
       const readyMinutes = String(readyDateTime.getMinutes()).padStart(2, '0');
       
-      return `${readyHours}:${readyMinutes}`; // ✅ 24-hour format
+      return `${readyHours}:${readyMinutes}`; // [OK] 24-hour format
     }
 
     /**
@@ -1276,7 +1276,7 @@ router.post('/admin/group-similar', verifyToken, async (req, res) => {
     // DEBUG: Print first roster structure
     // ========================================================================
     if (pendingRosters.length > 0) {
-      console.log('\n🔍 DEBUG - First Roster Structure:');
+      console.log('\n[INFO] DEBUG - First Roster Structure:');
       const firstRoster = pendingRosters[0];
       console.log('   customerEmail:', firstRoster.customerEmail);
       console.log('   customerName:', firstRoster.customerName);
@@ -1293,7 +1293,7 @@ router.post('/admin/group-similar', verifyToken, async (req, res) => {
     // ========================================================================
     // STEP 2: GROUP BY EMAIL DOMAIN, TIME, LOCATION, TYPE, WEEKDAYS
     // ========================================================================
-    console.log('\n📊 Creating groups by email domain...');
+    console.log('\n[INFO] Creating groups by email domain...');
 
     const groups = {};
 
@@ -1387,7 +1387,7 @@ router.post('/admin/group-similar', verifyToken, async (req, res) => {
         pickupAddress: roster.loginPickupAddress || 
                        roster.locations?.pickup?.address || 
                        'Pickup location',
-        // 🆕 Store full roster data for later use
+        // [INFO] Store full roster data for later use
         rosterData: {
           _id: roster._id,
           customerName: roster.customerName,
@@ -1405,18 +1405,18 @@ router.post('/admin/group-similar', verifyToken, async (req, res) => {
       groups[groupKey].employeeCount++;
     }
 
-    console.log(`\n✅ Created ${Object.keys(groups).length} raw groups`);
+    console.log(`\n[OK] Created ${Object.keys(groups).length} raw groups`);
 
     // ========================================================================
     // STEP 3: CALCULATE DISTANCES & ASSIGN SEQUENCES (FARTHEST → NEAREST)
     // ========================================================================
-    console.log('\n📏 CALCULATING DISTANCES & SEQUENCES...');
+    console.log('\n CALCULATING DISTANCES & SEQUENCES...');
     console.log('='.repeat(80));
 
     const validGroups = Object.values(groups).filter(g => g.employeeCount >= 1);
 
     for (const group of validGroups) {
-      console.log(`\n📊 Processing Group: ${group.emailDomain}`);
+      console.log(`\n[INFO] Processing Group: ${group.emailDomain}`);
       console.log(`   Location: ${group.location}`);
       console.log(`   Office Time: ${group.loginTime} (${format12Hour(group.loginTime)})`);
       console.log(`   Employees: ${group.employeeCount}`);
@@ -1428,7 +1428,7 @@ router.post('/admin/group-similar', verifyToken, async (req, res) => {
                         group.officeCoordinates?.lng;
 
       if (!officeLat || !officeLng) {
-        console.log(`   ⚠️  No office coordinates - skipping distance calculation`);
+        console.log(`   [WARN]  No office coordinates - skipping distance calculation`);
         
         // Assign default values without distance calculation
         group.employees.forEach((employee, index) => {
@@ -1448,11 +1448,11 @@ router.post('/admin/group-similar', verifyToken, async (req, res) => {
       // ====================================================================
       // CALCULATE DISTANCE FOR EACH EMPLOYEE
       // ====================================================================
-      console.log('\n   📍 Calculating distances from pickup to office:');
+      console.log('\n   [LOCATION] Calculating distances from pickup to office:');
       
       for (const employee of group.employees) {
         if (!employee.pickupCoordinates) {
-          console.log(`      ⚠️  ${employee.name} - No pickup coordinates`);
+          console.log(`      [WARN]  ${employee.name} - No pickup coordinates`);
           employee.distanceToOffice = 0;
           continue;
         }
@@ -1463,7 +1463,7 @@ router.post('/admin/group-similar', verifyToken, async (req, res) => {
         const distance = calculateDistance(pickupLat, pickupLng, officeLat, officeLng);
         employee.distanceToOffice = parseFloat(distance.toFixed(2));
 
-        console.log(`      📏 ${employee.name}: ${employee.distanceToOffice} km from office`);
+        console.log(`       ${employee.name}: ${employee.distanceToOffice} km from office`);
       }
 
       // ====================================================================
@@ -1471,7 +1471,7 @@ router.post('/admin/group-similar', verifyToken, async (req, res) => {
       // ====================================================================
       group.employees.sort((a, b) => (b.distanceToOffice || 0) - (a.distanceToOffice || 0));
 
-      console.log(`\n   🎯 PICKUP SEQUENCE (Farthest → Nearest):`);
+      console.log(`\n   [TARGET] PICKUP SEQUENCE (Farthest  Nearest):`);
       console.log('   ' + '='.repeat(76));
 
       // ====================================================================
@@ -1487,9 +1487,9 @@ router.post('/admin/group-similar', verifyToken, async (req, res) => {
         cumulativeDistance += distanceFromOffice;
         
         console.log(`\n   ${employee.sequence}. ${employee.name}`);
-        console.log(`      📍 Pickup Address: ${employee.pickupAddress}`);
-        console.log(`      📏 Distance to office: ${distanceFromOffice} km`);
-        console.log(`      📊 Cumulative distance: ${cumulativeDistance.toFixed(1)} km`);
+        console.log(`      [LOCATION] Pickup Address: ${employee.pickupAddress}`);
+        console.log(`       Distance to office: ${distanceFromOffice} km`);
+        console.log(`      [INFO] Cumulative distance: ${cumulativeDistance.toFixed(1)} km`);
         
         // Calculate pickup time (working backwards from office time)
         const pickupTime = calculatePickupTime(
@@ -1498,8 +1498,8 @@ router.post('/admin/group-similar', verifyToken, async (req, res) => {
           employee.sequence
         );
         
-        employee.estimatedPickupTime = pickupTime; // ✅ 24-hour format
-        employee.readyByTime = calculateReadyByTime(pickupTime); // ✅ 20 min before
+        employee.estimatedPickupTime = pickupTime; // [OK] 24-hour format
+        employee.readyByTime = calculateReadyByTime(pickupTime); // [OK] 20 min before
         
         // Convert to 12-hour format for notifications
         employee.pickupTime12Hour = format12Hour(pickupTime);
@@ -1526,11 +1526,11 @@ router.post('/admin/group-similar', verifyToken, async (req, res) => {
           }
         }
 
-        console.log(`      ⏰ Pickup Time: ${pickupTime} (${employee.pickupTime12Hour})`);
-        console.log(`      🏁 Ready By: ${employee.readyByTime} (${employee.readyByTime12Hour})`);
-        console.log(`      ⏱️  Travel Time: ~${employee.estimatedTravelTime} mins`);
+        console.log(`      [TIMER] Pickup Time: ${pickupTime} (${employee.pickupTime12Hour})`);
+        console.log(`      [DONE] Ready By: ${employee.readyByTime} (${employee.readyByTime12Hour})`);
+        console.log(`        Travel Time: ~${employee.estimatedTravelTime} mins`);
         if (index > 0) {
-          console.log(`      🔗 Distance from previous: ${employee.distanceFromPrevious} km`);
+          console.log(`      [LINK] Distance from previous: ${employee.distanceFromPrevious} km`);
         }
       });
 
@@ -1551,7 +1551,7 @@ router.post('/admin/group-similar', verifyToken, async (req, res) => {
       group.lastPickupTime = group.employees[group.employeeCount - 1]?.estimatedPickupTime;
       group.lastPickupTime12Hour = group.employees[group.employeeCount - 1]?.pickupTime12Hour;
       
-      console.log(`\n   📊 ROUTE SUMMARY:`);
+      console.log(`\n   [INFO] ROUTE SUMMARY:`);
       console.log(`      Total Distance: ${group.totalRouteDistance} km`);
       console.log(`      Total Time: ${group.totalRouteTime} mins`);
       console.log(`      First Pickup: ${group.firstPickupTime} (${group.firstPickupTime12Hour})`);
@@ -1568,11 +1568,11 @@ router.post('/admin/group-similar', verifyToken, async (req, res) => {
     // STEP 5: DISPLAY SUMMARY
     // ========================================================================
     console.log('\n' + '='.repeat(80));
-    console.log('📊 GROUPING SUMMARY');
+    console.log('[INFO] GROUPING SUMMARY');
     console.log('='.repeat(80));
     
     if (validGroups.length > 0) {
-      console.log('\n✅ VALID GROUPS FOUND:\n');
+      console.log('\n[OK] VALID GROUPS FOUND:\n');
       validGroups.forEach((group, idx) => {
         console.log(`   Group ${idx + 1}:`);
         console.log(`   - Domain: ${group.emailDomain}`);
@@ -1585,11 +1585,11 @@ router.post('/admin/group-similar', verifyToken, async (req, res) => {
         console.log('');
       });
     } else {
-      console.log('\n⚠️  No valid groups found');
+      console.log('\n[WARN]  No valid groups found');
     }
 
     console.log('='.repeat(80));
-    console.log('✅ GROUPING COMPLETE WITH FULL ROUTE CALCULATIONS');
+    console.log('[OK] GROUPING COMPLETE WITH FULL ROUTE CALCULATIONS');
     console.log('='.repeat(80) + '\n');
 
     // ========================================================================
@@ -1603,10 +1603,10 @@ router.post('/admin/group-similar', verifyToken, async (req, res) => {
           groupId: group.groupKey,
           emailDomain: group.emailDomain, // @wipro.com
           organization: group.emailDomain.replace('@', ''), // wipro.com
-          loginTime: group.loginTime, // ✅ 24-hour format
-          logoutTime: group.logoutTime, // ✅ 24-hour format
-          loginTime12Hour: format12Hour(group.loginTime), // 🆕 12-hour format
-          logoutTime12Hour: format12Hour(group.logoutTime), // 🆕 12-hour format
+          loginTime: group.loginTime, // [OK] 24-hour format
+          logoutTime: group.logoutTime, // [OK] 24-hour format
+          loginTime12Hour: format12Hour(group.loginTime), // [INFO] 12-hour format
+          logoutTime12Hour: format12Hour(group.logoutTime), // [INFO] 12-hour format
           loginLocation: group.location,
           logoutLocation: group.location,
           rosterType: group.rosterType,
@@ -1614,7 +1614,7 @@ router.post('/admin/group-similar', verifyToken, async (req, res) => {
           employeeCount: group.employeeCount,
           rosterIds: group.rosterIds,
           officeCoordinates: group.officeCoordinates,
-          // 🆕 Route Metrics
+          // [INFO] Route Metrics
           totalRouteDistance: group.totalRouteDistance,
           totalRouteTime: group.totalRouteTime,
           firstPickupTime: group.firstPickupTime,
@@ -1628,23 +1628,23 @@ router.post('/admin/group-similar', verifyToken, async (req, res) => {
             rosterId: emp.rosterId,
             pickupAddress: emp.pickupAddress,
             pickupCoordinates: emp.pickupCoordinates,
-            // 🆕 Distance-based fields (24-hour format)
+            // [INFO] Distance-based fields (24-hour format)
             sequence: emp.sequence, // 1 = farthest, last = nearest
             distanceToOffice: emp.distanceToOffice, // km
             distanceFromPrevious: emp.distanceFromPrevious, // km (for route optimization)
             estimatedPickupTime: emp.estimatedPickupTime, // "07:25" (24-hour)
             readyByTime: emp.readyByTime, // "07:05" (24-hour)
             estimatedTravelTime: emp.estimatedTravelTime, // minutes
-            // 🆕 12-hour format for notifications
+            // [INFO] 12-hour format for notifications
             pickupTime12Hour: emp.pickupTime12Hour, // "7:25 AM"
             readyByTime12Hour: emp.readyByTime12Hour, // "7:05 AM"
-            // 🆕 Full roster data for later use
+            // [INFO] Full roster data for later use
             rosterData: emp.rosterData
           }))
         })),
         totalRosters: pendingRosters.length,
         totalGroups: validGroups.length,
-        // 🆕 Metadata
+        // [INFO] Metadata
         calculationMethod: 'Haversine',
         timeFormat: '24-hour',
         readyBufferMinutes: 20,
@@ -1655,12 +1655,12 @@ router.post('/admin/group-similar', verifyToken, async (req, res) => {
     });
 
   } catch (error) {
-    console.error('\n' + '❌'.repeat(40));
+    console.error('\n' + '[ERROR]'.repeat(40));
     console.error('GROUPING FAILED');
-    console.error('❌'.repeat(40));
+    console.error('[ERROR]'.repeat(40));
     console.error('Error:', error);
     console.error('Stack:', error.stack);
-    console.error('❌'.repeat(40) + '\n');
+    console.error('[ERROR]'.repeat(40) + '\n');
 
     res.status(500).json({
       success: false,
@@ -1678,7 +1678,7 @@ router.get('/admin/assigned-trips', verifyToken, async (req, res) => {
   try {
     const userId = req.user.userId;
     console.log('\n' + '='.repeat(80));
-    console.log('📋 FETCHING ASSIGNED TRIPS FOR CLIENT MANAGEMENT');
+    console.log('[INFO] FETCHING ASSIGNED TRIPS FOR CLIENT MANAGEMENT');
     console.log('='.repeat(80));
 
     const { status, company, startDate, endDate } = req.query;
@@ -1687,8 +1687,8 @@ router.get('/admin/assigned-trips', verifyToken, async (req, res) => {
     const adminUser = await req.db.collection('users').findOne({ firebaseUid: userId });
     const adminOrganization = adminUser?.companyName || adminUser?.organizationName || '';
 
-    console.log(`👤 Admin: ${adminUser?.name || 'Unknown'}`);
-    console.log(`🏢 Organization: ${adminOrganization || 'Not set'}`);
+    console.log(`[USER] Admin: ${adminUser?.name || 'Unknown'}`);
+    console.log(` Organization: ${adminOrganization || 'Not set'}`);
 
     // Build query - only get assigned/ongoing/completed/cancelled trips
     const query = {
@@ -1725,7 +1725,7 @@ router.get('/admin/assigned-trips', verifyToken, async (req, res) => {
       query.assignedAt = dateFilter;
     }
 
-    console.log('📋 Query:', JSON.stringify(query, null, 2));
+    console.log('[INFO] Query:', JSON.stringify(query, null, 2));
 
     // Fetch trips
     const trips = await req.db.collection('rosters')
@@ -1733,11 +1733,11 @@ router.get('/admin/assigned-trips', verifyToken, async (req, res) => {
       .sort({ assignedAt: -1 })
       .toArray();
 
-    console.log(`📊 Found ${trips.length} trips`);
+    console.log(`[INFO] Found ${trips.length} trips`);
 
     // Get unique driver IDs to fetch driver details
     const driverIds = [...new Set(trips.map(t => t.driverId).filter(Boolean))];
-    console.log(`👤 Fetching details for ${driverIds.length} unique drivers...`);
+    console.log(`[USER] Fetching details for ${driverIds.length} unique drivers...`);
 
     // Fetch driver details from drivers collection
     const driversMap = {};
@@ -1758,7 +1758,7 @@ router.get('/admin/assigned-trips', verifyToken, async (req, res) => {
           phone: phone
         };
       });
-      console.log(`✅ Loaded ${drivers.length} driver details`);
+      console.log(`[OK] Loaded ${drivers.length} driver details`);
     }
 
     // Transform data
@@ -1772,7 +1772,7 @@ router.get('/admin/assigned-trips', verifyToken, async (req, res) => {
         companyName = companyName.charAt(0).toUpperCase() + companyName.slice(1);
       }
 
-      // ✅ FIX: Get driver info from driversMap or fallback to trip fields
+      // [OK] FIX: Get driver info from driversMap or fallback to trip fields
       const driverId = trip.driverId || trip.assignedDriverId || trip.assignedDriver?.driverId || '';
       const driverInfo = driversMap[driverId] || {};
       const driverName = driverInfo.name || trip.driverName || trip.assignedDriverName || trip.assignedDriver?.name || '';
@@ -1781,15 +1781,15 @@ router.get('/admin/assigned-trips', verifyToken, async (req, res) => {
       const vehicleNumber = trip.vehicleNumber || trip.assignedVehicleReg || trip.assignedVehicle?.registrationNumber || '';
       const vehicleId = trip.vehicleId || trip.assignedVehicleId || trip.assignedVehicle?.vehicleId || '';
 
-      // ✅ Extract pickup and drop locations
+      // [OK] Extract pickup and drop locations
       const pickupLocation = trip.pickupLocation || trip.homeLocation || trip.currentAddress || trip.employeeDetails?.address || '';
       const dropLocation = trip.dropLocation || trip.dropoffLocation || trip.officeLocation || '';
 
-      // ✅ Extract pickup and drop times
+      // [OK] Extract pickup and drop times
       const pickupTime = trip.pickupTime || trip.startTime || trip.fromTime || '';
       const dropTime = trip.dropTime || trip.dropoffTime || trip.endTime || trip.toTime || '';
 
-      // ✅ Extract distance data from stored distanceData field
+      // [OK] Extract distance data from stored distanceData field
       const distanceData = trip.distanceData || {};
       const totalDistanceKm = distanceData.totalDistanceKm || trip.distance || 0;
       const totalDurationMin = distanceData.totalDurationMin || trip.estimatedDuration || 0;
@@ -1826,7 +1826,7 @@ router.get('/admin/assigned-trips', verifyToken, async (req, res) => {
         completedAt: trip.completedAt,
         cancelledAt: trip.cancelledAt,
         createdAt: trip.createdAt,
-        // ✅ ADD DISTANCE DATA TO API RESPONSE
+        // [OK] ADD DISTANCE DATA TO API RESPONSE
         distance: totalDistanceKm,
         totalDistanceKm: totalDistanceKm,
         totalDurationMin: totalDurationMin,
@@ -1845,7 +1845,7 @@ router.get('/admin/assigned-trips', verifyToken, async (req, res) => {
       );
     }
 
-    console.log(`✅ Returning ${filteredTrips.length} trips`);
+    console.log(`[OK] Returning ${filteredTrips.length} trips`);
     console.log('='.repeat(80) + '\n');
 
     res.json({
@@ -1856,7 +1856,7 @@ router.get('/admin/assigned-trips', verifyToken, async (req, res) => {
     });
 
   } catch (error) {
-    console.error('❌ Error fetching assigned trips:', error);
+    console.error('[ERROR] Error fetching assigned trips:', error);
     res.status(500).json({
       success: false,
       message: 'Failed to fetch assigned trips',
@@ -1880,11 +1880,11 @@ router.get('/admin/assigned-trips', verifyToken, async (req, res) => {
 router.get('/admin/pending', verifyToken, async (req, res) => {
   try {
     const userId = req.user.userId;
-    console.log('🔍 Fetching pending rosters for admin...');
+    console.log('[INFO] Fetching pending rosters for admin...');
 
     const { officeLocation, rosterType } = req.query;
 
-    // ✅ Get admin's email domain for filtering
+    // [OK] Get admin's email domain for filtering
     let adminEmailDomain = null;
 
     try {
@@ -1893,15 +1893,15 @@ router.get('/admin/pending', verifyToken, async (req, res) => {
         const emailParts = adminUser.email.split('@');
         if (emailParts.length === 2) {
           adminEmailDomain = '@' + emailParts[1].toLowerCase();
-          console.log(`🔒 Admin email domain: ${adminEmailDomain}`);
+          console.log(`[INFO] Admin email domain: ${adminEmailDomain}`);
         }
       }
     } catch (userError) {
       console.warn('Could not fetch admin user:', userError.message);
     }
 
-    // ✅ Build base query - ONLY truly pending rosters
-    // ✅ ENHANCED: Check for null, missing, empty string, and 'null' string
+    // [OK] Build base query - ONLY truly pending rosters
+    // [OK] ENHANCED: Check for null, missing, empty string, and 'null' string
     const query = {
       $and: [
         // 1. Status must be pending
@@ -1968,9 +1968,9 @@ router.get('/admin/pending', verifyToken, async (req, res) => {
       query.rosterType = rosterType;
     }
 
-    console.log('📋 Fetching pending rosters from DB...');
+    console.log('[INFO] Fetching pending rosters from DB...');
 
-    // ✅ CRITICAL FIX: Project ALL required fields
+    // [OK] CRITICAL FIX: Project ALL required fields
     const allRosters = await req.db.collection('rosters')
       .find(query)
       .project({
@@ -1984,7 +1984,7 @@ router.get('/admin/pending', verifyToken, async (req, res) => {
         status: 1,
         rosterType: 1,
 
-        // ✅ EMPLOYEE DETAILS
+        // [OK] EMPLOYEE DETAILS
         employeeId: 1,
         department: 1,
         companyName: 1,
@@ -1994,7 +1994,7 @@ router.get('/admin/pending', verifyToken, async (req, res) => {
         employeeDetails: 1,
         employeeData: 1,
 
-        // ✅ DATE FIELDS (all variations)
+        // [OK] DATE FIELDS (all variations)
         startDate: 1,
         endDate: 1,
         fromDate: 1,
@@ -2002,7 +2002,7 @@ router.get('/admin/pending', verifyToken, async (req, res) => {
         'dateRange.from': 1,
         'dateRange.to': 1,
 
-        // ✅ TIME FIELDS (all variations)
+        // [OK] TIME FIELDS (all variations)
         startTime: 1,
         endTime: 1,
         fromTime: 1,
@@ -2010,21 +2010,21 @@ router.get('/admin/pending', verifyToken, async (req, res) => {
         'timeRange.from': 1,
         'timeRange.to': 1,
 
-        // ✅ LOCATION FIELDS
+        // [OK] LOCATION FIELDS
         officeLocation: 1,
         officeLocationCoordinates: 1,
 
-        // ✅ PICKUP LOCATION (all variations)
+        // [OK] PICKUP LOCATION (all variations)
         loginPickupAddress: 1,
         loginPickupLocation: 1,
         pickupLocation: 1,
 
-        // ✅ DROP LOCATION (all variations)
+        // [OK] DROP LOCATION (all variations)
         logoutDropAddress: 1,
         logoutDropLocation: 1,
         dropLocation: 1,
 
-        // ✅ COMPLETE LOCATIONS OBJECT (instead of nested projections)
+        // [OK] COMPLETE LOCATIONS OBJECT (instead of nested projections)
         locations: 1,
 
         // Other fields
@@ -2039,9 +2039,9 @@ router.get('/admin/pending', verifyToken, async (req, res) => {
       .sort({ createdAt: -1 })
       .toArray();
 
-    console.log(`📊 Found ${allRosters.length} total pending rosters`);
+    console.log(`[INFO] Found ${allRosters.length} total pending rosters`);
 
-    // ✅ Filter by email domain
+    // [OK] Filter by email domain
     let rosters = allRosters;
 
     if (adminEmailDomain && adminEmailDomain !== '@abrafleet.com') {
@@ -2053,7 +2053,7 @@ router.get('/admin/pending', verifyToken, async (req, res) => {
           '';
 
         if (!customerEmail) {
-          console.log(`⚠️  Roster ${roster._id} has no email, excluding`);
+          console.log(`[WARN]  Roster ${roster._id} has no email, excluding`);
           return false;
         }
 
@@ -2061,15 +2061,15 @@ router.get('/admin/pending', verifyToken, async (req, res) => {
         return customerDomain === adminEmailDomain;
       });
 
-      console.log(`🔒 After email domain filter (${adminEmailDomain}): ${rosters.length} rosters`);
+      console.log(`[INFO] After email domain filter (${adminEmailDomain}): ${rosters.length} rosters`);
     } else if (adminEmailDomain === '@abrafleet.com') {
       // Abrafleet admin → see ALL rosters
-      console.log(`👑 Abrafleet admin - showing all ${rosters.length} rosters`);
+      console.log(`[ADMIN] Abrafleet admin - showing all ${rosters.length} rosters`);
     }
 
-    // ✅ DEBUG: Log first roster to verify fields are present
+    // [OK] DEBUG: Log first roster to verify fields are present
     if (rosters.length > 0) {
-      console.log('\n🔍 DEBUG - First roster structure:');
+      console.log('\n[INFO] DEBUG - First roster structure:');
       const firstRoster = rosters[0];
       console.log('   _id:', firstRoster._id);
       console.log('   customerName:', firstRoster.customerName);
@@ -2089,7 +2089,7 @@ router.get('/admin/pending', verifyToken, async (req, res) => {
       console.log('');
     }
 
-    console.log(`✅ Returning ${rosters.length} rosters to frontend`);
+    console.log(`[OK] Returning ${rosters.length} rosters to frontend`);
 
     res.json({
       success: true,
@@ -2098,7 +2098,7 @@ router.get('/admin/pending', verifyToken, async (req, res) => {
     });
 
   } catch (err) {
-    console.error('❌ Error fetching pending rosters:', err.message);
+    console.error('[ERROR] Error fetching pending rosters:', err.message);
     res.status(500).json({
       success: false,
       message: 'Failed to fetch pending rosters',
@@ -2114,7 +2114,7 @@ router.get('/admin/pending', verifyToken, async (req, res) => {
 // @access  Private (Admin)
 router.get('/admin/stats', verifyToken, async (req, res) => {
   try {
-    console.log('📊 Fetching roster statistics...');
+    console.log('[INFO] Fetching roster statistics...');
 
     const stats = await req.db.collection('rosters').aggregate([
       {
@@ -2171,7 +2171,7 @@ router.get('/admin/stats', verifyToken, async (req, res) => {
       total
     };
 
-    console.log('📈 Stats:', result);
+    console.log(' Stats:', result);
 
     res.json({
       success: true,
@@ -2179,7 +2179,7 @@ router.get('/admin/stats', verifyToken, async (req, res) => {
     });
 
   } catch (err) {
-    console.error('❌ Error fetching roster stats:', err.message);
+    console.error('[ERROR] Error fetching roster stats:', err.message);
     res.status(500).json({
       success: false,
       message: 'Failed to fetch roster statistics',
@@ -2235,7 +2235,7 @@ router.post('/customer/leave-request', verifyToken, async (req, res) => {
 
     // If user doesn't exist in MongoDB, create them
     if (!userDoc) {
-      console.log('⚠️  User not found in MongoDB, creating user record...');
+      console.log('[WARN]  User not found in MongoDB, creating user record...');
 
       // Extract organization from email domain
       const emailDomain = customerEmail.split('@')[1];
@@ -2264,7 +2264,7 @@ router.post('/customer/leave-request', verifyToken, async (req, res) => {
       };
 
       await req.db.collection('users').insertOne(newUser);
-      console.log(`✅ Created user in MongoDB: ${customerEmail} - ${orgName}`);
+      console.log(`[OK] Created user in MongoDB: ${customerEmail} - ${orgName}`);
 
       userDoc = newUser;
     }
@@ -2284,8 +2284,8 @@ router.post('/customer/leave-request', verifyToken, async (req, res) => {
     }
 
     // Find all scheduled trips for the customer during the leave period
-    // ✅ FIXED: Use correct field names (startDate/endDate instead of fromDate/toDate)
-    // ✅ FIXED: Make organization filter optional since it may not be stored in rosters
+    // [OK] FIXED: Use correct field names (startDate/endDate instead of fromDate/toDate)
+    // [OK] FIXED: Make organization filter optional since it may not be stored in rosters
     const affectedTrips = await req.db.collection('rosters').find({
       $and: [
         {
@@ -2322,7 +2322,7 @@ router.post('/customer/leave-request', verifyToken, async (req, res) => {
       ]
     }).toArray();
 
-    console.log(`📅 Found ${affectedTrips.length} affected trips for leave request`);
+    console.log(`[INFO] Found ${affectedTrips.length} affected trips for leave request`);
 
     // Create leave request document
     const leaveRequest = {
@@ -2359,15 +2359,15 @@ router.post('/customer/leave-request', verifyToken, async (req, res) => {
 
     // Send notification to client (organization admin) for approval
     try {
-      // ✅ FIXED: Match by email domain instead of organization name
+      // [OK] FIXED: Match by email domain instead of organization name
       const customerDomain = customerEmail.split('@')[1];
-      console.log(`📤 Sending leave request notification to clients with domain: @${customerDomain}`);
+      console.log(` Sending leave request notification to clients with domain: @${customerDomain}`);
       console.log(`   Customer email: ${customerEmail}`);
       console.log(`   Customer organization: ${organizationName}`);
 
       const clientUIDs = [];
 
-      // ✅ Method 1: Check MongoDB for client users with matching email domain
+      // [OK] Method 1: Check MongoDB for client users with matching email domain
       const clientUsersFromDB = await req.db.collection('users').find({
         role: 'client'
       }).toArray();
@@ -2378,14 +2378,14 @@ router.post('/customer/leave-request', verifyToken, async (req, res) => {
           // Match by email domain (case-insensitive)
           if (clientDomain.toLowerCase() === customerDomain.toLowerCase()) {
             clientUIDs.push(user.firebaseUid);
-            console.log(`📊 Found client in MongoDB: ${user.email} (${user.firebaseUid}) - Domain match: @${clientDomain}`);
+            console.log(`[INFO] Found client in MongoDB: ${user.email} (${user.firebaseUid}) - Domain match: @${clientDomain}`);
           }
         }
       });
 
-      console.log(`📊 Found ${clientUIDs.length} client user(s) in MongoDB with domain @${customerDomain}`);
+      console.log(`[INFO] Found ${clientUIDs.length} client user(s) in MongoDB with domain @${customerDomain}`);
 
-      // ✅ Method 2: Check Firestore for client users with matching email domain
+      // [OK] Method 2: Check Firestore for client users with matching email domain
       try {
         const firestore = admin.firestore();
         const usersSnapshot = await firestore.collection('users')
@@ -2401,19 +2401,19 @@ router.post('/customer/leave-request', verifyToken, async (req, res) => {
             // Match by email domain (case-insensitive)
             if (clientDomain.toLowerCase() === customerDomain.toLowerCase() && !clientUIDs.includes(uid)) {
               clientUIDs.push(uid);
-              console.log(`📊 Found additional client in Firestore: ${userData.email} (${uid}) - Domain match: @${clientDomain}`);
+              console.log(`[INFO] Found additional client in Firestore: ${userData.email} (${uid}) - Domain match: @${clientDomain}`);
             }
           }
         });
       } catch (firestoreError) {
-        console.warn('⚠️  Could not check Firestore for client users:', firestoreError.message);
+        console.warn('[WARN]  Could not check Firestore for client users:', firestoreError.message);
       }
 
-      console.log(`📊 Total unique client UIDs with domain @${customerDomain}: ${clientUIDs.length}`);
+      console.log(`[INFO] Total unique client UIDs with domain @${customerDomain}: ${clientUIDs.length}`);
 
       // Send notification to all client users
       for (const clientUID of clientUIDs) {
-        console.log(`✅ Sending to client UID: ${clientUID}`);
+        console.log(`[OK] Sending to client UID: ${clientUID}`);
 
         // Try using createNotification first
         try {
@@ -2436,9 +2436,9 @@ router.post('/customer/leave-request', verifyToken, async (req, res) => {
               affectedTripsCount: affectedTrips.length
             }
           });
-          console.log(`✅ Notification sent to client via createNotification`);
+          console.log(`[OK] Notification sent to client via createNotification`);
         } catch (createError) {
-          console.warn(`⚠️  createNotification failed, sending directly to Firebase RTDB:`, createError.message);
+          console.warn(`[WARN]  createNotification failed, sending directly to Firebase RTDB:`, createError.message);
 
           // Fallback: Send directly to Firebase RTDB
           const notificationId = Date.now().toString();
@@ -2468,11 +2468,11 @@ router.post('/customer/leave-request', verifyToken, async (req, res) => {
 
           const firebasePath = `notifications/${clientUID}/${notificationId}`;
           await admin.database().ref(firebasePath).set(notification);
-          console.log(`✅ Notification sent directly to Firebase RTDB: ${firebasePath}`);
+          console.log(`[OK] Notification sent directly to Firebase RTDB: ${firebasePath}`);
         }
       }
     } catch (notificationError) {
-      console.error('❌ Failed to send leave request notification:', notificationError);
+      console.error('[ERROR] Failed to send leave request notification:', notificationError);
     }
 
     res.status(201).json({
@@ -2496,7 +2496,7 @@ router.post('/customer/leave-request', verifyToken, async (req, res) => {
     });
 
   } catch (err) {
-    console.error('❌ Error creating leave request:', err.message);
+    console.error('[ERROR] Error creating leave request:', err.message);
     res.status(500).json({
       success: false,
       message: 'Failed to submit leave request',
@@ -2547,7 +2547,7 @@ router.get('/customer/leave-requests', verifyToken, async (req, res) => {
     });
 
   } catch (err) {
-    console.error('❌ Error fetching leave requests:', err.message);
+    console.error('[ERROR] Error fetching leave requests:', err.message);
     res.status(500).json({
       success: false,
       message: 'Failed to fetch leave requests',
@@ -2616,7 +2616,7 @@ router.delete('/customer/leave-request/:id', verifyToken, async (req, res) => {
     });
 
   } catch (err) {
-    console.error('❌ Error cancelling leave request:', err.message);
+    console.error('[ERROR] Error cancelling leave request:', err.message);
     res.status(500).json({
       success: false,
       message: 'Failed to cancel leave request',
@@ -2635,9 +2635,9 @@ router.get('/admin/leave-requests', verifyToken, async (req, res) => {
     const userId = req.user.userId;
     const { status, organizationName } = req.query;
 
-    console.log('🏢 Fetching leave requests for organization review...');
+    console.log(' Fetching leave requests for organization review...');
 
-    // ✅ ORGANIZATION FILTER: Get admin's organization to filter requests
+    // [OK] ORGANIZATION FILTER: Get admin's organization to filter requests
     let adminOrganization = organizationName;
 
     if (!adminOrganization) {
@@ -2655,15 +2655,15 @@ router.get('/admin/leave-requests', verifyToken, async (req, res) => {
       query.status = status;
     }
 
-    // ✅ CRITICAL: Only show leave requests from the admin's organization
+    // [OK] CRITICAL: Only show leave requests from the admin's organization
     if (adminOrganization) {
       query.organizationName = adminOrganization;
-      console.log(`🔒 Filtering leave requests for organization: ${adminOrganization}`);
+      console.log(`[INFO] Filtering leave requests for organization: ${adminOrganization}`);
     } else {
-      console.log('⚠️  No organization found for admin, showing all requests');
+      console.log('[WARN]  No organization found for admin, showing all requests');
     }
 
-    console.log('📋 Leave requests query:', JSON.stringify(query, null, 2));
+    console.log('[INFO] Leave requests query:', JSON.stringify(query, null, 2));
 
     // Fetch leave requests from database
     const leaveRequests = await req.db.collection('leave_requests')
@@ -2671,7 +2671,7 @@ router.get('/admin/leave-requests', verifyToken, async (req, res) => {
       .sort({ createdAt: -1 })
       .toArray();
 
-    console.log(`📊 Found ${leaveRequests.length} leave requests`);
+    console.log(`[INFO] Found ${leaveRequests.length} leave requests`);
 
     // Transform data for frontend with affected trip details
     const transformedRequests = await Promise.all(leaveRequests.map(async (request) => {
@@ -2718,7 +2718,7 @@ router.get('/admin/leave-requests', verifyToken, async (req, res) => {
       };
     }));
 
-    console.log(`✅ Returning ${transformedRequests.length} transformed leave requests`);
+    console.log(`[OK] Returning ${transformedRequests.length} transformed leave requests`);
 
     res.json({
       success: true,
@@ -2727,7 +2727,7 @@ router.get('/admin/leave-requests', verifyToken, async (req, res) => {
     });
 
   } catch (err) {
-    console.error('❌ Error fetching leave requests for organization:', err.message);
+    console.error('[ERROR] Error fetching leave requests for organization:', err.message);
     res.status(500).json({
       success: false,
       message: 'Failed to fetch leave requests',
@@ -2744,7 +2744,7 @@ router.get('/admin/approved-leave-requests', verifyToken, async (req, res) => {
     const userId = req.user.userId;
     const { organizationName } = req.query;
 
-    console.log('✅ Fetching approved leave requests...');
+    console.log('[OK] Fetching approved leave requests...');
 
     // Get admin's organization to filter requests
     let adminOrganization = organizationName;
@@ -2764,10 +2764,10 @@ router.get('/admin/approved-leave-requests', verifyToken, async (req, res) => {
     // Filter by organization
     if (adminOrganization) {
       query.organizationName = adminOrganization;
-      console.log(`🔒 Filtering approved leave requests for organization: ${adminOrganization}`);
+      console.log(`[INFO] Filtering approved leave requests for organization: ${adminOrganization}`);
     }
 
-    console.log('📋 Approved leave requests query:', JSON.stringify(query, null, 2));
+    console.log('[INFO] Approved leave requests query:', JSON.stringify(query, null, 2));
 
     // Fetch approved leave requests
     const leaveRequests = await req.db.collection('leave_requests')
@@ -2775,7 +2775,7 @@ router.get('/admin/approved-leave-requests', verifyToken, async (req, res) => {
       .sort({ approvedAt: -1, createdAt: -1 })
       .toArray();
 
-    console.log(`📊 Found ${leaveRequests.length} approved leave requests`);
+    console.log(`[INFO] Found ${leaveRequests.length} approved leave requests`);
 
     // Transform data for frontend
     const transformedRequests = await Promise.all(leaveRequests.map(async (request) => {
@@ -2820,7 +2820,7 @@ router.get('/admin/approved-leave-requests', verifyToken, async (req, res) => {
     });
 
   } catch (err) {
-    console.error('❌ Error fetching approved leave requests:', err.message);
+    console.error('[ERROR] Error fetching approved leave requests:', err.message);
     res.status(500).json({
       success: false,
       message: 'Failed to fetch approved leave requests',
@@ -2838,7 +2838,7 @@ router.put('/admin/leave-request/:id/approve', verifyToken, async (req, res) => 
     const userId = req.user.userId;
     const { note } = req.body;
 
-    console.log(`✅ Approving leave request: ${leaveRequestId}`);
+    console.log(`[OK] Approving leave request: ${leaveRequestId}`);
 
     // Get admin/organization details
     let adminName = 'Unknown Admin';
@@ -2906,7 +2906,7 @@ router.put('/admin/leave-request/:id/approve', verifyToken, async (req, res) => 
 
     // Send notification to customer
     try {
-      console.log(`📤 Sending leave approval notification to customer: ${leaveRequest.customerId}`);
+      console.log(` Sending leave approval notification to customer: ${leaveRequest.customerId}`);
 
       // Try using createNotification first
       try {
@@ -2925,9 +2925,9 @@ router.put('/admin/leave-request/:id/approve', verifyToken, async (req, res) => 
             approvalNote: note || ''
           }
         });
-        console.log('✅ Notification sent via createNotification');
+        console.log('[OK] Notification sent via createNotification');
       } catch (createError) {
-        console.warn('⚠️  createNotification failed, sending directly to Firebase RTDB:', createError.message);
+        console.warn('[WARN]  createNotification failed, sending directly to Firebase RTDB:', createError.message);
 
         // Fallback: Send directly to Firebase RTDB
         const notificationId = Date.now().toString();
@@ -2953,10 +2953,10 @@ router.put('/admin/leave-request/:id/approve', verifyToken, async (req, res) => 
 
         const firebasePath = `notifications/${leaveRequest.customerId}/${notificationId}`;
         await admin.database().ref(firebasePath).set(notification);
-        console.log(`✅ Notification sent directly to Firebase RTDB: ${firebasePath}`);
+        console.log(`[OK] Notification sent directly to Firebase RTDB: ${firebasePath}`);
       }
     } catch (notificationError) {
-      console.error('❌ Failed to send approval notification:', notificationError);
+      console.error('[ERROR] Failed to send approval notification:', notificationError);
     }
 
     // Send notification to ALL fleet administrators
@@ -2966,12 +2966,12 @@ router.put('/admin/leave-request/:id/approve', verifyToken, async (req, res) => 
         role: 'admin'
       }).toArray();
 
-      console.log(`📢 Sending leave approval notification to ${adminUsers.length} admin(s)`);
+      console.log(` Sending leave approval notification to ${adminUsers.length} admin(s)`);
 
       // Send notification to each admin
       for (const adminUser of adminUsers) {
         try {
-          console.log(`📤 Sending notification to admin: ${adminUser.email || adminUser.firebaseUid}`);
+          console.log(` Sending notification to admin: ${adminUser.email || adminUser.firebaseUid}`);
 
           // Try using createNotification first
           try {
@@ -2992,9 +2992,9 @@ router.put('/admin/leave-request/:id/approve', verifyToken, async (req, res) => 
                 approvedBy: adminName
               }
             });
-            console.log(`✅ Notification sent to admin via createNotification: ${adminUser.email}`);
+            console.log(`[OK] Notification sent to admin via createNotification: ${adminUser.email}`);
           } catch (createError) {
-            console.warn(`⚠️  createNotification failed for admin, sending directly to Firebase RTDB:`, createError.message);
+            console.warn(`[WARN]  createNotification failed for admin, sending directly to Firebase RTDB:`, createError.message);
 
             // Fallback: Send directly to Firebase RTDB
             const notificationId = Date.now().toString() + '_' + Math.random().toString(36).substr(2, 9);
@@ -3022,18 +3022,18 @@ router.put('/admin/leave-request/:id/approve', verifyToken, async (req, res) => 
 
             const firebasePath = `notifications/${adminUser.firebaseUid}/${notificationId}`;
             await admin.database().ref(firebasePath).set(notification);
-            console.log(`✅ Notification sent directly to Firebase RTDB for admin: ${firebasePath}`);
+            console.log(`[OK] Notification sent directly to Firebase RTDB for admin: ${firebasePath}`);
           }
         } catch (adminNotifError) {
-          console.error(`❌ Failed to send notification to admin ${adminUser.email}:`, adminNotifError);
+          console.error(`[ERROR] Failed to send notification to admin ${adminUser.email}:`, adminNotifError);
         }
       }
 
       if (adminUsers.length === 0) {
-        console.warn('⚠️  WARNING: No admin users found in database!');
+        console.warn('[WARN]  WARNING: No admin users found in database!');
       }
     } catch (notificationError) {
-      console.error('❌ Failed to send admin notifications:', notificationError);
+      console.error('[ERROR] Failed to send admin notifications:', notificationError);
     }
 
     res.json({
@@ -3049,7 +3049,7 @@ router.put('/admin/leave-request/:id/approve', verifyToken, async (req, res) => 
     });
 
   } catch (err) {
-    console.error('❌ Error approving leave request:', err.message);
+    console.error('[ERROR] Error approving leave request:', err.message);
     res.status(500).json({
       success: false,
       message: 'Failed to approve leave request',
@@ -3074,7 +3074,7 @@ router.put('/admin/leave-request/:id/reject', verifyToken, async (req, res) => {
       });
     }
 
-    console.log(`❌ Rejecting leave request: ${leaveRequestId}`);
+    console.log(`[ERROR] Rejecting leave request: ${leaveRequestId}`);
 
     // Get admin/organization details
     let adminName = 'Unknown Admin';
@@ -3160,7 +3160,7 @@ router.put('/admin/leave-request/:id/reject', verifyToken, async (req, res) => {
         }
       });
     } catch (notificationError) {
-      console.error('❌ Failed to send rejection notification:', notificationError);
+      console.error('[ERROR] Failed to send rejection notification:', notificationError);
     }
 
     res.json({
@@ -3176,7 +3176,7 @@ router.put('/admin/leave-request/:id/reject', verifyToken, async (req, res) => {
     });
 
   } catch (err) {
-    console.error('❌ Error rejecting leave request:', err.message);
+    console.error('[ERROR] Error rejecting leave request:', err.message);
     res.status(500).json({
       success: false,
       message: 'Failed to reject leave request',
@@ -3192,7 +3192,7 @@ router.get('/admin/leave-request/:id', verifyToken, async (req, res) => {
   try {
     const leaveRequestId = req.params.id;
 
-    console.log(`📋 Fetching leave request details: ${leaveRequestId}`);
+    console.log(`[INFO] Fetching leave request details: ${leaveRequestId}`);
 
     // Find the leave request
     const leaveRequest = await req.db.collection('leave_requests').findOne({
@@ -3273,7 +3273,7 @@ router.get('/admin/leave-request/:id', verifyToken, async (req, res) => {
     });
 
   } catch (err) {
-    console.error('❌ Error fetching leave request details:', err.message);
+    console.error('[ERROR] Error fetching leave request details:', err.message);
     res.status(500).json({
       success: false,
       message: 'Failed to fetch leave request details',
@@ -3291,7 +3291,7 @@ router.post('/admin/cancel-leave-trips/:leaveRequestId', verifyToken, async (req
     const userId = req.user.userId;
     const { adminNotes } = req.body;
 
-    console.log(`🗑️ Cancelling trips for leave request: ${leaveRequestId}`);
+    console.log(` Cancelling trips for leave request: ${leaveRequestId}`);
 
     // Get admin details
     let adminName = 'Unknown Admin';
@@ -3336,7 +3336,7 @@ router.post('/admin/cancel-leave-trips/:leaveRequestId', verifyToken, async (req
       })
       .toArray();
 
-    console.log(`📋 Found ${affectedTrips.length} trips to cancel`);
+    console.log(`[INFO] Found ${affectedTrips.length} trips to cancel`);
 
     // Cancel all affected trips
     const cancelledTrips = [];
@@ -3398,9 +3398,9 @@ router.post('/admin/cancel-leave-trips/:leaveRequestId', verifyToken, async (req
                 cancelledAt: new Date().toISOString()
               }
             });
-            console.log(`✅ Notification sent to driver: ${trip.assignedDriver.driverName || trip.assignedDriver.driverId}`);
+            console.log(`[OK] Notification sent to driver: ${trip.assignedDriver.driverName || trip.assignedDriver.driverId}`);
           } catch (driverNotifError) {
-            console.warn(`⚠️  createNotification failed for driver, sending directly to Firebase RTDB`);
+            console.warn(`[WARN]  createNotification failed for driver, sending directly to Firebase RTDB`);
 
             // Fallback: Send directly to Firebase RTDB
             const notificationId = Date.now().toString() + '_' + Math.random().toString(36).substr(2, 9);
@@ -3432,7 +3432,7 @@ router.post('/admin/cancel-leave-trips/:leaveRequestId', verifyToken, async (req
 
             const firebasePath = `notifications/${trip.assignedDriver.driverId}/${notificationId}`;
             await admin.database().ref(firebasePath).set(notification);
-            console.log(`✅ Notification sent directly to Firebase RTDB for driver: ${firebasePath}`);
+            console.log(`[OK] Notification sent directly to Firebase RTDB for driver: ${firebasePath}`);
           }
         })();
 
@@ -3443,9 +3443,9 @@ router.post('/admin/cancel-leave-trips/:leaveRequestId', verifyToken, async (req
     // Wait for all notifications to be sent
     try {
       await Promise.all(notificationPromises);
-      console.log(`✅ Sent ${notificationPromises.length} driver notifications`);
+      console.log(`[OK] Sent ${notificationPromises.length} driver notifications`);
     } catch (notificationError) {
-      console.error('❌ Some driver notifications failed:', notificationError);
+      console.error('[ERROR] Some driver notifications failed:', notificationError);
     }
 
     // Send notification to admin who cancelled the trips
@@ -3467,7 +3467,7 @@ router.post('/admin/cancel-leave-trips/:leaveRequestId', verifyToken, async (req
       await createNotification(req.db, {
         userId: userId,
         type: 'trip_cancelled',
-        title: '✅ Trips Cancelled Successfully',
+        title: '[OK] Trips Cancelled Successfully',
         body: `Successfully cancelled ${cancelledTrips.length} trip(s) for ${leaveRequest.customerName}`,
         priority: 'high',
         category: 'trip_management',
@@ -3480,9 +3480,9 @@ router.post('/admin/cancel-leave-trips/:leaveRequestId', verifyToken, async (req
           processedAt: new Date().toISOString()
         }
       });
-      console.log(`✅ Sent admin notification for trip cancellation with readable addresses`);
+      console.log(`[OK] Sent admin notification for trip cancellation with readable addresses`);
     } catch (adminNotificationError) {
-      console.error('❌ Admin notification failed:', adminNotificationError);
+      console.error('[ERROR] Admin notification failed:', adminNotificationError);
     }
 
     // Mark leave request as processed
@@ -3528,7 +3528,7 @@ router.post('/admin/cancel-leave-trips/:leaveRequestId', verifyToken, async (req
     });
 
   } catch (err) {
-    console.error('❌ Error cancelling leave trips:', err.message);
+    console.error('[ERROR] Error cancelling leave trips:', err.message);
     res.status(500).json({
       success: false,
       message: 'Failed to cancel trips',
@@ -3544,7 +3544,7 @@ router.get('/admin/trip-cancellation-history', verifyToken, async (req, res) => 
   try {
     const { limit = 50 } = req.query;
 
-    console.log('📋 Fetching trip cancellation history...');
+    console.log('[INFO] Fetching trip cancellation history...');
 
     const history = await req.db.collection('trip_cancellation_history')
       .find({})
@@ -3572,7 +3572,7 @@ router.get('/admin/trip-cancellation-history', verifyToken, async (req, res) => 
     });
 
   } catch (err) {
-    console.error('❌ Error fetching trip cancellation history:', err.message);
+    console.error('[ERROR] Error fetching trip cancellation history:', err.message);
     res.status(500).json({
       success: false,
       message: 'Failed to fetch trip cancellation history',
@@ -3591,7 +3591,7 @@ router.get('/driver/cancelled-trips', verifyToken, async (req, res) => {
     const userId = req.user.userId;
     const { status = 'all', limit = 20 } = req.query;
 
-    console.log(`🚗 Fetching cancelled trips for driver: ${userId}`);
+    console.log(`[VEHICLE] Fetching cancelled trips for driver: ${userId}`);
 
     // Build query
     const query = {
@@ -3632,7 +3632,7 @@ router.get('/driver/cancelled-trips', verifyToken, async (req, res) => {
     });
 
   } catch (err) {
-    console.error('❌ Error fetching cancelled trips for driver:', err.message);
+    console.error('[ERROR] Error fetching cancelled trips for driver:', err.message);
     res.status(500).json({
       success: false,
       message: 'Failed to fetch cancelled trips',
@@ -3649,7 +3649,7 @@ router.put('/driver/acknowledge-cancellation/:tripId', verifyToken, async (req, 
     const tripId = req.params.tripId;
     const userId = req.user.userId;
 
-    console.log(`✅ Driver ${userId} acknowledging cancellation for trip: ${tripId}`);
+    console.log(`[OK] Driver ${userId} acknowledging cancellation for trip: ${tripId}`);
 
     // Update trip to mark as acknowledged
     const result = await req.db.collection('rosters').updateOne(
@@ -3680,7 +3680,7 @@ router.put('/driver/acknowledge-cancellation/:tripId', verifyToken, async (req, 
     });
 
   } catch (err) {
-    console.error('❌ Error acknowledging trip cancellation:', err.message);
+    console.error('[ERROR] Error acknowledging trip cancellation:', err.message);
     res.status(500).json({
       success: false,
       message: 'Failed to acknowledge trip cancellation',
@@ -3795,32 +3795,32 @@ router.post(
         logoutDropLocation,
         logoutDropAddress,
         notes,
-        employeeData // ✅ CRITICAL: Receive employee data from request
+        employeeData // [OK] CRITICAL: Receive employee data from request
       } = req.body;
 
-      // ✅ FIX: Use employee data if provided, otherwise fall back to requester
+      // [OK] FIX: Use employee data if provided, otherwise fall back to requester
       let customerName = 'Unknown Customer';
       let customerEmail = '';
 
       if (employeeData && employeeData.email && employeeData.name) {
-        // ✅ Use employee data from bulk import
+        // [OK] Use employee data from bulk import
         customerName = employeeData.name;
         customerEmail = employeeData.email;
-        console.log(`📧 Using employee data: ${customerName} (${customerEmail})`);
+        console.log(`[INFO] Using employee data: ${customerName} (${customerEmail})`);
       } else {
         // Fallback: Get from authenticated user
         // First, try to get from req.user (set by auth middleware)
         if (req.user && req.user.email) {
           customerEmail = req.user.email;
           customerName = req.user.name || req.user.displayName || req.user.email;
-          console.log(`📧 Using req.user data: ${customerName} (${customerEmail})`);
+          console.log(`[INFO] Using req.user data: ${customerName} (${customerEmail})`);
         } else {
           // Try Firebase Auth
           try {
             const userRecord = await admin.auth().getUser(userId);
             customerName = userRecord.displayName || userRecord.email || 'Unknown Customer';
             customerEmail = userRecord.email || '';
-            console.log(`📧 Using Firebase Auth data: ${customerName} (${customerEmail})`);
+            console.log(`[INFO] Using Firebase Auth data: ${customerName} (${customerEmail})`);
           } catch (authError) {
             console.warn('Could not fetch user from Firebase:', authError);
             
@@ -3837,7 +3837,7 @@ router.post(
               if (userDoc) {
                 customerName = userDoc.name || userDoc.displayName || userDoc.email || 'Unknown Customer';
                 customerEmail = userDoc.email || userDoc.emailAddress || '';
-                console.log(`📧 Using ${collectionName} data: ${customerName} (${customerEmail})`);
+                console.log(`[INFO] Using ${collectionName} data: ${customerName} (${customerEmail})`);
                 break;
               }
             }
@@ -3846,7 +3846,7 @@ router.post(
         
         // Final validation
         if (!customerEmail) {
-          console.error('❌ CRITICAL: Could not determine customer email!');
+          console.error('[ERROR] CRITICAL: Could not determine customer email!');
           console.error(`   User ID: ${userId}`);
           console.error(`   req.user: ${JSON.stringify(req.user)}`);
           return res.status(400).json({
@@ -3855,18 +3855,18 @@ router.post(
           });
         }
         
-        console.log(`✅ Final customer data: ${customerName} (${customerEmail})`);
+        console.log(`[OK] Final customer data: ${customerName} (${customerEmail})`);
       }
 
-      // ✅ Server-side geocoding (if coordinates missing) - LENIENT MODE
+      // [OK] Server-side geocoding (if coordinates missing) - LENIENT MODE
       if ((!officeLocationCoordinates || !officeLocationCoordinates.latitude) && officeLocation) {
-        console.log(`🌍 Auto-geocoding Office: ${officeLocation}`);
+        console.log(` Auto-geocoding Office: ${officeLocation}`);
         const coords = await geocodeAddress(officeLocation);
         if (coords) {
           officeLocationCoordinates = coords;
-          console.log(`✅ Office geocoded: ${coords.latitude}, ${coords.longitude}`);
+          console.log(`[OK] Office geocoded: ${coords.latitude}, ${coords.longitude}`);
         } else {
-          console.warn(`⚠️  Could not geocode office location: "${officeLocation}" - using default coordinates`);
+          console.warn(`[WARN]  Could not geocode office location: "${officeLocation}" - using default coordinates`);
           // Use default coordinates instead of failing
           officeLocationCoordinates = { latitude: 12.9716, longitude: 77.5946 };
         }
@@ -3875,13 +3875,13 @@ router.post(
       if ((rosterType === 'login' || rosterType === 'both') &&
         (!loginPickupLocation || loginPickupLocation.length === 0) &&
         loginPickupAddress) {
-        console.log(`🌍 Auto-geocoding Pickup: ${loginPickupAddress}`);
+        console.log(` Auto-geocoding Pickup: ${loginPickupAddress}`);
         const coords = await geocodeAddress(loginPickupAddress);
         if (coords) {
           loginPickupLocation = [coords.latitude, coords.longitude];
-          console.log(`✅ Pickup geocoded: ${coords.latitude}, ${coords.longitude}`);
+          console.log(`[OK] Pickup geocoded: ${coords.latitude}, ${coords.longitude}`);
         } else {
-          console.warn(`⚠️  Could not geocode pickup location: "${loginPickupAddress}" - using approximate coordinates`);
+          console.warn(`[WARN]  Could not geocode pickup location: "${loginPickupAddress}" - using approximate coordinates`);
           // Use approximate coordinates instead of failing
           loginPickupLocation = [12.9716, 77.5946];
         }
@@ -3890,13 +3890,13 @@ router.post(
       if ((rosterType === 'logout' || rosterType === 'both') &&
         (!logoutDropLocation || logoutDropLocation.length === 0) &&
         logoutDropAddress) {
-        console.log(`🌍 Auto-geocoding Drop: ${logoutDropAddress}`);
+        console.log(` Auto-geocoding Drop: ${logoutDropAddress}`);
         const coords = await geocodeAddress(logoutDropAddress);
         if (coords) {
           logoutDropLocation = [coords.latitude, coords.longitude];
-          console.log(`✅ Drop geocoded: ${coords.latitude}, ${coords.longitude}`);
+          console.log(`[OK] Drop geocoded: ${coords.latitude}, ${coords.longitude}`);
         } else {
-          console.warn(`⚠️  Could not geocode drop location: "${logoutDropAddress}" - using approximate coordinates`);
+          console.warn(`[WARN]  Could not geocode drop location: "${logoutDropAddress}" - using approximate coordinates`);
           // Use approximate coordinates instead of failing
           logoutDropLocation = [12.9716, 77.5946];
         }
@@ -3926,7 +3926,7 @@ router.post(
         });
       }
 
-      // ✅ Prepare roster data with employee information
+      // [OK] Prepare roster data with employee information
       const rosterData = {
         rosterType,
         officeLocation,
@@ -3941,14 +3941,14 @@ router.post(
         logoutDropLocation,
         logoutDropAddress,
         notes,
-        customerName, // ✅ Employee name
-        customerEmail, // ✅ Employee email
-        employeeDetails: employeeData || {}, // ✅ Store full employee data
+        customerName, // [OK] Employee name
+        customerEmail, // [OK] Employee email
+        employeeDetails: employeeData || {}, // [OK] Store full employee data
         createdBy: userId, // Track who created it (might be admin)
         createdByAdmin: req.user.email === 'admin@abrafleet.com' ? true : false
       };
 
-      console.log(`✅ Creating roster for: ${customerName} (${customerEmail})`);
+      console.log(`[OK] Creating roster for: ${customerName} (${customerEmail})`);
 
       // Create the roster in MongoDB
       const newRoster = await Roster.createCustomerRoster(rosterData, userId);
@@ -3959,8 +3959,8 @@ router.post(
         const rosterNotification = {
           id: newRoster._id.toString(),
           customerId: userId,
-          customerName: customerName, // ✅ Employee name
-          customerEmail: customerEmail, // ✅ Employee email
+          customerName: customerName, // [OK] Employee name
+          customerEmail: customerEmail, // [OK] Employee email
           rosterType: newRoster.rosterType,
           officeLocation: newRoster.officeLocation,
           weekdays: newRoster.weeklyOffDays || weekdays,
@@ -3982,9 +3982,9 @@ router.post(
 
         await firebaseDb.ref('roster_requests').child(newRoster._id.toString()).set(rosterNotification);
 
-        console.log('✅ Roster notification sent to Firebase');
+        console.log('[OK] Roster notification sent to Firebase');
       } catch (firebaseError) {
-        console.error('❌ Failed to send Firebase notification:', firebaseError);
+        console.error('[ERROR] Failed to send Firebase notification:', firebaseError);
       }
 
       res.status(201).json({
@@ -3995,8 +3995,8 @@ router.post(
           status: newRoster.status,
           rosterType: newRoster.rosterType,
           officeLocation: newRoster.officeLocation,
-          customerName: customerName, // ✅ Return employee name
-          customerEmail: customerEmail, // ✅ Return employee email
+          customerName: customerName, // [OK] Return employee name
+          customerEmail: customerEmail, // [OK] Return employee email
           dateRange: {
             from: newRoster.startDate,
             to: newRoster.endDate
@@ -4012,7 +4012,7 @@ router.post(
       });
 
     } catch (err) {
-      console.error('❌ Error creating customer roster:', err.message);
+      console.error('[ERROR] Error creating customer roster:', err.message);
       console.error(err.stack);
 
       res.status(500).json({
@@ -4030,7 +4030,7 @@ router.get('/customer/my-rosters', verifyToken, async (req, res) => {
     const { status, rosterType, startDate, endDate } = req.query;
     const db = req.db;
 
-    console.log(`🔍 MY-ROSTERS: Looking for user with User ID: ${req.user.userId}`);
+    console.log(`[INFO] MY-ROSTERS: Looking for user with User ID: ${req.user.userId}`);
 
     // Find user in correct collection based on role (set by auth middleware)
     let user = null;
@@ -4059,35 +4059,35 @@ router.get('/customer/my-rosters', verifyToken, async (req, res) => {
         
         if (user) {
           userCollection = collectionName;
-          console.log(`✅ MY-ROSTERS: User found in ${collectionName} collection`);
+          console.log(`[OK] MY-ROSTERS: User found in ${collectionName} collection`);
           break;
         }
       }
     }
 
     if (!user) {
-      console.log('❌ MY-ROSTERS: User not found in any collection');
+      console.log('[ERROR] MY-ROSTERS: User not found in any collection');
       return res.status(404).json({
         success: false,
         message: 'User not found'
       });
     }
     
-    console.log(`✅ MY-ROSTERS: User found in ${userCollection} collection`);
+    console.log(`[OK] MY-ROSTERS: User found in ${userCollection} collection`);
 
     const userEmail = user.email || user.emailAddress || user.customerEmail;
     
     if (!userEmail) {
-      console.log('❌ MY-ROSTERS: User email not found in user document');
+      console.log('[ERROR] MY-ROSTERS: User email not found in user document');
       return res.status(400).json({
         success: false,
         message: 'User email not found'
       });
     }
 
-    console.log(`✅ MY-ROSTERS: User found - ${userEmail}`);
+    console.log(`[OK] MY-ROSTERS: User found - ${userEmail}`);
 
-    // ✅ SIMPLIFIED QUERY - Return ALL user rosters (no strict filtering)
+    // [OK] SIMPLIFIED QUERY - Return ALL user rosters (no strict filtering)
     const query = {
       $or: [
         { customerEmail: userEmail },
@@ -4121,9 +4121,9 @@ router.get('/customer/my-rosters', verifyToken, async (req, res) => {
     // Fetch ALL rosters for the user
     const rosters = await db.collection('rosters').find(query).toArray();
 
-    console.log(`📋 MY-ROSTERS: Found ${rosters.length} total rosters for ${userEmail}`);
+    console.log(`[INFO] MY-ROSTERS: Found ${rosters.length} total rosters for ${userEmail}`);
 
-    // ✅ ENHANCED MAPPING - Handle all possible field variations
+    // [OK] ENHANCED MAPPING - Handle all possible field variations
     const mappedRosters = rosters.map(roster => ({
       id: roster._id,
       _id: roster._id,
@@ -4137,23 +4137,23 @@ router.get('/customer/my-rosters', verifyToken, async (req, res) => {
       driverName: roster.driverName || 'To be assigned',
       driverPhone: roster.driverPhone || 'N/A',
       
-      // ✅ FLEXIBLE DATE MAPPING
+      // [OK] FLEXIBLE DATE MAPPING
       dateRange: {
         from: roster.dateRange?.from || roster.startDate || roster.fromDate || roster.tripDate,
         to: roster.dateRange?.to || roster.endDate || roster.toDate || roster.tripDate
       },
       
-      // ✅ FLEXIBLE TIME MAPPING
+      // [OK] FLEXIBLE TIME MAPPING
       timeRange: {
         from: roster.timeRange?.from || roster.startTime || roster.fromTime || roster.pickupTime || '09:00',
         to: roster.timeRange?.to || roster.endTime || roster.toTime || roster.dropTime || '18:00'
       },
       
-      // ✅ WORKING DAYS MAPPING
+      // [OK] WORKING DAYS MAPPING
       weekdays: roster.weekdays || roster.weeklyOffDays || roster.workingDays || [],
       weeklyOffDays: roster.weekdays || roster.weeklyOffDays || roster.workingDays || [],
       
-      // ✅ ENHANCED LOCATION MAPPING
+      // [OK] ENHANCED LOCATION MAPPING
       locations: roster.locations || {
         office: {
           coordinates: roster.officeCoordinates || {
@@ -4200,12 +4200,12 @@ router.get('/customer/my-rosters', verifyToken, async (req, res) => {
       }
     }));
 
-    console.log(`✅ MY-ROSTERS: Returning ${mappedRosters.length} rosters to client`);
+    console.log(`[OK] MY-ROSTERS: Returning ${mappedRosters.length} rosters to client`);
 
     // Debug log first roster structure if available
     if (mappedRosters.length > 0) {
       const firstRoster = mappedRosters[0];
-      console.log('🔍 MY-ROSTERS: First roster sample:');
+      console.log('[INFO] MY-ROSTERS: First roster sample:');
       console.log(`   ID: ${firstRoster.id}`);
       console.log(`   Type: ${firstRoster.rosterType}`);
       console.log(`   Status: ${firstRoster.status}`);
@@ -4222,7 +4222,7 @@ router.get('/customer/my-rosters', verifyToken, async (req, res) => {
     });
 
   } catch (error) {
-    console.error('❌ MY-ROSTERS: Error fetching user rosters:', error);
+    console.error('[ERROR] MY-ROSTERS: Error fetching user rosters:', error);
     res.status(500).json({
       success: false,
       message: 'Failed to fetch rosters',
@@ -4446,9 +4446,9 @@ router.put('/customer/:id', verifyToken, async (req, res) => {
               updatedAt: updatedRoster.updatedAt.toISOString()
             }
           });
-          console.log(`✅ Notification sent to admin via createNotification: ${adminUser.email}`);
+          console.log(`[OK] Notification sent to admin via createNotification: ${adminUser.email}`);
         } catch (createError) {
-          console.warn(`⚠️  createNotification failed for admin, sending directly to Firebase RTDB:`, createError.message);
+          console.warn(`[WARN]  createNotification failed for admin, sending directly to Firebase RTDB:`, createError.message);
 
           // Fallback: Send directly to Firebase RTDB
           const notificationId = Date.now().toString() + '_' + Math.random().toString(36).substr(2, 9);
@@ -4475,15 +4475,15 @@ router.put('/customer/:id', verifyToken, async (req, res) => {
 
           const firebasePath = `notifications/${adminUser.firebaseUid}/${notificationId}`;
           await admin.database().ref(firebasePath).set(notification);
-          console.log(`✅ Notification sent directly to Firebase RTDB for admin: ${firebasePath}`);
+          console.log(`[OK] Notification sent directly to Firebase RTDB for admin: ${firebasePath}`);
         }
       }
 
       if (adminUsers.length === 0) {
-        console.warn('⚠️  WARNING: No admin users found in database!');
+        console.warn('[WARN]  WARNING: No admin users found in database!');
       }
     } catch (notificationError) {
-      console.error('❌ Failed to send admin notifications for roster update:', notificationError);
+      console.error('[ERROR] Failed to send admin notifications for roster update:', notificationError);
     }
 
     res.json({
@@ -4533,11 +4533,11 @@ router.delete('/customer/:id', verifyToken, async (req, res) => {
     const db = req.db;
     const rosterId = req.params.id;
 
-    console.log(`🗑️ DELETE ROSTER: Attempting to cancel roster ${rosterId} for user ${req.user.userId}`);
+    console.log(` DELETE ROSTER: Attempting to cancel roster ${rosterId} for user ${req.user.userId}`);
 
-    // ✅ VALIDATE ROSTER ID FORMAT
+    // [OK] VALIDATE ROSTER ID FORMAT
     if (!isValidObjectId(rosterId)) {
-      console.log(`❌ DELETE ROSTER: Invalid roster ID format: ${rosterId}`);
+      console.log(`[ERROR] DELETE ROSTER: Invalid roster ID format: ${rosterId}`);
       return res.status(400).json({
         success: false,
         message: 'Invalid roster ID format'
@@ -4553,7 +4553,7 @@ router.delete('/customer/:id', verifyToken, async (req, res) => {
     });
 
     if (!user) {
-      console.log('❌ DELETE ROSTER: User not found in admin_users collection');
+      console.log('[ERROR] DELETE ROSTER: User not found in admin_users collection');
       return res.status(404).json({
         success: false,
         message: 'User not found'
@@ -4561,14 +4561,14 @@ router.delete('/customer/:id', verifyToken, async (req, res) => {
     }
 
     const userEmail = user.email || user.emailAddress || user.customerEmail;
-    console.log(`✅ DELETE ROSTER: User found - ${userEmail}`);
+    console.log(`[OK] DELETE ROSTER: User found - ${userEmail}`);
 
-    // ✅ SAFE OBJECTID CREATION WITH ERROR HANDLING
+    // [OK] SAFE OBJECTID CREATION WITH ERROR HANDLING
     let rosterObjectId;
     try {
-      rosterObjectId = new require('mongodb').ObjectId(rosterId);
+      rosterObjectId = new ObjectId(rosterId);
     } catch (objectIdError) {
-      console.log(`❌ DELETE ROSTER: Failed to create ObjectId from ${rosterId}:`, objectIdError.message);
+      console.log(`[ERROR] DELETE ROSTER: Failed to create ObjectId from ${rosterId}:`, objectIdError.message);
       return res.status(400).json({
         success: false,
         message: 'Invalid roster ID format'
@@ -4581,27 +4581,27 @@ router.delete('/customer/:id', verifyToken, async (req, res) => {
     });
 
     if (!existingRoster) {
-      console.log('❌ DELETE ROSTER: Roster not found');
+      console.log('[ERROR] DELETE ROSTER: Roster not found');
       return res.status(404).json({
         success: false,
         message: 'Roster not found'
       });
     }
 
-    console.log('🔍 DELETE ROSTER: Found roster:', {
+    console.log('[INFO] DELETE ROSTER: Found roster:', {
       id: existingRoster._id,
       customerEmail: existingRoster.customerEmail,
       status: existingRoster.status,
       employeeDetails: existingRoster.employeeDetails?.email
     });
 
-    // ✅ FIX: Check ownership using email fields (not userId)
+    // [OK] FIX: Check ownership using email fields (not userId)
     const rosterOwnerEmail = existingRoster.customerEmail || 
                             existingRoster.employeeDetails?.email || 
                             existingRoster.employeeData?.email;
 
     if (!rosterOwnerEmail || rosterOwnerEmail !== userEmail) {
-      console.log(`❌ DELETE ROSTER: Access denied. Roster owner: ${rosterOwnerEmail}, User: ${userEmail}`);
+      console.log(`[ERROR] DELETE ROSTER: Access denied. Roster owner: ${rosterOwnerEmail}, User: ${userEmail}`);
       return res.status(403).json({
         success: false,
         message: 'Access denied - you can only cancel your own rosters'
@@ -4610,7 +4610,7 @@ router.delete('/customer/:id', verifyToken, async (req, res) => {
 
     // Check if roster can still be cancelled
     if (existingRoster.status === 'completed') {
-      console.log('❌ DELETE ROSTER: Cannot cancel completed roster');
+      console.log('[ERROR] DELETE ROSTER: Cannot cancel completed roster');
       return res.status(400).json({
         success: false,
         message: 'Cannot cancel completed roster'
@@ -4618,14 +4618,14 @@ router.delete('/customer/:id', verifyToken, async (req, res) => {
     }
 
     if (existingRoster.status === 'cancelled') {
-      console.log('⚠️ DELETE ROSTER: Roster already cancelled');
+      console.log('[WARN] DELETE ROSTER: Roster already cancelled');
       return res.status(400).json({
         success: false,
         message: 'Roster is already cancelled'
       });
     }
 
-    // ✅ FIX: Update roster status in MongoDB
+    // [OK] FIX: Update roster status in MongoDB
     const updateResult = await db.collection('rosters').updateOne(
       { _id: rosterObjectId },
       {
@@ -4639,14 +4639,14 @@ router.delete('/customer/:id', verifyToken, async (req, res) => {
     );
 
     if (updateResult.matchedCount === 0) {
-      console.log('❌ DELETE ROSTER: Failed to update roster');
+      console.log('[ERROR] DELETE ROSTER: Failed to update roster');
       return res.status(404).json({
         success: false,
         message: 'Failed to cancel roster'
       });
     }
 
-    console.log('✅ DELETE ROSTER: Roster cancelled successfully');
+    console.log('[OK] DELETE ROSTER: Roster cancelled successfully');
 
     // Update Firebase real-time notifications
     try {
@@ -4656,9 +4656,9 @@ router.delete('/customer/:id', verifyToken, async (req, res) => {
         cancelledAt: new Date().toISOString()
       });
 
-      console.log('✅ DELETE ROSTER: Firebase updated');
+      console.log('[OK] DELETE ROSTER: Firebase updated');
     } catch (firebaseError) {
-      console.warn('⚠️ DELETE ROSTER: Failed to update Firebase:', firebaseError.message);
+      console.warn('[WARN] DELETE ROSTER: Failed to update Firebase:', firebaseError.message);
     }
 
     res.json({
@@ -4672,8 +4672,8 @@ router.delete('/customer/:id', verifyToken, async (req, res) => {
     });
 
   } catch (error) {
-    console.error('❌ DELETE ROSTER: Error cancelling roster:', error);
-    console.error('❌ DELETE ROSTER: Stack trace:', error.stack);
+    console.error('[ERROR] DELETE ROSTER: Error cancelling roster:', error);
+    console.error('[ERROR] DELETE ROSTER: Stack trace:', error.stack);
     res.status(500).json({
       success: false,
       message: 'Failed to cancel roster',
@@ -4683,6 +4683,131 @@ router.delete('/customer/:id', verifyToken, async (req, res) => {
 });
 
 // ========== ADMIN MANAGEMENT ROUTES WITH DETAILED LOGGING ==========
+
+// @route   PUT api/roster/admin/update/:id
+// @desc    Admin update roster details (name, email, phone, locations, times, type)
+// @access  Private (Admin)
+router.put('/admin/update/:id', verifyToken, async (req, res) => {
+  try {
+    const db = req.db;
+    const rosterId = req.params.id;
+
+    console.log(` ADMIN UPDATE ROSTER: ${rosterId}`);
+
+    if (!isValidObjectId(rosterId)) {
+      return res.status(400).json({ success: false, message: 'Invalid roster ID format' });
+    }
+
+    let rosterObjectId;
+    try {
+      rosterObjectId = new ObjectId(rosterId);
+    } catch (e) {
+      return res.status(400).json({ success: false, message: 'Invalid roster ID' });
+    }
+
+    const existingRoster = await db.collection('rosters').findOne({ _id: rosterObjectId });
+    if (!existingRoster) {
+      return res.status(404).json({ success: false, message: 'Roster not found' });
+    }
+
+    // Build update object from allowed fields
+    const allowedFields = [
+      'rosterType', 'officeLocation', 'pickupLocation', 'dropLocation',
+      'startTime', 'endTime', 'notes', 'customerName', 'customerEmail',
+      'phoneNumber', 'companyName', 'employeeDetails',
+      'loginPickupAddress', 'logoutDropAddress',
+    ];
+
+    const updateFields = { updatedAt: new Date(), updatedByAdmin: req.user?.email || req.user?.userId };
+    for (const field of allowedFields) {
+      if (req.body[field] !== undefined) {
+        updateFields[field] = req.body[field];
+      }
+    }
+
+    const result = await db.collection('rosters').updateOne(
+      { _id: rosterObjectId },
+      { $set: updateFields }
+    );
+
+    if (result.matchedCount === 0) {
+      return res.status(404).json({ success: false, message: 'Roster not found' });
+    }
+
+    console.log(`[OK] ADMIN UPDATE ROSTER: Updated successfully`);
+    res.json({
+      success: true,
+      message: 'Roster updated successfully',
+      data: { rosterId, updatedFields: Object.keys(updateFields) }
+    });
+
+  } catch (error) {
+    console.error('[ERROR] ADMIN UPDATE ROSTER error:', error);
+    res.status(500).json({ success: false, message: 'Failed to update roster', error: error.message });
+  }
+});
+
+// @route   DELETE api/roster/admin/delete/:id
+// @desc    Admin delete (cancel) any roster regardless of ownership
+// @access  Private (Admin)
+router.delete('/admin/delete/:id', verifyToken, async (req, res) => {
+  try {
+    const db = req.db;
+    const rosterId = req.params.id;
+
+    console.log(` ADMIN DELETE ROSTER: ${rosterId} by ${req.user?.email || req.user?.userId}`);
+
+    if (!isValidObjectId(rosterId)) {
+      return res.status(400).json({ success: false, message: 'Invalid roster ID format' });
+    }
+
+    let rosterObjectId;
+    try {
+      rosterObjectId = new ObjectId(rosterId);
+    } catch (e) {
+      return res.status(400).json({ success: false, message: 'Invalid roster ID' });
+    }
+
+    const existingRoster = await db.collection('rosters').findOne({ _id: rosterObjectId });
+    if (!existingRoster) {
+      return res.status(404).json({ success: false, message: 'Roster not found' });
+    }
+
+    if (existingRoster.status === 'completed') {
+      return res.status(400).json({ success: false, message: 'Cannot delete a completed roster' });
+    }
+
+    const result = await db.collection('rosters').updateOne(
+      { _id: rosterObjectId },
+      {
+        $set: {
+          status: 'cancelled',
+          cancelledAt: new Date(),
+          cancelledBy: req.user?.email || req.user?.userId,
+          cancelledByAdmin: true,
+          updatedAt: new Date(),
+        }
+      }
+    );
+
+    if (result.matchedCount === 0) {
+      return res.status(404).json({ success: false, message: 'Failed to delete roster' });
+    }
+
+    console.log(`[OK] ADMIN DELETE ROSTER: Cancelled successfully`);
+    res.json({
+      success: true,
+      message: 'Roster deleted successfully',
+      data: { rosterId, status: 'cancelled' }
+    });
+
+  } catch (error) {
+    console.error('[ERROR] ADMIN DELETE ROSTER error:', error);
+    res.status(500).json({ success: false, message: 'Failed to delete roster', error: error.message });
+  }
+});
+
+
 
 // @route   GET api/roster/admin/approved
 // @desc    Get approved/assigned roster assignments for admin
@@ -4703,7 +4828,7 @@ router.get('/admin/approved', verifyToken, async (req, res) => {
       query.rosterType = rosterType;
     }
 
-    // ✅ FIXED: Handles BOTH old and new formats
+    // [OK] FIXED: Handles BOTH old and new formats
     const approvedRosters = await req.db.collection('rosters')
       .aggregate([
         { $match: query },
@@ -4818,12 +4943,12 @@ router.get('/admin/approved', verifyToken, async (req, res) => {
 // @desc    Assign driver and vehicle to a customer roster WITH DETAILED LOGGING
 // @access  Private (Admin/Manager)
 // ============================================================================
-// 🔧 ENHANCED ASSIGNMENT ROUTE - WITH AUTOMATIC DISTANCE CALCULATION
+// [SETUP] ENHANCED ASSIGNMENT ROUTE - WITH AUTOMATIC DISTANCE CALCULATION
 // File: Replace /admin/assign route in roster_router.js
 // Feature: Auto-calculates distance when admin assigns driver to roster
 // ============================================================================
 
-// ✅ ADD THIS AT TOP OF FILE (after other requires)
+// [OK] ADD THIS AT TOP OF FILE (after other requires)
 
 
 // ============================================================================
@@ -4845,10 +4970,10 @@ router.post('/admin/assign',
   ],
   async (req, res) => {
     console.log('\n' + '='.repeat(80));
-    console.log('🎯 SINGLE ROSTER ASSIGNMENT (WITH TRIP CREATION)');
+    console.log('[TARGET] SINGLE ROSTER ASSIGNMENT (WITH TRIP CREATION)');
     console.log('='.repeat(80));
-    console.log('📅 Timestamp:', new Date().toISOString());
-    console.log('👤 Admin User ID:', req.user.userId);
+    console.log('[INFO] Timestamp:', new Date().toISOString());
+    console.log('[USER] Admin User ID:', req.user.userId);
 
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
@@ -4869,7 +4994,7 @@ router.post('/admin/assign',
       // ====================================================================
       // STEP 1: FLEXIBLE ROSTER LOOKUP
       // ====================================================================
-      console.log('\n📋 Step 1: Fetching roster details...');
+      console.log('\n[INFO] Step 1: Fetching roster details...');
       const rosterQuery = { $or: [] };
       if (ObjectId.isValid(rosterId)) {
         rosterQuery.$or.push({ _id: new ObjectId(rosterId) });
@@ -4882,11 +5007,11 @@ router.post('/admin/assign',
       
       if (!roster) {
         await session.abortTransaction();
-        console.log('❌ ERROR: Roster not found');
+        console.log('[ERROR] ERROR: Roster not found');
         return res.status(404).json({ success: false, message: 'Roster not found' });
       }
 
-      console.log(`✅ Roster found: ${roster.customerName || 'Unknown'}`);
+      console.log(`[OK] Roster found: ${roster.customerName || 'Unknown'}`);
       console.log(`   Roster ID: ${roster._id}`);
       console.log(`   Customer: ${roster.customerName || 'Unknown'}`);
       console.log(`   Type: ${roster.rosterType || 'both'}`);
@@ -4895,7 +5020,7 @@ router.post('/admin/assign',
       // ====================================================================
       // STEP 2: FLEXIBLE DRIVER LOOKUP
       // ====================================================================
-      console.log('\n🚗 Step 2: Fetching driver details...');
+      console.log('\n[VEHICLE] Step 2: Fetching driver details...');
       const driverQuery = { $or: [] };
       if (ObjectId.isValid(driverId)) {
         driverQuery.$or.push({ _id: new ObjectId(driverId) });
@@ -4928,7 +5053,7 @@ router.post('/admin/assign',
         driverEmail = driver.personalInfo.email || '';
       }
 
-      console.log(`✅ Driver found: ${driverName}`);
+      console.log(`[OK] Driver found: ${driverName}`);
       console.log(`   Driver ID: ${driver._id}`);
       console.log(`   Phone: ${driverPhone || 'N/A'}`);
       console.log(`   Email: ${driverEmail || 'N/A'}`);
@@ -4936,7 +5061,7 @@ router.post('/admin/assign',
       // ====================================================================
       // STEP 3: FLEXIBLE VEHICLE LOOKUP
       // ====================================================================
-      console.log('\n🚗 Step 3: Fetching vehicle details...');
+      console.log('\n[VEHICLE] Step 3: Fetching vehicle details...');
       const vehicleQuery = { $or: [] };
       if (ObjectId.isValid(vehicleId)) {
         vehicleQuery.$or.push({ _id: new ObjectId(vehicleId) });
@@ -4953,14 +5078,14 @@ router.post('/admin/assign',
         return res.status(404).json({ success: false, message: 'Vehicle not found' });
       }
 
-      console.log(`✅ Vehicle found: ${vehicle.registrationNumber || vehicle.vehicleId || 'Unknown'}`);
+      console.log(`[OK] Vehicle found: ${vehicle.registrationNumber || vehicle.vehicleId || 'Unknown'}`);
       console.log(`   Vehicle ID: ${vehicle._id}`);
       console.log(`   Registration: ${vehicle.registrationNumber || 'N/A'}`);
 
       // ====================================================================
       // STEP 4: Calculate Distance (if coordinates available)
       // ====================================================================
-      console.log('\n📏 Step 4: Calculating distance...');
+      console.log('\n Step 4: Calculating distance...');
       let distanceData = null;
       try {
         distanceData = calculateRosterDistances(roster);
@@ -4968,13 +5093,13 @@ router.post('/admin/assign',
           console.log(`   Total Distance: ${distanceData.totalDistanceKm} km`);
         }
       } catch (distError) {
-        console.log('⚠️  Distance calculation error:', distError.message);
+        console.log('[WARN]  Distance calculation error:', distError.message);
       }
 
       // ====================================================================
       // STEP 5: UPDATE ROSTER (backward compatibility)
       // ====================================================================
-      console.log('\n💾 Step 5: Updating roster in "rosters" collection...');
+      console.log('\n[SAVE] Step 5: Updating roster in "rosters" collection...');
       const updatedRoster = await req.db.collection('rosters').findOneAndUpdate(
         { _id: roster._id },
         {
@@ -4994,12 +5119,12 @@ router.post('/admin/assign',
         { returnDocument: 'after', session }
       );
 
-      console.log('✅ Roster updated successfully');
+      console.log('[OK] Roster updated successfully');
 
       // ====================================================================
-      // STEP 6: 🆕 CREATE TRIP IN "roster-assigned-trips" COLLECTION
+      // STEP 6: [INFO] CREATE TRIP IN "roster-assigned-trips" COLLECTION
       // ====================================================================
-      console.log('\n🎫 Step 6: Creating trip in "roster-assigned-trips" collection...');
+      console.log('\n Step 6: Creating trip in "roster-assigned-trips" collection...');
       
       const tripNumber = `TRIP-${Date.now().toString().slice(-6)}-01`;
       const scheduledDate = new Date().toISOString().split('T')[0];
@@ -5023,7 +5148,7 @@ router.post('/admin/assign',
         tripNumber,
         tripType: roster.rosterType || 'login',
         
-        // 🆕 Original Roster Reference
+        // [INFO] Original Roster Reference
         rosterId: roster._id,
         
         // Customer Info
@@ -5031,16 +5156,16 @@ router.post('/admin/assign',
         customerEmail: roster.customerEmail || '',
         customerPhone: roster.customerPhone || roster.phone || '',
         
-        // 🆕 Driver & Vehicle (USING MONGODB OBJECTID)
+        // [INFO] Driver & Vehicle (USING MONGODB OBJECTID)
         driverId: driver._id,
         vehicleId: vehicle._id,
         
-        // 🆕 Pickup Sequence & Timing (24-hour format)
+        // [INFO] Pickup Sequence & Timing (24-hour format)
         pickupSequence: 1, // Single assignment = sequence 1
         estimatedPickupTime: pickupTime,
         readyByTime: readyByTime,
         
-        // 🆕 Distance Calculations
+        // [INFO] Distance Calculations
         distanceToOffice: distanceData?.totalDistanceKm || 0,
         distanceFromPrevious: 0, // Single assignment has no previous
         estimatedTravelTime: distanceData?.totalDurationMin || 30,
@@ -5102,19 +5227,42 @@ router.post('/admin/assign',
       const tripResult = await req.db.collection('roster-assigned-trips').insertOne(tripData, { session });
       const tripId = tripResult.insertedId;
 
-      console.log(`✅ Trip created: ${tripNumber} (ID: ${tripId})`);
+      console.log(`[OK] Trip created: ${tripNumber} (ID: ${tripId})`);
 
-      // Link trip back to roster
+      // Link trip back to roster & update status to assigned
       await req.db.collection('rosters').updateOne(
         { _id: roster._id },
-        { $set: { tripId: tripId } },
+        {
+          $set: {
+            tripId: tripId,
+            status: 'assigned',
+            driverId: driver._id,
+            vehicleId: vehicle._id,
+            assignedDriverId: driver._id.toString(),
+            assignedVehicleId: vehicle._id.toString(),
+            assignedDriver: {
+              id: driver._id.toString(),
+              name: driverName,
+              phone: driverPhone,
+              email: driverEmail
+            },
+            assignedVehicle: {
+              id: vehicle._id.toString(),
+              vehicleNumber: vehicle.registrationNumber || vehicle.vehicleNumber || ''
+            },
+            assignmentDate: new Date(),
+            assignedAt: new Date(),
+            assignedBy: req.user.userId,
+            updatedAt: new Date()
+          }
+        },
         { session }
       );
 
       // ====================================================================
-      // STEP 7: 🆕 SEND ENHANCED CUSTOMER NOTIFICATION (with AM/PM)
+      // STEP 7: [INFO] SEND ENHANCED CUSTOMER NOTIFICATION (with AM/PM)
       // ====================================================================
-      console.log('\n📧 Step 7: Sending customer notification...');
+      console.log('\n[INFO] Step 7: Sending customer notification...');
       try {
         // Convert 24-hour to 12-hour format with AM/PM
         const format12Hour = (time24) => {
@@ -5131,13 +5279,13 @@ router.post('/admin/assign',
 
         await createNotification(req.db, {
           userId: roster.customerId || roster.customerEmail,
-          title: '🚗 Driver Assigned - Be Ready!',
+          title: '[VEHICLE] Driver Assigned - Be Ready!',
           body: `Driver ${driverName} has been assigned to your trip.\n\n` +
                 `Vehicle: ${vehicle.registrationNumber}\n` +
                 `Pickup Sequence: #1 (Single pickup)\n\n` +
-                `🕐 PICKUP TIME: ${pickupTime12}\n` +
-                `⏰ BE READY BY: ${readyByTime12}\n\n` +
-                `📍 Distance to office: ${(distanceData?.totalDistanceKm || 0).toFixed(1)} km\n` +
+                `[TIMER] PICKUP TIME: ${pickupTime12}\n` +
+                `[TIMER] BE READY BY: ${readyByTime12}\n\n` +
+                `[LOCATION] Distance to office: ${(distanceData?.totalDistanceKm || 0).toFixed(1)} km\n` +
                 `⏱️ Travel time: ~${distanceData?.totalDurationMin || 30} mins\n` +
                 `🏢 Office arrival: ${officeTime12}\n\n` +
                 `Track your driver in real-time through the app.`,
@@ -5161,15 +5309,15 @@ router.post('/admin/assign',
           category: 'roster'
         });
         
-        console.log('✅ Customer notification sent');
+        console.log('[OK] Customer notification sent');
       } catch (notifError) {
-        console.log('⚠️  Customer notification failed:', notifError.message);
+        console.log('[WARN]  Customer notification failed:', notifError.message);
       }
 
       // ====================================================================
-      // STEP 8: 🆕 SEND ENHANCED DRIVER NOTIFICATION (with AM/PM)
+      // STEP 8: [INFO] SEND ENHANCED DRIVER NOTIFICATION (with AM/PM)
       // ====================================================================
-      console.log('\n📧 Step 8: Sending driver notification...');
+      console.log('\n[INFO] Step 8: Sending driver notification...');
       try {
         const format12Hour = (time24) => {
           const [hours, minutes] = time24.split(':').map(Number);
@@ -5192,15 +5340,15 @@ router.post('/admin/assign',
         if (driverUser && driverUser.firebaseUid) {
           await createNotification(req.db, {
             userId: driverUser.firebaseUid,
-            title: '🚗 New Trip Assignment',
+            title: '[VEHICLE] New Trip Assignment',
             body: `You have been assigned a new trip.\n\n` +
                   `Customer: ${roster.customerName}\n` +
                   `Vehicle: ${vehicle.registrationNumber}\n\n` +
-                  `📍 PICKUP DETAILS:\n` +
+                  `[LOCATION] PICKUP DETAILS:\n` +
                   `Time: ${pickupTime12}\n` +
                   `Ready by: ${readyByTime12}\n` +
                   `Location: ${roster.loginPickupAddress || 'Pickup location'}\n\n` +
-                  `📍 DROP DETAILS:\n` +
+                  `[LOCATION] DROP DETAILS:\n` +
                   `Location: ${roster.officeLocation || 'Office'}\n\n` +
                   `📏 Distance: ${(distanceData?.totalDistanceKm || 0).toFixed(1)} km\n` +
                   `⏱️ Duration: ~${distanceData?.totalDurationMin || 30} mins\n\n` +
@@ -5224,12 +5372,12 @@ router.post('/admin/assign',
             category: 'roster'
           });
           
-          console.log('✅ Driver notification sent');
+          console.log('[OK] Driver notification sent');
         } else {
-          console.log('ℹ️  Driver has no app access');
+          console.log('[INFO]  Driver has no app access');
         }
       } catch (notifError) {
-        console.log('⚠️  Driver notification failed:', notifError.message);
+        console.log('[WARN]  Driver notification failed:', notifError.message);
       }
 
       // ====================================================================
@@ -5237,9 +5385,9 @@ router.post('/admin/assign',
       // ====================================================================
       await session.commitTransaction();
 
-      console.log('\n✅ ASSIGNMENT COMPLETED SUCCESSFULLY');
+      console.log('\n[OK] ASSIGNMENT COMPLETED SUCCESSFULLY');
       console.log('='.repeat(80));
-      console.log('📊 Summary:');
+      console.log('[INFO] Summary:');
       console.log(`   - Roster updated: ${roster._id}`);
       console.log(`   - Trip created: ${tripId}`);
       console.log(`   - Trip number: ${tripNumber}`);
@@ -5274,7 +5422,7 @@ router.post('/admin/assign',
 
     } catch (err) {
       await session.abortTransaction();
-      console.error('❌ ERROR IN ROSTER ASSIGNMENT:', err);
+      console.error('[ERROR] ERROR IN ROSTER ASSIGNMENT:', err);
       console.error(err.stack);
 
       res.status(500).json({
@@ -5322,11 +5470,11 @@ router.put('/admin/edit-assignment/:id',
   ],
   async (req, res) => {
     console.log('\n' + '='.repeat(80));
-    console.log('🔄 ROSTER ASSIGNMENT UPDATE (WITH TRIP UPDATE)');
+    console.log('[PROCESS] ROSTER ASSIGNMENT UPDATE (WITH TRIP UPDATE)');
     console.log('='.repeat(80));
-    console.log('📅 Timestamp:', new Date().toISOString());
-    console.log('👤 Admin User ID:', req.user.userId);
-    console.log('📋 Roster ID:', req.params.id);
+    console.log('[INFO] Timestamp:', new Date().toISOString());
+    console.log('[USER] Admin User ID:', req.user.userId);
+    console.log('[INFO] Roster ID:', req.params.id);
 
     const session = req.mongoClient.startSession();
 
@@ -5360,7 +5508,7 @@ router.put('/admin/edit-assignment/:id',
         });
       }
 
-      console.log('✅ Roster found:', roster.customerName);
+      console.log('[OK] Roster found:', roster.customerName);
 
       // ====================================================================
       // STEP 2: FLEXIBLE DRIVER LOOKUP
@@ -5399,7 +5547,7 @@ router.put('/admin/edit-assignment/:id',
         driverName = 'Unknown Driver';
       }
 
-      console.log('✅ Driver found:', driverName);
+      console.log('[OK] Driver found:', driverName);
 
       // ====================================================================
       // STEP 3: FLEXIBLE VEHICLE LOOKUP
@@ -5423,12 +5571,12 @@ router.put('/admin/edit-assignment/:id',
         });
       }
 
-      console.log('✅ Vehicle found:', vehicle.registrationNumber);
+      console.log('[OK] Vehicle found:', vehicle.registrationNumber);
 
       // ====================================================================
       // STEP 4: Reverse geocode locations
       // ====================================================================
-      console.log('\n🌍 Reverse geocoding locations...');
+      console.log('\n Reverse geocoding locations...');
 
       const reverseGeocode = async (lat, lng) => {
         try {
@@ -5476,7 +5624,7 @@ router.put('/admin/edit-assignment/:id',
         dropAddress = await reverseGeocode(coords.latitude, coords.longitude);
       }
 
-      console.log('✅ Locations geocoded');
+      console.log('[OK] Locations geocoded');
 
       // ====================================================================
       // STEP 5: UPDATE ROSTER (backward compatibility)
@@ -5499,12 +5647,12 @@ router.put('/admin/edit-assignment/:id',
         { returnDocument: 'after', session }
       );
 
-      console.log('✅ Roster updated in MongoDB');
+      console.log('[OK] Roster updated in MongoDB');
 
       // ====================================================================
-      // STEP 6: 🆕 UPDATE OR CREATE TRIP in roster-assigned-trips
+      // STEP 6: [INFO] UPDATE OR CREATE TRIP in roster-assigned-trips
       // ====================================================================
-      console.log('\n🎫 Step 6: Updating trip in "roster-assigned-trips" collection...');
+      console.log('\n Step 6: Updating trip in "roster-assigned-trips" collection...');
 
       // Check if trip exists
       let existingTrip = await req.db.collection('roster-assigned-trips').findOne(
@@ -5551,7 +5699,7 @@ router.put('/admin/edit-assignment/:id',
           { session }
         );
         
-        console.log('✅ Trip updated successfully');
+        console.log('[OK] Trip updated successfully');
       } else {
         // Create new trip
         console.log('   Creating new trip...');
@@ -5606,14 +5754,37 @@ router.put('/admin/edit-assignment/:id',
         const tripResult = await req.db.collection('roster-assigned-trips').insertOne(tripData, { session });
         existingTrip = { _id: tripResult.insertedId, tripNumber };
         
-        // Link trip to roster
+        // Link trip to roster & update status to assigned
         await req.db.collection('rosters').updateOne(
           { _id: roster._id },
-          { $set: { tripId: existingTrip._id } },
+          {
+            $set: {
+              tripId: existingTrip._id,
+              status: 'assigned',
+              driverId: driver._id,
+              vehicleId: vehicle._id,
+              assignedDriverId: driver._id.toString(),
+              assignedVehicleId: vehicle._id.toString(),
+              assignedDriver: {
+                id: driver._id.toString(),
+                name: driverName,
+                phone: driverPhone,
+                email: driverEmail
+              },
+              assignedVehicle: {
+                id: vehicle._id.toString(),
+                vehicleNumber: vehicle.registrationNumber || vehicle.vehicleNumber || ''
+              },
+              assignmentDate: new Date(),
+              assignedAt: new Date(),
+              assignedBy: req.user.userId,
+              updatedAt: new Date()
+            }
+          },
           { session }
         );
         
-        console.log(`✅ Trip created: ${tripNumber}`);
+        console.log(`[OK] Trip created: ${tripNumber}`);
       }
 
       // ====================================================================
@@ -5632,9 +5803,9 @@ router.put('/admin/edit-assignment/:id',
           updatedAt: new Date().toISOString(),
           lastModifiedBy: req.user.userId
         });
-        console.log('✅ Firebase updated');
+        console.log('[OK] Firebase updated');
       } catch (firebaseError) {
-        console.log('⚠️  Firebase update failed:', firebaseError.message);
+        console.log('[WARN]  Firebase update failed:', firebaseError.message);
       }
 
       // ====================================================================
@@ -5658,8 +5829,8 @@ Driver: ${driverName}
 Phone: ${driverPhone || 'Not available'}
 Vehicle: ${vehicle.registrationNumber}
 
-🕐 PICKUP TIME: ${pickupTime12}
-⏰ BE READY BY: ${readyByTime12}
+[TIMER] PICKUP TIME: ${pickupTime12}
+[TIMER] BE READY BY: ${readyByTime12}
 
 Pickup Location: ${pickupAddress}
 Drop Location: ${dropAddress}`;
@@ -5693,9 +5864,9 @@ Drop Location: ${dropAddress}`;
           style: 'success'
         });
 
-        console.log('✅ Customer notification sent to:', roster.customerName);
+        console.log('[OK] Customer notification sent to:', roster.customerName);
       } catch (notifError) {
-        console.log('⚠️  Customer notification failed:', notifError.message);
+        console.log('[WARN]  Customer notification failed:', notifError.message);
       }
 
       // Driver notification
@@ -5713,12 +5884,12 @@ Drop Location: ${dropAddress}`;
 Customer: ${roster.customerName}
 Vehicle: ${vehicle.registrationNumber}
 
-📍 PICKUP DETAILS:
+[LOCATION] PICKUP DETAILS:
 Time: ${pickupTime12}
 Ready by: ${readyByTime12}
 Location: ${pickupAddress}
 
-📍 DROP DETAILS:
+[LOCATION] DROP DETAILS:
 Location: ${dropAddress}
 
 START BY: ${readyByTime12}`;
@@ -5751,17 +5922,17 @@ START BY: ${readyByTime12}`;
             style: 'success'
           });
 
-          console.log('✅ Driver notification sent to:', driverName);
+          console.log('[OK] Driver notification sent to:', driverName);
         } else {
-          console.log('ℹ️  Driver has no app access');
+          console.log('[INFO]  Driver has no app access');
         }
       } catch (driverNotifError) {
-        console.log('⚠️  Driver notification failed:', driverNotifError.message);
+        console.log('[WARN]  Driver notification failed:', driverNotifError.message);
       }
 
       await session.commitTransaction();
 
-      console.log('\n✅ ASSIGNMENT UPDATE COMPLETED\n');
+      console.log('\n[OK] ASSIGNMENT UPDATE COMPLETED\n');
 
       res.json({
         success: true,
@@ -5787,7 +5958,7 @@ START BY: ${readyByTime12}`;
 
     } catch (err) {
       await session.abortTransaction();
-      console.error('❌ ERROR:', err.message);
+      console.error('[ERROR] ERROR:', err.message);
 
       res.status(500).json({
         success: false,
@@ -5940,13 +6111,13 @@ router.get('/:id', verifyToken, async (req, res) => {
 // @access  Private (Admin)
 router.post('/admin/assign-batch', verifyToken, async (req, res) => {
   console.log('\n' + '='.repeat(80));
-  console.log('🚀 BATCH ROUTE ASSIGNMENT INITIATED');
+  console.log('[START] BATCH ROUTE ASSIGNMENT INITIATED');
   console.log('='.repeat(80));
 
   try {
     const { vehicleId, rosterIds, routeDetails } = req.body;
 
-    console.log('📦 Request Data:');
+    console.log(' Request Data:');
     console.log('   Vehicle ID:', vehicleId);
     console.log('   Roster IDs:', rosterIds);
     console.log('   Route Details:', routeDetails);
@@ -5960,7 +6131,7 @@ router.post('/admin/assign-batch', verifyToken, async (req, res) => {
     }
 
     // Step 1: Get vehicle details with driver
-    console.log('\n🚗 Step 1: Fetching vehicle details...');
+    console.log('\n[VEHICLE] Step 1: Fetching vehicle details...');
     const vehicle = await req.db.collection('vehicles').findOne({
       $or: [
         { _id: ObjectId.isValid(vehicleId) ? new ObjectId(vehicleId) : null },
@@ -5969,14 +6140,14 @@ router.post('/admin/assign-batch', verifyToken, async (req, res) => {
     });
 
     if (!vehicle) {
-      console.log('❌ Vehicle not found');
+      console.log('[ERROR] Vehicle not found');
       return res.status(404).json({
         success: false,
         message: 'Vehicle not found'
       });
     }
 
-    console.log('✅ Vehicle found:', vehicle.name || vehicle.vehicleNumber);
+    console.log('[OK] Vehicle found:', vehicle.name || vehicle.vehicleNumber);
 
     // Get driver details - FIXED VERSION
     let driverId;
@@ -5998,7 +6169,7 @@ router.post('/admin/assign-batch', verifyToken, async (req, res) => {
         driverName = 'Unknown Driver';
       }
 
-      console.log('✅ Driver found (from vehicle object):', driverName);
+      console.log('[OK] Driver found (from vehicle object):', driverName);
     } else if (typeof vehicle.assignedDriver === 'string') {
       // Driver is just an ID, need to fetch from database
       driverId = vehicle.assignedDriver;
@@ -6012,7 +6183,7 @@ router.post('/admin/assign-batch', verifyToken, async (req, res) => {
       });
 
       if (!driver) {
-        console.log('❌ Driver not found in drivers collection, checking users collection...');
+        console.log('[ERROR] Driver not found in drivers collection, checking users collection...');
 
         // Try finding in users collection
         driver = await req.db.collection('users').findOne({
@@ -6024,7 +6195,7 @@ router.post('/admin/assign-batch', verifyToken, async (req, res) => {
         });
 
         if (!driver) {
-          console.log('❌ Driver not found in any collection');
+          console.log('[ERROR] Driver not found in any collection');
           return res.status(404).json({
             success: false,
             message: `Driver not found with ID: ${driverId}`
@@ -6041,25 +6212,25 @@ router.post('/admin/assign-batch', verifyToken, async (req, res) => {
         driverName = 'Unknown Driver';
       }
 
-      console.log('✅ Driver found (from database):', driverName);
+      console.log('[OK] Driver found (from database):', driverName);
     } else {
-      console.log('❌ No driver assigned to vehicle');
+      console.log('[ERROR] No driver assigned to vehicle');
       return res.status(400).json({
         success: false,
         message: 'Vehicle has no assigned driver'
       });
     }
 
-    console.log('✅ Driver confirmed:', driverName);
+    console.log('[OK] Driver confirmed:', driverName);
 
-    // Step 2: Check vehicle capacity - ✅ FIXED VERSION
-    console.log('\n📊 Step 2: Checking vehicle capacity...');
+    // Step 2: Check vehicle capacity - [OK] FIXED VERSION
+    console.log('\n[INFO] Step 2: Checking vehicle capacity...');
     const totalSeats = vehicle.capacity?.passengers || 
                        vehicle.seatCapacity || 
                        vehicle.seatingCapacity || 
                        4;
 
-    // ✅ FIX: Count unique customers from existing trips, not trip count
+    // [OK] FIX: Count unique customers from existing trips, not trip count
     const today = new Date().toISOString().split('T')[0];
     const existingTrips = await req.db.collection('roster-assigned-trips').find({
       vehicleId: new ObjectId(vehicleId),
@@ -6067,8 +6238,8 @@ router.post('/admin/assign-batch', verifyToken, async (req, res) => {
       scheduledDate: today
     }).toArray();
 
-    console.log(`   📅 Today's date: ${today}`);
-    console.log(`   📊 Existing trips found: ${existingTrips.length}`);
+    console.log(`   [INFO] Today's date: ${today}`);
+    console.log(`   [INFO] Existing trips found: ${existingTrips.length}`);
 
     // Extract unique customer emails from all trips
     const uniqueCustomers = new Set();
@@ -6083,24 +6254,24 @@ router.post('/admin/assign-batch', verifyToken, async (req, res) => {
     const currentAssignedCount = uniqueCustomers.size;
     const availableSeats = totalSeats - 1 - currentAssignedCount; // -1 for driver
 
-    console.log(`   🪑 Total Seats: ${totalSeats}`);
-    console.log(`   👥 Currently Assigned: ${currentAssignedCount} unique customers`);
-    console.log(`   🚗 Existing Trips: ${existingTrips.length}`);
-    console.log(`   ✅ Available Seats: ${availableSeats}`);
-    console.log(`   📝 Requested: ${rosterIds.length} customers`);
+    console.log(`    Total Seats: ${totalSeats}`);
+    console.log(`   [USERS] Currently Assigned: ${currentAssignedCount} unique customers`);
+    console.log(`   [VEHICLE] Existing Trips: ${existingTrips.length}`);
+    console.log(`   [OK] Available Seats: ${availableSeats}`);
+    console.log(`   [INFO] Requested: ${rosterIds.length} customers`);
 
     if (availableSeats < rosterIds.length) {
-      console.log(`❌ Not enough seats! Need ${rosterIds.length}, have ${availableSeats}`);
+      console.log(`[ERROR] Not enough seats! Need ${rosterIds.length}, have ${availableSeats}`);
       return res.status(400).json({
         success: false,
         message: `Vehicle only has ${availableSeats} available seats, but ${rosterIds.length} customers requested`
       });
     }
 
-    console.log('✅ Capacity check passed');
+    console.log('[OK] Capacity check passed');
 
     // Step 3: Update rosters
-    console.log('\n📝 Step 3: Updating rosters...');
+    console.log('\n[INFO] Step 3: Updating rosters...');
     const updateResults = [];
     const notifications = [];
 
@@ -6117,7 +6288,7 @@ router.post('/admin/assign-batch', verifyToken, async (req, res) => {
         });
 
         if (!roster) {
-          console.log(`⚠️ Roster ${rosterId} not found, skipping`);
+          console.log(`[WARN] Roster ${rosterId} not found, skipping`);
           updateResults.push({ rosterId, success: false, error: 'Not found' });
           continue;
         }
@@ -6138,7 +6309,7 @@ router.post('/admin/assign-batch', verifyToken, async (req, res) => {
           }
         );
 
-        console.log(`✅ Updated roster ${i + 1}/${rosterIds.length}: ${roster.customerName || 'Unknown'}`);
+        console.log(`[OK] Updated roster ${i + 1}/${rosterIds.length}: ${roster.customerName || 'Unknown'}`);
         updateResults.push({ rosterId, success: true });
 
         // Prepare notification for customer
@@ -6175,15 +6346,15 @@ router.post('/admin/assign-batch', verifyToken, async (req, res) => {
         }
 
       } catch (error) {
-        console.log(`❌ Error updating roster ${rosterId}:`, error.message);
+        console.log(`[ERROR] Error updating roster ${rosterId}:`, error.message);
         updateResults.push({ rosterId, success: false, error: error.message });
       }
     }
 
-    // Step 4: Update vehicle assigned customers - ✅ FIXED VERSION
-    console.log('\n🚗 Step 4: Updating vehicle capacity...');
+    // Step 4: Update vehicle assigned customers - [OK] FIXED VERSION
+    console.log('\n[VEHICLE] Step 4: Updating vehicle capacity...');
     
-    // ✅ FIX: Get current unique customers, then add new ones
+    // [OK] FIX: Get current unique customers, then add new ones
     const currentUniqueEmails = Array.from(uniqueCustomers);
     
     // Get emails of newly assigned customers
@@ -6207,16 +6378,16 @@ router.post('/admin/assign-batch', verifyToken, async (req, res) => {
       { _id: vehicle._id },
       {
         $set: {
-          assignedCustomers: allUniqueEmails, // ✅ Store unique customer emails
+          assignedCustomers: allUniqueEmails, // [OK] Store unique customer emails
           updatedAt: new Date()
         }
       }
     );
 
-    console.log(`✅ Vehicle now has ${allUniqueEmails.length} unique assigned customers`);
+    console.log(`[OK] Vehicle now has ${allUniqueEmails.length} unique assigned customers`);
 
     // Step 5: Send notifications (async, don't wait)
-    console.log('\n📧 Step 5: Sending notifications...');
+    console.log('\n[INFO] Step 5: Sending notifications...');
     if (notifications.length > 0) {
       // Send notifications in background
       setImmediate(async () => {
@@ -6236,7 +6407,7 @@ router.post('/admin/assign-batch', verifyToken, async (req, res) => {
               });
 
               if (existingNotification) {
-                console.log(`⚠️  Notification already exists for roster ${notif.rosterId}, skipping`);
+                console.log(`[WARN]  Notification already exists for roster ${notif.rosterId}, skipping`);
                 continue;
               }
 
@@ -6254,7 +6425,7 @@ Your driver will pick you up according to the optimized route. You will receive 
                 userEmail: notif.email,                    // 🔥 PRIMARY: Email for FCM
                 userRole: 'customer',                      // 🔥 User role
                 type: 'route_assigned',
-                title: '🚗 Your Ride is Confirmed!',
+                title: '[VEHICLE] Your Ride is Confirmed!',
                 body: notificationBody,
                 data: {
                   rosterId: notif.rosterId,
@@ -6280,12 +6451,12 @@ Your driver will pick you up according to the optimized route. You will receive 
                 }
               });
 
-              console.log(`✅ Notification sent to ${notif.customerName}`);
+              console.log(`[OK] Notification sent to ${notif.customerName}`);
             } else {
-              console.log(`⚠️ User not found for ${notif.email}`);
+              console.log(`[WARN] User not found for ${notif.email}`);
             }
           } catch (error) {
-            console.log(`⚠️ Failed to send notification to ${notif.customerName}:`, error.message);
+            console.log(`[WARN] Failed to send notification to ${notif.customerName}:`, error.message);
           }
         }
 
@@ -6310,7 +6481,7 @@ Please check your route details in the Driver Dashboard.`;
               userEmail: driverUser.email,                 // 🔥 PRIMARY: Email for FCM
               userRole: 'driver',                          // 🔥 User role
               type: 'route_assigned_driver',
-              title: '🚗 New Route Assignment',
+              title: '[VEHICLE] New Route Assignment',
               body: driverNotificationBody,
               data: {
                 vehicleId: vehicleId,
@@ -6328,15 +6499,15 @@ Please check your route details in the Driver Dashboard.`;
               }
             });
 
-            console.log(`✅ Notification sent to driver`);
+            console.log(`[OK] Notification sent to driver`);
           }
         } catch (error) {
-          console.log(`⚠️ Failed to send driver notification:`, error.message);
+          console.log(`[WARN] Failed to send driver notification:`, error.message);
         }
 
         // 🔥 NEW: Send notification to all admins
         try {
-          console.log('📤 Sending notifications to admins...');
+          console.log(' Sending notifications to admins...');
           
           // Get all active admin users
           const adminUsers = await req.db.collection('users').find({
@@ -6349,7 +6520,7 @@ Please check your route details in the Driver Dashboard.`;
           // Send notification to each admin
           for (const admin of adminUsers) {
             if (!admin.email) {
-              console.log(`⚠️  Skipping admin ${admin._id} - no email`);
+              console.log(`[WARN]  Skipping admin ${admin._id} - no email`);
               continue;
             }
             
@@ -6366,7 +6537,7 @@ The route has been optimized and all customers have been notified.`;
               userId: admin.firebaseUid || admin._id.toString(),
               userEmail: admin.email,                      // 🔥 PRIMARY: Email for FCM
               userRole: admin.role,                        // 🔥 User role
-              title: '📋 Route Assignment Completed',
+              title: '[INFO] Route Assignment Completed',
               body: adminNotificationBody,
               type: 'roster_assigned_admin',
               data: {
@@ -6390,10 +6561,10 @@ The route has been optimized and all customers have been notified.`;
             });
           }
           
-          console.log(`✅ Admin notifications sent to ${adminUsers.length} admin(s)`);
+          console.log(`[OK] Admin notifications sent to ${adminUsers.length} admin(s)`);
           
         } catch (error) {
-          console.log(`⚠️ Failed to send admin notifications:`, error.message);
+          console.log(`[WARN] Failed to send admin notifications:`, error.message);
         }
       });
     }
@@ -6402,7 +6573,7 @@ The route has been optimized and all customers have been notified.`;
     const successCount = updateResults.filter(r => r.success).length;
     const failCount = updateResults.filter(r => !r.success).length;
 
-    console.log('\n✅ BATCH ASSIGNMENT COMPLETE');
+    console.log('\n[OK] BATCH ASSIGNMENT COMPLETE');
     console.log(`   Success: ${successCount}/${rosterIds.length}`);
     console.log(`   Failed: ${failCount}`);
     console.log('='.repeat(80));
@@ -6418,13 +6589,13 @@ The route has been optimized and all customers have been notified.`;
           id: vehicleId,
           name: vehicle.name || vehicle.vehicleNumber,
           driver: driverName, // Use the already determined driver name
-          availableSeats: totalSeats - 1 - allUniqueEmails.length // ✅ Fixed calculation
+          availableSeats: totalSeats - 1 - allUniqueEmails.length // [OK] Fixed calculation
         }
       }
     });
 
   } catch (error) {
-    console.error('❌ BATCH ASSIGNMENT ERROR:', error);
+    console.error('[ERROR] BATCH ASSIGNMENT ERROR:', error);
     res.status(500).json({
       success: false,
       message: 'Failed to assign rosters',
@@ -6438,7 +6609,7 @@ The route has been optimized and all customers have been notified.`;
 // @access  Private (Admin/Manager)
 router.get('/admin/stats', verifyToken, async (req, res) => {
   try {
-    console.log('📊 Fetching roster statistics for admin dashboard...');
+    console.log('[INFO] Fetching roster statistics for admin dashboard...');
 
     // Get counts for each status
     const [pending, assigned, inProgress, completed, cancelled] = await Promise.all([
@@ -6475,7 +6646,7 @@ router.get('/admin/stats', verifyToken, async (req, res) => {
       total
     };
 
-    console.log('✅ Roster stats calculated:', stats);
+    console.log('[OK] Roster stats calculated:', stats);
 
     res.json({
       success: true,
@@ -6484,7 +6655,7 @@ router.get('/admin/stats', verifyToken, async (req, res) => {
     });
 
   } catch (err) {
-    console.error('❌ Error fetching roster stats:', err.message);
+    console.error('[ERROR] Error fetching roster stats:', err.message);
     res.status(500).json({
       success: false,
       message: 'Failed to fetch roster statistics',
@@ -6536,7 +6707,7 @@ router.get('/admin/approved', verifyToken, async (req, res) => {
 
 // Global error handler for this router
 router.use((err, req, res, next) => {
-  console.error('❌ ROUTER ERROR:', err.message);
+  console.error('[ERROR] ROUTER ERROR:', err.message);
   console.error('Path:', req.path);
   console.error('Stack:', err.stack);
 
