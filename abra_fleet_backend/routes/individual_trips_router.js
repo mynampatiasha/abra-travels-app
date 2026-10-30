@@ -41,6 +41,85 @@ function buildDriverFilter(driverId) {
 }
 
 // ============================================================================
+// HELPER: Robust driver-ownership filter for action endpoints (respond/start/
+// arrive/depart/end) and the driver's trip lists.
+//
+// The JWT `userId` is the driver's `drivers._id`, but different creation flows
+// store the assigned driver under different ids / field names:
+//   • admin "Start New Trip"      → trips.driverId = driver._id (may be users._id
+//                                    or a driver code), trips.driverFirebaseUid
+//   • route optimiser             → roster-assigned-trips.driverId = ObjectId
+//   • roster assignment           → roster_assigned_trips.driverId = string
+// Matching only on `req.user.userId` produces false 404s ("Trip not found or not
+// assigned to you") and empty lists. This resolves every id that can represent
+// the caller and matches the trip against all of them, across every field name
+// in use.
+// ============================================================================
+async function buildDriverTripFilter(db, reqUser) {
+  const ids = new Set();
+  const add = (v) => {
+    if (v === undefined || v === null) return;
+    const s = String(v).trim();
+    if (s && s !== 'null' && s !== 'undefined') ids.add(s);
+  };
+
+  add(reqUser.userId);
+  add(reqUser.driverId);
+
+  try {
+    let driverDoc = null;
+    if (ObjectId.isValid(reqUser.userId)) {
+      driverDoc = await db.collection('drivers').findOne({ _id: new ObjectId(reqUser.userId) });
+    }
+    if (!driverDoc && reqUser.email) {
+      driverDoc = await db.collection('drivers').findOne({ email: String(reqUser.email).toLowerCase() });
+    }
+    if (driverDoc) {
+      add(driverDoc._id);
+      add(driverDoc.userId);
+      add(driverDoc.firebaseUid);
+      add(driverDoc.driverId);
+      add(driverDoc.driverCode);
+    }
+  } catch (e) {
+    console.warn('⚠️  buildDriverTripFilter: driver lookup failed:', e.message);
+  }
+
+  const idList = [...ids];
+  const idFields = [
+    'driverId', 'assignedDriverId', 'driverFirebaseUid',
+    'driver._id', 'assignedDriver._id', 'assignedDriver.driverId',
+  ];
+  const or = [];
+  for (const f of idFields) {
+    for (const v of idList) {
+      or.push({ [f]: v });
+      if (ObjectId.isValid(v)) {
+        try { or.push({ [f]: new ObjectId(v) }); } catch (_) {}
+      }
+    }
+  }
+  if (reqUser.email) {
+    const em = String(reqUser.email).toLowerCase();
+    or.push({ driverEmail: em }, { driverEmail: reqUser.email },
+            { 'driver.email': em }, { 'assignedDriver.email': em });
+  }
+
+  // If we somehow resolved nothing, never match (safer than matching everything).
+  return or.length ? { $or: or } : { _id: null };
+}
+
+// Every collection an individual/assigned trip can live in. NOTE the hyphenated
+// `roster-assigned-trips` (route optimiser) vs underscored `roster_assigned_trips`
+// (roster assignment) — both are real, separate collections.
+const DRIVER_TRIP_COLLECTIONS = [
+  'roster_assigned_trips',
+  'roster-assigned-trips',
+  'trips',
+  'client_created_trips',
+];
+
+// ============================================================================
 // HELPER: Normalise a client_created_trips document to match roster/trips shape
 // Maps clientName/clientPhone → customerName/customerPhone for Flutter UI
 // ============================================================================
@@ -108,16 +187,14 @@ router.get('/individual/pending', verifyToken, async (req, res) => {
 
     const db = req.db;
     const driverId = req.user.userId;
+    const driverFilter = await buildDriverTripFilter(db, req.user);
 
     console.log('🔍 Driver ID:', driverId);
     console.log('   Type:', typeof driverId);
 
     // ── 1. ORIGINAL: roster_assigned_trips ──────────────────────────────────
     const rosterTrips = await db.collection('roster_assigned_trips').find({
-      $or: [
-        { driverId: driverId },
-        { driverId: new ObjectId(driverId) }
-      ],
+      ...driverFilter,
       status: { $in: ['assigned', 'pending'] },
       tripType: { $in: ['individual', 'manual'] }
     }).sort({ createdAt: -1 }).toArray();
@@ -128,7 +205,7 @@ router.get('/individual/pending', verifyToken, async (req, res) => {
     let manualTrips = [];
     try {
       manualTrips = await db.collection('trips').find({
-        ...buildDriverFilter(driverId),
+        ...driverFilter,
         status: { $in: ['assigned', 'accepted'] },
       }).sort({ createdAt: -1 }).toArray();
       console.log(`✅ Manual trips (pending): ${manualTrips.length}`);
@@ -140,7 +217,7 @@ router.get('/individual/pending', verifyToken, async (req, res) => {
     let clientTrips = [];
     try {
       clientTrips = await db.collection('client_created_trips').find({
-        ...buildDriverFilter(driverId),
+        ...driverFilter,
         status: { $in: ['assigned', 'accepted'] },
       }).sort({ createdAt: -1 }).toArray();
       console.log(`✅ Client trips (pending): ${clientTrips.length}`);
@@ -236,16 +313,14 @@ router.get('/individual/accepted', verifyToken, async (req, res) => {
 
     const db = req.db;
     const driverId = req.user.userId;
+    const driverFilter = await buildDriverTripFilter(db, req.user);
 
     console.log('🔍 Driver ID:', driverId);
     console.log('   Type:', typeof driverId);
 
     // ── 1. ORIGINAL: roster_assigned_trips ──────────────────────────────────
     const rosterTrips = await db.collection('roster_assigned_trips').find({
-      $or: [
-        { driverId: driverId },
-        { driverId: new ObjectId(driverId) }
-      ],
+      ...driverFilter,
       status: { $in: ['accepted', 'started', 'in_progress'] },
       tripType: { $in: ['individual', 'manual'] }
     }).sort({ createdAt: -1 }).toArray();
@@ -256,7 +331,7 @@ router.get('/individual/accepted', verifyToken, async (req, res) => {
     let manualTrips = [];
     try {
       manualTrips = await db.collection('trips').find({
-        ...buildDriverFilter(driverId),
+        ...driverFilter,
         status: { $in: ['accepted', 'started', 'in_progress'] },
       }).sort({ createdAt: -1 }).toArray();
       console.log(`✅ Manual trips (accepted): ${manualTrips.length}`);
@@ -268,7 +343,7 @@ router.get('/individual/accepted', verifyToken, async (req, res) => {
     let clientTrips = [];
     try {
       clientTrips = await db.collection('client_created_trips').find({
-        ...buildDriverFilter(driverId),
+        ...driverFilter,
         status: { $in: ['accepted', 'started', 'in_progress'] },
       }).sort({ createdAt: -1 }).toArray();
       console.log(`✅ Client trips (accepted): ${clientTrips.length}`);
@@ -359,16 +434,14 @@ router.get('/individual/completed', verifyToken, async (req, res) => {
 
     const db = req.db;
     const driverId = req.user.userId;
+    const driverFilter = await buildDriverTripFilter(db, req.user);
 
     console.log('🔍 Driver ID:', driverId);
     console.log('   Type:', typeof driverId);
 
     // ── 1. ORIGINAL: roster_assigned_trips ──────────────────────────────────
     const rosterTrips = await db.collection('roster_assigned_trips').find({
-      $or: [
-        { driverId: driverId },
-        { driverId: new ObjectId(driverId) }
-      ],
+      ...driverFilter,
       status: 'completed',
       tripType: { $in: ['individual', 'manual'] }
     }).sort({ completedAt: -1 }).limit(50).toArray();
@@ -379,7 +452,7 @@ router.get('/individual/completed', verifyToken, async (req, res) => {
     let manualTrips = [];
     try {
       manualTrips = await db.collection('trips').find({
-        ...buildDriverFilter(driverId),
+        ...driverFilter,
         status: 'completed',
       }).sort({ updatedAt: -1 }).limit(50).toArray();
       console.log(`✅ Manual trips (completed): ${manualTrips.length}`);
@@ -391,7 +464,7 @@ router.get('/individual/completed', verifyToken, async (req, res) => {
     let clientTrips = [];
     try {
       clientTrips = await db.collection('client_created_trips').find({
-        ...buildDriverFilter(driverId),
+        ...driverFilter,
         status: 'completed',
       }).sort({ updatedAt: -1 }).limit(50).toArray();
       console.log(`✅ Client trips (completed): ${clientTrips.length}`);
@@ -488,11 +561,12 @@ router.post('/individual/:tripId/arrive', verifyToken, async (req, res) => {
       ? { currentLocation: { latitude, longitude, timestamp: new Date() } }
       : {};
 
-    // Try all 3 collections — first match wins
+    // Try every collection — first match wins
+    const driverFilter = await buildDriverTripFilter(db, req.user);
     let updated = false;
-    for (const col of ['roster_assigned_trips', 'trips', 'client_created_trips']) {
+    for (const col of DRIVER_TRIP_COLLECTIONS) {
       const result = await db.collection(col).updateOne(
-        { _id: oid, ...buildDriverFilter(driverId) },
+        { _id: oid, ...driverFilter },
         { $set: { ...locationUpdate, arrivedAt: new Date(), updatedAt: new Date() } }
       );
       if (result.matchedCount > 0) {
@@ -532,10 +606,11 @@ router.post('/individual/:tripId/depart', verifyToken, async (req, res) => {
       ? { currentLocation: { latitude, longitude, timestamp: new Date() } }
       : {};
 
+    const driverFilter = await buildDriverTripFilter(db, req.user);
     let updated = false;
-    for (const col of ['roster_assigned_trips', 'trips', 'client_created_trips']) {
+    for (const col of DRIVER_TRIP_COLLECTIONS) {
       const result = await db.collection(col).updateOne(
-        { _id: oid, ...buildDriverFilter(driverId) },
+        { _id: oid, ...driverFilter },
         { $set: { ...locationUpdate, departedAt: new Date(), updatedAt: new Date() } }
       );
       if (result.matchedCount > 0) {
@@ -579,10 +654,11 @@ router.post('/individual/:tripId/location', verifyToken, async (req, res) => {
       timestamp: new Date(),
     };
 
-    // Try all 3 collections — first match wins
-    for (const col of ['trips', 'client_created_trips', 'roster_assigned_trips']) {
+    // Try every collection — first match wins
+    const driverFilter = await buildDriverTripFilter(db, req.user);
+    for (const col of DRIVER_TRIP_COLLECTIONS) {
       const result = await db.collection(col).updateOne(
-        { _id: oid, ...buildDriverFilter(driverId) },
+        { _id: oid, ...driverFilter },
         {
           $set: { currentLocation: locationEntry, updatedAt: new Date() },
           $push: { locationHistory: { $each: [locationEntry], $slice: -200 } },
@@ -634,34 +710,23 @@ router.post('/individual/:tripId/respond', verifyToken, async (req, res) => {
     let oid;
     try { oid = new ObjectId(tripId); } catch { return res.status(400).json({ success: false, error: 'Invalid trip ID' }); }
 
-    // ── 1. Try roster_assigned_trips first (original logic) ─────────────────
-    let trip = await db.collection('roster_assigned_trips').findOne({
-      _id: oid,
-      $or: [{ driverId: driverId }, { driverId: new ObjectId(driverId) }]
-    });
-    let collectionName = 'roster_assigned_trips';
-
-    // ── 2. Try trips collection ──────────────────────────────────────────────
-    if (!trip) {
+    // ── Locate the trip across every collection, matching the driver by ANY of
+    //    their known identifiers (fixes false 404s from id/collection mismatch).
+    const driverFilter = await buildDriverTripFilter(db, req.user);
+    let trip = null;
+    let collectionName = null;
+    for (const cn of DRIVER_TRIP_COLLECTIONS) {
       try {
-        trip = await db.collection('trips').findOne({ _id: oid, ...buildDriverFilter(driverId) });
-        if (trip) collectionName = 'trips';
-      } catch (e) { console.error('⚠️  trips lookup failed:', e.message); }
-    }
-
-    // ── 3. Try client_created_trips ──────────────────────────────────────────
-    if (!trip) {
-      try {
-        trip = await db.collection('client_created_trips').findOne({ _id: oid, ...buildDriverFilter(driverId) });
-        if (trip) collectionName = 'client_created_trips';
-      } catch (e) { console.error('⚠️  client_created_trips lookup failed:', e.message); }
+        const found = await db.collection(cn).findOne({ _id: oid, ...driverFilter });
+        if (found) { trip = found; collectionName = cn; break; }
+      } catch (e) { console.error(`⚠️  ${cn} lookup failed:`, e.message); }
     }
 
     if (!trip) {
-      console.error('❌ Trip not found in any collection');
-      return res.status(404).json({ 
-        success: false, 
-        error: 'Trip not found or not assigned to you' 
+      console.error('❌ Trip not found in any collection for driver:', driverId);
+      return res.status(404).json({
+        success: false,
+        error: 'Trip not found or not assigned to you'
       });
     }
 
@@ -817,25 +882,15 @@ router.post('/individual/:tripId/start', verifyToken, upload.single('photo'), as
     let oid;
     try { oid = new ObjectId(tripId); } catch { return res.status(400).json({ success: false, error: 'Invalid trip ID' }); }
 
-    // Find which collection this trip belongs to
-    let trip = await db.collection('roster_assigned_trips').findOne({
-      _id: oid,
-      $or: [{ driverId: driverId }, { driverId: new ObjectId(driverId) }]
-    });
-    let collectionName = 'roster_assigned_trips';
-
-    if (!trip) {
+    // Find which collection this trip belongs to (match driver by any known id)
+    const driverFilter = await buildDriverTripFilter(db, req.user);
+    let trip = null;
+    let collectionName = null;
+    for (const cn of DRIVER_TRIP_COLLECTIONS) {
       try {
-        trip = await db.collection('trips').findOne({ _id: oid, ...buildDriverFilter(driverId) });
-        if (trip) collectionName = 'trips';
-      } catch (e) { console.error('⚠️  trips lookup failed:', e.message); }
-    }
-
-    if (!trip) {
-      try {
-        trip = await db.collection('client_created_trips').findOne({ _id: oid, ...buildDriverFilter(driverId) });
-        if (trip) collectionName = 'client_created_trips';
-      } catch (e) { console.error('⚠️  client_created_trips lookup failed:', e.message); }
+        const found = await db.collection(cn).findOne({ _id: oid, ...driverFilter });
+        if (found) { trip = found; collectionName = cn; break; }
+      } catch (e) { console.error(`⚠️  ${cn} lookup failed:`, e.message); }
     }
 
     if (!trip) {
@@ -909,25 +964,15 @@ router.post('/individual/:tripId/end', verifyToken, upload.single('photo'), asyn
     let oid;
     try { oid = new ObjectId(tripId); } catch { return res.status(400).json({ success: false, error: 'Invalid trip ID' }); }
 
-    // Find which collection this trip belongs to
-    let trip = await db.collection('roster_assigned_trips').findOne({
-      _id: oid,
-      $or: [{ driverId: driverId }, { driverId: new ObjectId(driverId) }]
-    });
-    let collectionName = 'roster_assigned_trips';
-
-    if (!trip) {
+    // Find which collection this trip belongs to (match driver by any known id)
+    const driverFilter = await buildDriverTripFilter(db, req.user);
+    let trip = null;
+    let collectionName = null;
+    for (const cn of DRIVER_TRIP_COLLECTIONS) {
       try {
-        trip = await db.collection('trips').findOne({ _id: oid, ...buildDriverFilter(driverId) });
-        if (trip) collectionName = 'trips';
-      } catch (e) { console.error('⚠️  trips lookup failed:', e.message); }
-    }
-
-    if (!trip) {
-      try {
-        trip = await db.collection('client_created_trips').findOne({ _id: oid, ...buildDriverFilter(driverId) });
-        if (trip) collectionName = 'client_created_trips';
-      } catch (e) { console.error('⚠️  client_created_trips lookup failed:', e.message); }
+        const found = await db.collection(cn).findOne({ _id: oid, ...driverFilter });
+        if (found) { trip = found; collectionName = cn; break; }
+      } catch (e) { console.error(`⚠️  ${cn} lookup failed:`, e.message); }
     }
 
     if (!trip) {
