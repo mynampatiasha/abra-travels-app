@@ -66,6 +66,12 @@ class _CustomerNotificationsScreenState extends State<CustomerNotificationsScree
     // ✅ NEW: Feedback notifications
     'feedback_reply',          // Admin replied to customer feedback
     'feedback_request',        // Request for trip feedback
+
+    // ✅ OTP verification notifications
+    'otp_step_in',             // Boarding OTP
+    'otp_step_out',            // Drop-off OTP
+    'otp_step_in_resend',      // Resent boarding OTP
+    'otp_step_out_resend',     // Resent drop-off OTP
   ];
 
   @override
@@ -204,8 +210,8 @@ class _CustomerNotificationsScreenState extends State<CustomerNotificationsScree
 
           // Sort by date (newest first)
           _notifications.sort((a, b) {
-            final aDate = DateTime.parse(a['createdAt'] ?? DateTime.now().toIso8601String());
-            final bDate = DateTime.parse(b['createdAt'] ?? DateTime.now().toIso8601String());
+            final aDate = DateTime.parse(a['createdAt'] ?? DateTime.now().toIso8601String()).toLocal();
+            final bDate = DateTime.parse(b['createdAt'] ?? DateTime.now().toIso8601String()).toLocal();
             return bDate.compareTo(aDate);
           });
 
@@ -636,7 +642,7 @@ class _CustomerNotificationsScreenState extends State<CustomerNotificationsScree
     DateTime? dateTime;
     if (createdAt != null) {
       try {
-        dateTime = DateTime.parse(createdAt);
+        dateTime = DateTime.parse(createdAt).toLocal();
       } catch (e) {
         debugPrint('Error parsing date: $e');
       }
@@ -864,6 +870,7 @@ class _CustomerNotificationsScreenState extends State<CustomerNotificationsScree
       '__v',
       'tripId',           // ✅ ADDED: Hide trip ID
       'tripNumber',       // ✅ ADDED: Hide trip number (if it's technical)
+      // ✅ NOTE: 'otp' and 'otpType' are intentionally NOT hidden — shown in special OTP section
     ];
 
     // Hide if in hidden list
@@ -891,7 +898,7 @@ class _CustomerNotificationsScreenState extends State<CustomerNotificationsScree
     // Format dates
     if (key.toLowerCase().contains('date') || key.toLowerCase().contains('time')) {
       try {
-        final dateTime = DateTime.parse(value.toString());
+        final dateTime = DateTime.parse(value.toString()).toLocal();
         return DateFormat('MMM dd, yyyy • hh:mm a').format(dateTime);
       } catch (e) {
         return value.toString();
@@ -962,7 +969,7 @@ class _CustomerNotificationsScreenState extends State<CustomerNotificationsScree
     DateTime? dateTime;
     if (createdAt != null) {
       try {
-        dateTime = DateTime.parse(createdAt);
+        dateTime = DateTime.parse(createdAt).toLocal();
       } catch (e) {
         debugPrint('Error parsing date: $e');
       }
@@ -1107,9 +1114,112 @@ class _CustomerNotificationsScreenState extends State<CustomerNotificationsScree
                         const SizedBox(height: 24),
                       ],
 
+                      // ✅ OTP CARD — shown prominently for otp_step_in / otp_step_out
+                      if ((type == 'otp_step_in' || type == 'otp_step_out' ||
+                           type == 'otp_step_in_resend' || type == 'otp_step_out_resend') &&
+                          data['otp'] != null) ...[
+                        Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.all(20),
+                          decoration: BoxDecoration(
+                            gradient: LinearGradient(
+                              begin: Alignment.topLeft,
+                              end: Alignment.bottomRight,
+                              colors: type.contains('step_in')
+                                  ? [const Color(0xFF0D1B3E), const Color(0xFF1A3A6B)]
+                                  : [const Color(0xFF1A3A6B), const Color(0xFF2463AE)],
+                            ),
+                            borderRadius: BorderRadius.circular(16),
+                          ),
+                          child: Column(
+                            children: [
+                              Text(
+                                type.contains('step_in')
+                                    ? '🔐 Your Boarding OTP'
+                                    : '🔐 Your Drop-Off OTP',
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 16,
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                type.contains('step_in')
+                                    ? 'Show this to your driver when boarding'
+                                    : 'Share this with your driver at your destination',
+                                style: TextStyle(
+                                  color: Colors.white.withOpacity(0.8),
+                                  fontSize: 12,
+                                ),
+                                textAlign: TextAlign.center,
+                              ),
+                              const SizedBox(height: 16),
+                              // Large OTP display
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 14),
+                                decoration: BoxDecoration(
+                                  color: Colors.white,
+                                  borderRadius: BorderRadius.circular(12),
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: Colors.black.withOpacity(0.15),
+                                      blurRadius: 10,
+                                      offset: const Offset(0, 4),
+                                    ),
+                                  ],
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Text(
+                                      data['otp'].toString(),
+                                      style: const TextStyle(
+                                        fontSize: 38,
+                                        fontWeight: FontWeight.bold,
+                                        color: Color(0xFF0D1B3E),
+                                        letterSpacing: 8,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 12),
+                                    GestureDetector(
+                                      onTap: () {
+                                        // Copy to clipboard
+                                        ScaffoldMessenger.of(context).showSnackBar(
+                                          const SnackBar(
+                                            content: Text('OTP copied!'),
+                                            duration: Duration(seconds: 1),
+                                            behavior: SnackBarBehavior.floating,
+                                          ),
+                                        );
+                                      },
+                                      child: const Icon(
+                                        Icons.copy,
+                                        color: Color(0xFF2463AE),
+                                        size: 22,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              if (data['expiresAt'] != null) ...[
+                                const SizedBox(height: 10),
+                                Text(
+                                  'Valid for 30 minutes',
+                                  style: TextStyle(
+                                    color: Colors.white.withOpacity(0.7),
+                                    fontSize: 11,
+                                  ),
+                                ),
+                              ],
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 20),
+                      ],
+
                       // Details section - Only show if there's data to display
-                      if (displayData.isNotEmpty) ...[
-                        Row(
+                      if (displayData.isNotEmpty) ...[                        Row(
                           children: [
                             Icon(
                               Icons.info_outline,
@@ -1375,6 +1485,14 @@ class _CustomerNotificationsScreenState extends State<CustomerNotificationsScree
       
       case 'feedback_reply':
         return [Colors.purple[600]!, Colors.purple[400]!];
+
+      // ✅ OTP notifications — navy gradient
+      case 'otp_step_in':
+      case 'otp_step_in_resend':
+        return [const Color(0xFF0D1B3E), const Color(0xFF2463AE)];
+      case 'otp_step_out':
+      case 'otp_step_out_resend':
+        return [const Color(0xFF1A3A6B), const Color(0xFF3D8EFF)];
       
       case 'leave_approved':
       case 'address_change_approved':
@@ -1541,6 +1659,18 @@ class _CustomerNotificationsScreenState extends State<CustomerNotificationsScree
       case 'feedback_request':
         iconData = Icons.star_rate;
         iconColor = Colors.amber;
+        break;
+
+      // ✅ OTP notifications
+      case 'otp_step_in':
+      case 'otp_step_in_resend':
+        iconData = Icons.login;
+        iconColor = const Color(0xFF2463AE);
+        break;
+      case 'otp_step_out':
+      case 'otp_step_out_resend':
+        iconData = Icons.logout;
+        iconColor = const Color(0xFF1A3A6B);
         break;
 
       default:

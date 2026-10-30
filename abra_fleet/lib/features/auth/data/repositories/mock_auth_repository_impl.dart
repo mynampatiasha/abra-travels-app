@@ -50,6 +50,14 @@ class MockAuthRepositoryImpl implements AuthRepository {
     String? name,
     required String role,
     String? phoneNumber,
+    String? companyName,
+    String? department,
+    String? employeeId,
+    String? branch,
+    String? designation,
+    String? altPhoneNumber,
+    String? emergencyContactName,
+    String? emergencyContactPhone,
   }) async {
     await Future.delayed(const Duration(seconds: 1)); // Simulate network delay
 

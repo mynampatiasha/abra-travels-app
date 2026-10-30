@@ -1,7 +1,7 @@
 // lib/features/admin/role_based_access/permission.dart
 // ============================================================================
-// 🔐 PERMISSION MANAGEMENT SCREEN
-// UI styled to match careers.php — blue gradient cards, white clean layout
+// ðŸ” PERMISSION MANAGEMENT SCREEN
+// UI styled to match careers.php â€” blue gradient cards, white clean layout
 // Opens as an OVERLAY DIALOG (not Navigator.push)
 // ============================================================================
 
@@ -9,10 +9,10 @@ import 'package:flutter/material.dart';
 import 'package:abra_fleet/core/services/erp_users_management_service.dart';
 
 // ============================================================================
-// 🎨 THEME — matches careers.php color system
+// ðŸŽ¨ THEME â€” matches careers.php color system
 // ============================================================================
 class _Theme {
-  // Blues — from careers.php
+  // Blues â€” from careers.php
   static const heroStart        = Color(0xFF0F172A); // .cr-hero gradient start
   static const heroEnd          = Color(0xFF1E40AF); // .cr-hero gradient end
   static const cardHeaderStart  = Color(0xFFEFF6FF); // .cr-card-hdr gradient
@@ -29,12 +29,12 @@ class _Theme {
   static const textSecondary    = Color(0xFF64748B); // subtitles
   static const textMuted        = Color(0xFF94A3B8);
 
-  // Access checkbox — green like .jt-t
+  // Access checkbox â€” green like .jt-t
   static const accessGreen      = Color(0xFF16A34A);
   static const accessGreenBg    = Color(0xFFF0FDF4);
   static const accessGreenBorder= Color(0xFF86EFAC);
 
-  // Edit checkbox — blue
+  // Edit checkbox â€” blue
   static const editBlue         = Color(0xFF1E40AF);
   static const editBlueBg       = Color(0xFFEFF6FF);
   static const editBlueBorder   = Color(0xFFBFDBFE);
@@ -44,13 +44,13 @@ class _Theme {
   static const dangerBg         = Color(0xFFFEF2F2);
   static const dangerBorder     = Color(0xFFFECACA);
 
-  // Submit bar — matches .cr-submit-box
+  // Submit bar â€” matches .cr-submit-box
   static const submitStart      = Color(0xFF0F172A);
   static const submitEnd        = Color(0xFF1E3A8A);
 }
 
 // ============================================================================
-// 🚀 STATIC HELPER — show as overlay dialog
+// ðŸš€ STATIC HELPER â€” show as overlay dialog
 // Call: PermissionManagementScreen.showOverlay(context, userId, userName)
 // ============================================================================
 class PermissionManagementScreen extends StatefulWidget {
@@ -63,7 +63,7 @@ class PermissionManagementScreen extends StatefulWidget {
     required this.userName,
   });
 
-  /// ✅ Open as full-screen overlay dialog (not Navigator.push)
+  /// âœ… Open as full-screen overlay dialog (not Navigator.push)
   static Future<void> showOverlay(
     BuildContext context, {
     required String userId,
@@ -102,7 +102,7 @@ class _PermissionManagementScreenState
   bool _isSaving = false;
 
   // ========================================================================
-  // 🗂️ MODULE STRUCTURE — matches careers.php step-card pattern
+  // ðŸ—‚ï¸ MODULE STRUCTURE â€” matches careers.php step-card pattern
   // Each module = one "cr-card" equivalent
   // ========================================================================
   final List<Map<String, dynamic>> _modules = [
@@ -123,8 +123,11 @@ class _PermissionManagementScreenState
         'hrm_leave_requests': 'Leave Requests',
         'hrm_payroll':        'Payroll',
         'hrm_notice_board':   'Notice Board',
+        'hrm_kpi':            'KPI Module (Folder)',
         'hrm_kpq':            'KPQ',
         'hrm_kpi_evaluation': 'KPI Evaluation',
+        'expense_tracker':    'Expense Tracker',
+        'essential_purchases':'Essential Purchases',
       },
     },
     {
@@ -256,6 +259,44 @@ class _PermissionManagementScreenState
         'tt_careers':       'Careers',
       },
     },
+    {
+      'title': 'Sales & Marketing',
+      'subtitle': 'Sales & Marketing Analytics',
+      'icon': Icons.campaign_outlined,
+      'permissions': {
+        'customer_analytics_al': 'Customer Analytics',
+        'meta_ads_analytics_al': 'Meta Ads Analytics',
+        'google_ads_analytics_al': 'Google Ads Analytics',
+        'search_console_al': 'Search Console',
+        'youtube_studio_al': 'AI Video Studio',
+        'social_media_al': 'Social Media',
+      },
+    },
+    {
+      'title': 'HRM Screening Hub',
+      'subtitle': 'Workforce Journey and Onboarding',
+      'icon': Icons.how_to_reg_outlined,
+      'permissions': {
+        'hrm_workforce_journey': 'Workforce Journey',
+        'hrm_hiring_process': 'Screening',
+        'hrm_screening_kpq': 'Screening KPQ',
+        'hrm_onboarding': 'Onboarding',
+        'hrm_training_oje': 'Training and OJE',
+        'hrm_employee_checklist': 'Employee Checklist',
+        'hrm_employee_evaluation': 'Employee Evaluation',
+      },
+    },
+    {
+      'title': 'HRM Exit Process',
+      'subtitle': 'Exit Initiation and Clearance',
+      'icon': Icons.exit_to_app_outlined,
+      'permissions': {
+        'hrm_exit_initiation': 'Exit Initiation',
+        'hrm_exit_handover': 'Exit Handover',
+        'hrm_exit_interview': 'Exit Interview',
+        'hrm_exit_settlement': 'Settlement & Clearance',
+      },
+    },
   ];
 
   @override
@@ -265,13 +306,13 @@ class _PermissionManagementScreenState
   }
 
   // ========================================================================
-  // 🔌 LOAD PERMISSIONS
+  // ðŸ”Œ LOAD PERMISSIONS
   // ========================================================================
   Future<void> _loadPermissions() async {
     setState(() => _isLoading = true);
     try {
       final response = await _service.fetchPermissions(widget.userId);
-      debugPrint('📋 Raw response: $response');
+      debugPrint('ðŸ“‹ Raw response: $response');
 
       if (response['success'] != false) {
         dynamic rawData = response['data'];
@@ -283,7 +324,7 @@ class _PermissionManagementScreenState
         // Handle: { permissions: {...} } at root level
         if (rawData == null) rawData = response['permissions'];
 
-        debugPrint('📋 rawData type: ${rawData.runtimeType}');
+        debugPrint('ðŸ“‹ rawData type: ${rawData.runtimeType}');
 
         if (rawData is Map<String, dynamic>) {
           final Map<String, Map<String, dynamic>> converted = {};
@@ -303,12 +344,12 @@ class _PermissionManagementScreenState
               converted[key] = {'can_access': false, 'edit_delete': false};
             }
           });
-          debugPrint('✅ Loaded ${converted.length} permissions');
+          debugPrint('âœ… Loaded ${converted.length} permissions');
           if (mounted) setState(() => _permissions = converted);
         }
       }
     } catch (e) {
-      debugPrint('❌ Load error: $e');
+      debugPrint('âŒ Load error: $e');
       _showToast('Failed to load permissions', isError: true);
     } finally {
       if (mounted) setState(() => _isLoading = false);
@@ -316,7 +357,7 @@ class _PermissionManagementScreenState
   }
 
   // ========================================================================
-  // 💾 SAVE PERMISSIONS
+  // ðŸ’¾ SAVE PERMISSIONS
   // ========================================================================
   Future<void> _savePermissions() async {
     setState(() => _isSaving = true);
@@ -334,7 +375,7 @@ class _PermissionManagementScreenState
         );
       }
     } catch (e) {
-      debugPrint('❌ Save error: $e');
+      debugPrint('âŒ Save error: $e');
       _showToast('Error saving permissions', isError: true);
     } finally {
       if (mounted) setState(() => _isSaving = false);
@@ -388,7 +429,7 @@ class _PermissionManagementScreenState
       perms.keys.where((k) => _getAccess(k)).length;
 
   // ========================================================================
-  // 🎨 BUILD
+  // ðŸŽ¨ BUILD
   // ========================================================================
   @override
   Widget build(BuildContext context) {
@@ -430,7 +471,7 @@ class _PermissionManagementScreenState
     );
   }
 
-  // ── HERO — matches .cr-hero dark gradient + .jdm-head style ──
+  // â”€â”€ HERO â€” matches .cr-hero dark gradient + .jdm-head style â”€â”€
   Widget _buildHero() {
     return Container(
       decoration: const BoxDecoration(
@@ -443,7 +484,7 @@ class _PermissionManagementScreenState
       padding: const EdgeInsets.fromLTRB(20, 20, 12, 20),
       child: Row(
         children: [
-          // Icon box — matches .cr-card-icon
+          // Icon box â€” matches .cr-card-icon
           Container(
             width: 46,
             height: 46,
@@ -462,7 +503,7 @@ class _PermissionManagementScreenState
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Badge — matches .cr-hero-badge
+                // Badge â€” matches .cr-hero-badge
                 Container(
                   padding:
                       const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
@@ -502,7 +543,7 @@ class _PermissionManagementScreenState
               ],
             ),
           ),
-          // Close button — matches .jdm-close
+          // Close button â€” matches .jdm-close
           GestureDetector(
             onTap: () => Navigator.of(context).pop(),
             child: Container(
@@ -520,7 +561,7 @@ class _PermissionManagementScreenState
     );
   }
 
-  // ── QUICK ACTIONS — matches .cr-submit-box button pattern ──
+  // â”€â”€ QUICK ACTIONS â€” matches .cr-submit-box button pattern â”€â”€
   Widget _buildQuickActions() {
     return Container(
       color: Colors.white,
@@ -606,7 +647,7 @@ class _PermissionManagementScreenState
     );
   }
 
-  // ── MODULE CARD — matches .cr-card from careers.php ──
+  // â”€â”€ MODULE CARD â€” matches .cr-card from careers.php â”€â”€
   Widget _buildModuleCard(Map<String, dynamic> module) {
     final title = module['title'] as String;
     final subtitle = module['subtitle'] as String;
@@ -635,7 +676,7 @@ class _PermissionManagementScreenState
       ),
       child: Column(
         children: [
-          // Card Header — matches .cr-card-hdr
+          // Card Header â€” matches .cr-card-hdr
           Container(
             padding: const EdgeInsets.fromLTRB(16, 14, 12, 14),
             decoration: BoxDecoration(
@@ -655,7 +696,7 @@ class _PermissionManagementScreenState
             ),
             child: Row(
               children: [
-                // Icon box — matches .cr-card-icon
+                // Icon box â€” matches .cr-card-icon
                 Container(
                   width: 42,
                   height: 42,
@@ -693,7 +734,7 @@ class _PermissionManagementScreenState
                     ],
                   ),
                 ),
-                // Enabled count badge — matches .vac-badge
+                // Enabled count badge â€” matches .vac-badge
                 if (hasAny)
                   Container(
                     padding:
@@ -712,7 +753,7 @@ class _PermissionManagementScreenState
                     ),
                   ),
                 const SizedBox(width: 6),
-                // All / Clear buttons — matches .dtab style
+                // All / Clear buttons â€” matches .dtab style
                 _moduleAction('All', _Theme.accessGreen,
                     () => _selectAllInModule(perms, true)),
                 const SizedBox(width: 4),
@@ -722,7 +763,7 @@ class _PermissionManagementScreenState
             ),
           ),
 
-          // Card Body — matches .cr-card-body
+          // Card Body â€” matches .cr-card-body
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 8, 16, 14),
             child: Column(
@@ -788,7 +829,7 @@ class _PermissionManagementScreenState
     );
   }
 
-  // ── PERMISSION ROW — matches job card row layout ──
+  // â”€â”€ PERMISSION ROW â€” matches job card row layout â”€â”€
   Widget _buildPermRow(String key, String label) {
     final canAccess = _getAccess(key);
     final canEdit = _getEdit(key);
@@ -797,7 +838,7 @@ class _PermissionManagementScreenState
       margin: const EdgeInsets.only(bottom: 5),
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       decoration: BoxDecoration(
-        // Matches .job-card hover — subtle bg tint when enabled
+        // Matches .job-card hover â€” subtle bg tint when enabled
         color: canAccess
             ? _Theme.accessGreenBg
             : const Color(0xFFF8FAFC),
@@ -809,7 +850,7 @@ class _PermissionManagementScreenState
       ),
       child: Row(
         children: [
-          // Permission label — matches .jc-desc style
+          // Permission label â€” matches .jc-desc style
           Expanded(
             child: Text(
               label,
@@ -831,7 +872,7 @@ class _PermissionManagementScreenState
               ),
             ),
           ),
-          // Edit/Delete checkbox — disabled if no access
+          // Edit/Delete checkbox â€” disabled if no access
           SizedBox(
             width: 80,
             child: Center(
@@ -876,7 +917,7 @@ class _PermissionManagementScreenState
     );
   }
 
-  // ── SUBMIT BAR — matches .cr-submit-box ──
+  // â”€â”€ SUBMIT BAR â€” matches .cr-submit-box â”€â”€
   Widget _buildSubmitBar() {
     return Container(
       decoration: const BoxDecoration(
@@ -893,7 +934,7 @@ class _PermissionManagementScreenState
       padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
       child: Row(
         children: [
-          // Cancel — matches .btn-hs outlined style
+          // Cancel â€” matches .btn-hs outlined style
           Expanded(
             child: GestureDetector(
               onTap: _isSaving ? null : () => Navigator.of(context).pop(),
@@ -919,7 +960,7 @@ class _PermissionManagementScreenState
             ),
           ),
           const SizedBox(width: 12),
-          // Save — matches .btn-submit style
+          // Save â€” matches .btn-submit style
           Expanded(
             flex: 2,
             child: GestureDetector(

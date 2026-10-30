@@ -1,5 +1,5 @@
 // File: lib/features/admin/customer_management/presentation/screens/admin_all_customers.dart
-// ✅ COMPLETE VERSION - All Features Working
+// âœ… COMPLETE VERSION - All Features Working
 // 
 // Features:
 // - Filter button (opens AlternativeFilterBar overlay)
@@ -26,6 +26,8 @@ import 'package:abra_fleet/features/client/bulk_import_rosters.dart';
 import 'package:abra_fleet/features/admin/widgets/horizontal_filter_bar.dart';
 import 'package:abra_fleet/features/admin/widgets/country_state_city_filter.dart';
 import 'package:abra_fleet/app/config/api_config.dart';
+import 'package:flutter/gestures.dart';
+import 'package:abra_fleet/core/widgets/permission_restricted_dialog.dart';
 
 // For web download - conditional import
 import 'package:abra_fleet/download_helper_stub.dart'
@@ -39,6 +41,8 @@ class AdminAllCustomersPage extends StatefulWidget {
 }
 
 class _AdminAllCustomersPageState extends State<AdminAllCustomersPage> {
+  final ScrollController _horizontalScrollController = ScrollController();
+  final ScrollController _verticalScrollController = ScrollController();
   Timer? _autoRefreshTimer;
   String? selectedOrganization = 'All Organizations';
   String? selectedStatus = 'All';
@@ -85,6 +89,8 @@ class _AdminAllCustomersPageState extends State<AdminAllCustomersPage> {
     _autoRefreshTimer?.cancel();
     _autoRefreshTimer = null;
     searchController.dispose();
+    _horizontalScrollController.dispose();
+    _verticalScrollController.dispose();
     super.dispose();
   }
 
@@ -92,8 +98,8 @@ class _AdminAllCustomersPageState extends State<AdminAllCustomersPage> {
     if (!mounted) return;
     
     try {
-      print('\n🟢 INITIALIZING CUSTOMER DATA');
-      print('─' * 80);
+      print('\nðŸŸ¢ INITIALIZING CUSTOMER DATA');
+      print('â”€' * 80);
       
       final provider = Provider.of<CustomerProvider>(context, listen: false);
       
@@ -102,7 +108,7 @@ class _AdminAllCustomersPageState extends State<AdminAllCustomersPage> {
       if (!mounted) return;
       
       await provider.fetchCustomers(
-        status: 'active',
+        status: selectedStatus != 'All' ? selectedStatus?.toLowerCase() : null,
         search: '',
         organization: selectedOrganization == 'All Organizations' ? null : selectedOrganization,
         department: selectedDepartment == 'All Departments' ? null : selectedDepartment,
@@ -110,9 +116,9 @@ class _AdminAllCustomersPageState extends State<AdminAllCustomersPage> {
       
       if (!mounted) return;
       
-      print('✅ Customer data initialized successfully');
+      print('âœ… Customer data initialized successfully');
     } catch (e) {
-      print('❌ Error initializing customer data: $e');
+      print('âŒ Error initializing customer data: $e');
       
       if (!mounted) return;
       
@@ -133,10 +139,19 @@ class _AdminAllCustomersPageState extends State<AdminAllCustomersPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF8FAFC),
+      backgroundColor: const Color(0xFFF0F4F8),
       appBar: AppBar(
-        backgroundColor: const Color(0xFF2563EB),
-        elevation: 0,
+        flexibleSpace: Container(
+          decoration: const BoxDecoration(
+            gradient: LinearGradient(
+              colors: [Color(0xFF0F2557), Color(0xFF1A3FC4)],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+          ),
+        ),
+        elevation: 2,
+        shadowColor: const Color(0x590F2557),
         leading: IconButton(
           icon: const Icon(Icons.arrow_back, color: Colors.white),
           onPressed: () {
@@ -149,7 +164,8 @@ class _AdminAllCustomersPageState extends State<AdminAllCustomersPage> {
           style: TextStyle(
             color: Colors.white,
             fontSize: 20,
-            fontWeight: FontWeight.w600,
+            fontWeight: FontWeight.w700,
+            letterSpacing: 0.3,
           ),
         ),
       ),
@@ -191,7 +207,7 @@ class _AdminAllCustomersPageState extends State<AdminAllCustomersPage> {
                       _buildStatsGrid(customerProvider.customers),
                       const SizedBox(height: 24),
                       
-                      // 🆕 NEW: Country State City Filter (replaces Advanced Filters button)
+                      // ðŸ†• NEW: Country State City Filter (replaces Advanced Filters button)
                       CountryStateCityFilter(
                         onFilterApplied: (filterData) {
                           setState(() {
@@ -217,6 +233,7 @@ class _AdminAllCustomersPageState extends State<AdminAllCustomersPage> {
                               _activeFilters['area'] = filterData['localArea'];
                             }
                           });
+                          _refreshCustomers();
                         },
                       ),
                       const SizedBox(height: 24),
@@ -259,7 +276,7 @@ class _AdminAllCustomersPageState extends State<AdminAllCustomersPage> {
               },
             ),
           
-          // 🆕 Advanced Filter Overlay
+          // ðŸ†• Advanced Filter Overlay
           if (_showFilterOverlay)
             _buildAdvancedFilterOverlay(),
         ],
@@ -374,7 +391,7 @@ class _AdminAllCustomersPageState extends State<AdminAllCustomersPage> {
     });
   }
 
-  // 🆕 Quick Actions Section (Advanced Filters Button Commented Out)
+  // ðŸ†• Quick Actions Section (Advanced Filters Button Commented Out)
   Widget _buildQuickActions() {
     final activeFilterCount = _activeFilters.length;
     
@@ -393,7 +410,7 @@ class _AdminAllCustomersPageState extends State<AdminAllCustomersPage> {
       padding: const EdgeInsets.all(20),
       child: Row(
         children: [
-          // ❌ COMMENTED OUT - Advanced Filters Button
+          // âŒ COMMENTED OUT - Advanced Filters Button
           // Expanded(
           //   child: ElevatedButton.icon(
           //     onPressed: () {
@@ -456,7 +473,7 @@ class _AdminAllCustomersPageState extends State<AdminAllCustomersPage> {
     );
   }
 
-  // 🆕 Advanced Filter Overlay
+  // ðŸ†• Advanced Filter Overlay
   Widget _buildAdvancedFilterOverlay() {
     return Container(
       color: Colors.black54,
@@ -528,7 +545,7 @@ class _AdminAllCustomersPageState extends State<AdminAllCustomersPage> {
     );
   }
 
-  // 🆕 Export Customers to Excel
+  // ðŸ†• Export Customers to Excel
   Future<void> _exportCustomers() async {
     if (_isExporting) return;
     
@@ -537,8 +554,8 @@ class _AdminAllCustomersPageState extends State<AdminAllCustomersPage> {
     });
 
     try {
-      print('\n📊 EXPORTING CUSTOMERS TO EXCEL');
-      print('─' * 80);
+      print('\nðŸ“Š EXPORTING CUSTOMERS TO EXCEL');
+      print('â”€' * 80);
 
       final prefs = await SharedPreferences.getInstance();
       final token = prefs.getString('jwt_token');
@@ -587,10 +604,10 @@ class _AdminAllCustomersPageState extends State<AdminAllCustomersPage> {
         queryParams['endDate'] = (_activeFilters['endDate'] as DateTime).toIso8601String();
       }
 
-      final uri = Uri.parse('${ApiConfig.baseUrl}/api/admin/customers/export')
+      final uri = Uri.parse('${ApiConfig.baseUrl}/api/admin/customers/legacy/export')
           .replace(queryParameters: queryParams);
 
-      print('📡 Export URL: $uri');
+      print('ðŸ“¡ Export URL: $uri');
 
       final response = await http.get(
         uri,
@@ -604,7 +621,7 @@ class _AdminAllCustomersPageState extends State<AdminAllCustomersPage> {
         },
       );
 
-      print('📥 Response Status: ${response.statusCode}');
+      print('ðŸ“¥ Response Status: ${response.statusCode}');
 
       if (response.statusCode == 200) {
         final bytes = response.bodyBytes;
@@ -658,12 +675,12 @@ class _AdminAllCustomersPageState extends State<AdminAllCustomersPage> {
           ),
         );
 
-        print('✅ Export completed successfully');
+        print('âœ… Export completed successfully');
       } else {
         throw Exception('Export failed: ${response.statusCode}');
       }
     } catch (e) {
-      print('❌ Export error: $e');
+      print('âŒ Export error: $e');
       
       if (!mounted) return;
       
@@ -706,7 +723,9 @@ class _AdminAllCustomersPageState extends State<AdminAllCustomersPage> {
             label: 'Total Customers',
             value: customers.length.toString(),
             subtitle: 'All registered',
-            color: const Color(0xFF2563EB),
+            icon: Icons.people_alt_rounded,
+            color: const Color(0xFF0F2557),
+            iconBg: const Color(0xFFEFF6FF),
           ),
         ),
         const SizedBox(width: 16),
@@ -717,7 +736,9 @@ class _AdminAllCustomersPageState extends State<AdminAllCustomersPage> {
             subtitle: customers.isEmpty 
               ? '0%' 
               : '${((activeCustomers / customers.length) * 100).toStringAsFixed(0)}% active',
+            icon: Icons.check_circle_rounded,
             color: const Color(0xFF10B981),
+            iconBg: const Color(0xFFECFDF5),
           ),
         ),
         const SizedBox(width: 16),
@@ -726,7 +747,9 @@ class _AdminAllCustomersPageState extends State<AdminAllCustomersPage> {
             label: 'Inactive',
             value: inactiveCustomers.toString(),
             subtitle: 'Need attention',
+            icon: Icons.pause_circle_filled_rounded,
             color: const Color(0xFFF59E0B),
+            iconBg: const Color(0xFFFFFBEB),
           ),
         ),
         const SizedBox(width: 16),
@@ -735,7 +758,9 @@ class _AdminAllCustomersPageState extends State<AdminAllCustomersPage> {
             label: 'Pending Approval',
             value: pendingCustomers.toString(),
             subtitle: 'Awaiting verification',
+            icon: Icons.hourglass_top_rounded,
             color: const Color(0xFFEF4444),
+            iconBg: const Color(0xFFFEF2F2),
           ),
         ),
       ],
@@ -746,12 +771,15 @@ class _AdminAllCustomersPageState extends State<AdminAllCustomersPage> {
     required String label,
     required String value,
     required String subtitle,
+    required IconData icon,
     required Color color,
+    required Color iconBg,
   }) {
     return Container(
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFFE2E8F0), width: 2),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withOpacity(0.04),
@@ -759,39 +787,56 @@ class _AdminAllCustomersPageState extends State<AdminAllCustomersPage> {
             offset: const Offset(0, 2),
           ),
         ],
-        border: Border(
-          left: BorderSide(color: color, width: 4),
-        ),
       ),
-      padding: const EdgeInsets.all(20),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisAlignment: MainAxisAlignment.center,
+      padding: const EdgeInsets.all(18),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          Text(
-            label.toUpperCase(),
-            style: const TextStyle(
-              fontSize: 11,
-              color: Color(0xFF64748B),
-              fontWeight: FontWeight.w600,
-              letterSpacing: 0.5,
+          Container(
+            width: 48,
+            height: 48,
+            decoration: BoxDecoration(
+              color: iconBg,
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: color.withOpacity(0.2), width: 1.5),
             ),
+            child: Icon(icon, color: color, size: 24),
           ),
-          const SizedBox(height: 8),
-          Text(
-            value,
-            style: const TextStyle(
-              fontSize: 28,
-              fontWeight: FontWeight.w700,
-              color: Color(0xFF1E293B),
-            ),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            subtitle,
-            style: TextStyle(
-              fontSize: 12,
-              color: color,
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  label.toUpperCase(),
+                  style: const TextStyle(
+                    fontSize: 11,
+                    color: Color(0xFF64748B),
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 0.5,
+                  ),
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  value,
+                  style: const TextStyle(
+                    fontSize: 22,
+                    fontWeight: FontWeight.w800,
+                    color: Color(0xFF1E293B),
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  subtitle,
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                    color: color,
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
             ),
           ),
         ],
@@ -804,6 +849,7 @@ class _AdminAllCustomersPageState extends State<AdminAllCustomersPage> {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFFE2E8F0), width: 2),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withOpacity(0.04),
@@ -812,24 +858,25 @@ class _AdminAllCustomersPageState extends State<AdminAllCustomersPage> {
           ),
         ],
       ),
-      padding: const EdgeInsets.all(24),
+      padding: const EdgeInsets.all(22),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const Row(
             children: [
-              Icon(Icons.search, size: 18),
+              Icon(Icons.search, size: 18, color: Color(0xFF0F2557)),
               SizedBox(width: 8),
               Text(
                 'Quick Search & Filter',
                 style: TextStyle(
                   fontSize: 16,
-                  fontWeight: FontWeight.w600,
+                  fontWeight: FontWeight.w700,
+                  color: Color(0xFF0F2557),
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 20),
+          const SizedBox(height: 18),
           Row(
             children: [
               Expanded(child: _buildOrganizationDropdown(provider)),
@@ -841,24 +888,43 @@ class _AdminAllCustomersPageState extends State<AdminAllCustomersPage> {
               Expanded(flex: 2, child: _buildSearchField()),
             ],
           ),
-          const SizedBox(height: 20),
+          const SizedBox(height: 18),
           Row(
             children: [
-              ElevatedButton.icon(
-                onPressed: () {
-                  setState(() {});
-                },
-                icon: const Icon(Icons.search, size: 18),
-                label: const Text('Search'),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF2563EB),
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 20,
-                    vertical: 12,
+              Container(
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(
+                    colors: [Color(0xFF0F2557), Color(0xFF1A3FC4)],
                   ),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(8),
+                  borderRadius: BorderRadius.circular(10),
+                  boxShadow: [
+                    BoxShadow(
+                      color: const Color(0xFF0F2557).withOpacity(0.3),
+                      blurRadius: 8,
+                      offset: const Offset(0, 2),
+                    ),
+                  ],
+                ),
+                child: ElevatedButton.icon(
+                  onPressed: () {
+                    setState(() {});
+                  },
+                  icon: const Icon(Icons.search, size: 18),
+                  label: const Text(
+                    'Apply Filter',
+                    style: TextStyle(fontWeight: FontWeight.w700),
+                  ),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.transparent,
+                    shadowColor: Colors.transparent,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 22,
+                      vertical: 12,
+                    ),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
                   ),
                 ),
               ),
@@ -873,15 +939,19 @@ class _AdminAllCustomersPageState extends State<AdminAllCustomersPage> {
                   });
                 },
                 icon: const Icon(Icons.refresh, size: 18),
-                label: const Text('Reset'),
+                label: const Text(
+                  'Reset',
+                  style: TextStyle(fontWeight: FontWeight.w600),
+                ),
                 style: OutlinedButton.styleFrom(
                   foregroundColor: const Color(0xFF64748B),
+                  side: const BorderSide(color: Color(0xFFE2E8F0), width: 2),
                   padding: const EdgeInsets.symmetric(
                     horizontal: 20,
                     vertical: 12,
                   ),
                   shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(8),
+                    borderRadius: BorderRadius.circular(10),
                   ),
                 ),
               ),
@@ -1213,137 +1283,288 @@ class _AdminAllCustomersPageState extends State<AdminAllCustomersPage> {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFFE2E8F0), width: 2),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withOpacity(0.04),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
+            blurRadius: 10,
+            offset: const Offset(0, 3),
           ),
         ],
       ),
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+          // Table Top Bar with Quick Scroll Controls
           Container(
-            padding: const EdgeInsets.all(20),
+            padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 16),
             decoration: const BoxDecoration(
               border: Border(
-                bottom: BorderSide(color: Color(0xFFF3F4F6)),
+                bottom: BorderSide(color: Color(0xFFE2E8F0), width: 1.5),
               ),
             ),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text(
-                  'Customer Directory (${customers.length})',
-                  style: const TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.w700,
-                  ),
+                Row(
+                  children: [
+                    const Icon(Icons.people_alt, color: Color(0xFF0F2557), size: 22),
+                    const SizedBox(width: 10),
+                    Text(
+                      'Customer Directory (${customers.length})',
+                      style: const TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w800,
+                        color: Color(0xFF0F2557),
+                        letterSpacing: 0.2,
+                      ),
+                    ),
+                  ],
                 ),
                 Wrap(
                   spacing: 8,
                   runSpacing: 8,
+                  crossAxisAlignment: WrapCrossAlignment.center,
                   children: [
-                    // 🆕 Export Button (moved before Add Customer)
-                    ElevatedButton.icon(
-                      onPressed: _isExporting ? null : _exportCustomers,
-                      icon: _isExporting
-                        ? const SizedBox(
-                            width: 16,
-                            height: 16,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                            ),
-                          )
-                        : const Icon(Icons.file_download, size: 16),
-                      label: Text(_isExporting ? 'Exporting...' : 'Export'),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFF10B981),
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 16,
-                          vertical: 10,
-                        ),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                      ),
-                    ),
-                    ElevatedButton.icon(
+                    // Scroll Left Button
+                    IconButton.filledTonal(
                       onPressed: () {
-                        setState(() {
-                          _editingCustomer = null;
-                          _showAddCustomerOverlay = true;
-                        });
+                        _horizontalScrollController.animateTo(
+                          0,
+                          duration: const Duration(milliseconds: 300),
+                          curve: Curves.easeOut,
+                        );
                       },
-                      icon: const Icon(Icons.person_add, size: 16),
-                      label: const Text('Add Customer'),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFF2563EB),
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 16,
-                          vertical: 10,
-                        ),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(8),
-                        ),
+                      icon: const Icon(Icons.arrow_back_ios_new, size: 14),
+                      tooltip: 'Scroll to First Column',
+                      style: IconButton.styleFrom(
+                        backgroundColor: const Color(0xFFEFF6FF),
+                        foregroundColor: const Color(0xFF1A3FC4),
+                        padding: const EdgeInsets.all(8),
                       ),
                     ),
-                    ElevatedButton.icon(
+                    // Scroll Right Button
+                    IconButton.filledTonal(
                       onPressed: () {
-                        setState(() {
-                          _showBulkImportOverlay = true;
-                        });
+                        _horizontalScrollController.animateTo(
+                          _horizontalScrollController.position.maxScrollExtent,
+                          duration: const Duration(milliseconds: 300),
+                          curve: Curves.easeOut,
+                        );
                       },
-                      icon: const Icon(Icons.upload_file, size: 16),
-                      label: const Text('Bulk Import'),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFF8B5CF6),
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 16,
-                          vertical: 10,
+                      icon: const Icon(Icons.arrow_forward_ios, size: 14),
+                      tooltip: 'Scroll to Actions / Status',
+                      style: IconButton.styleFrom(
+                        backgroundColor: const Color(0xFFEFF6FF),
+                        foregroundColor: const Color(0xFF1A3FC4),
+                        padding: const EdgeInsets.all(8),
+                      ),
+                    ),
+                    const SizedBox(width: 4),
+
+                    // Export Button
+                    Container(
+                      decoration: BoxDecoration(
+                        gradient: const LinearGradient(
+                          colors: [Color(0xFF10B981), Color(0xFF059669)],
                         ),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(8),
+                        borderRadius: BorderRadius.circular(10),
+                        boxShadow: [
+                          BoxShadow(
+                            color: const Color(0xFF10B981).withOpacity(0.3),
+                            blurRadius: 6,
+                            offset: const Offset(0, 2),
+                          ),
+                        ],
+                      ),
+                      child: ElevatedButton.icon(
+                        onPressed: _isExporting ? null : _exportCustomers,
+                        icon: _isExporting
+                          ? const SizedBox(
+                              width: 16,
+                              height: 16,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                              ),
+                            )
+                          : const Icon(Icons.file_download_outlined, size: 17),
+                        label: Text(
+                          _isExporting ? 'Exporting...' : 'Export',
+                          style: const TextStyle(fontWeight: FontWeight.w700),
+                        ),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.transparent,
+                          shadowColor: Colors.transparent,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 14,
+                            vertical: 9,
+                          ),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(10),
+                          ),
                         ),
                       ),
                     ),
-                    ElevatedButton.icon(
-                      onPressed: () {
-                        setState(() {
-                          _showBulkImportRostersOverlay = true;
-                        });
-                      },
-                      icon: const Icon(Icons.calendar_today, size: 16),
-                      label: const Text('Bulk Import Rosters'),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFFEC4899),
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 16,
-                          vertical: 10,
+                    
+                    // Add Customer Button
+                    Container(
+                      decoration: BoxDecoration(
+                        gradient: const LinearGradient(
+                          colors: [Color(0xFF0F2557), Color(0xFF1A3FC4)],
                         ),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(8),
+                        borderRadius: BorderRadius.circular(10),
+                        boxShadow: [
+                          BoxShadow(
+                            color: const Color(0xFF0F2557).withOpacity(0.3),
+                            blurRadius: 6,
+                            offset: const Offset(0, 2),
+                          ),
+                        ],
+                      ),
+                      child: ElevatedButton.icon(
+                        onPressed: () {
+                          setState(() {
+                            _editingCustomer = null;
+                            _showAddCustomerOverlay = true;
+                          });
+                        },
+                        icon: const Icon(Icons.person_add_alt_1, size: 17),
+                        label: const Text(
+                          'Add Customer',
+                          style: const TextStyle(fontWeight: FontWeight.w700),
+                        ),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.transparent,
+                          shadowColor: Colors.transparent,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 14,
+                            vertical: 9,
+                          ),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(10),
+                          ),
                         ),
                       ),
                     ),
-                    ElevatedButton.icon(
-                      onPressed: () => _refreshCustomers(),
-                      icon: const Icon(Icons.refresh, size: 16),
-                      label: const Text('Refresh'),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFF10B981),
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 16,
-                          vertical: 10,
+                    
+                    // Bulk Import Button
+                    Container(
+                      decoration: BoxDecoration(
+                        gradient: const LinearGradient(
+                          colors: [Color(0xFF6366F1), Color(0xFF4F46E5)],
                         ),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(8),
+                        borderRadius: BorderRadius.circular(10),
+                        boxShadow: [
+                          BoxShadow(
+                            color: const Color(0xFF6366F1).withOpacity(0.3),
+                            blurRadius: 6,
+                            offset: const Offset(0, 2),
+                          ),
+                        ],
+                      ),
+                      child: ElevatedButton.icon(
+                        onPressed: () {
+                          setState(() {
+                            _showBulkImportOverlay = true;
+                          });
+                        },
+                        icon: const Icon(Icons.upload_file_outlined, size: 17),
+                        label: const Text(
+                          'Bulk Import',
+                          style: const TextStyle(fontWeight: FontWeight.w700),
+                        ),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.transparent,
+                          shadowColor: Colors.transparent,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 14,
+                            vertical: 9,
+                          ),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                        ),
+                      ),
+                    ),
+                    
+                    // Bulk Import Rosters Button
+                    Container(
+                      decoration: BoxDecoration(
+                        gradient: const LinearGradient(
+                          colors: [Color(0xFFEC4899), Color(0xFFDB2777)],
+                        ),
+                        borderRadius: BorderRadius.circular(10),
+                        boxShadow: [
+                          BoxShadow(
+                            color: const Color(0xFFEC4899).withOpacity(0.3),
+                            blurRadius: 6,
+                            offset: const Offset(0, 2),
+                          ),
+                        ],
+                      ),
+                      child: ElevatedButton.icon(
+                        onPressed: () {
+                          setState(() {
+                            _showBulkImportRostersOverlay = true;
+                          });
+                        },
+                        icon: const Icon(Icons.calendar_today_outlined, size: 16),
+                        label: const Text(
+                          'Bulk Import Rosters',
+                          style: const TextStyle(fontWeight: FontWeight.w700),
+                        ),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.transparent,
+                          shadowColor: Colors.transparent,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 14,
+                            vertical: 9,
+                          ),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                        ),
+                      ),
+                    ),
+                    
+                    // Refresh Button
+                    Container(
+                      decoration: BoxDecoration(
+                        gradient: const LinearGradient(
+                          colors: [Color(0xFF0D9488), Color(0xFF0F766E)],
+                        ),
+                        borderRadius: BorderRadius.circular(10),
+                        boxShadow: [
+                          BoxShadow(
+                            color: const Color(0xFF0D9488).withOpacity(0.3),
+                            blurRadius: 6,
+                            offset: const Offset(0, 2),
+                          ),
+                        ],
+                      ),
+                      child: ElevatedButton.icon(
+                        onPressed: () => _refreshCustomers(),
+                        icon: const Icon(Icons.refresh, size: 17),
+                        label: const Text(
+                          'Refresh',
+                          style: const TextStyle(fontWeight: FontWeight.w700),
+                        ),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.transparent,
+                          shadowColor: Colors.transparent,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 14,
+                            vertical: 9,
+                          ),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(10),
+                          ),
                         ),
                       ),
                     ),
@@ -1353,155 +1574,525 @@ class _AdminAllCustomersPageState extends State<AdminAllCustomersPage> {
             ),
           ),
 
+          // Horizontal Drag Hint Banner
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+            decoration: const BoxDecoration(
+              color: Color(0xFFEFF6FF),
+              border: Border(
+                bottom: BorderSide(color: Color(0xFFBFDBFE), width: 1),
+              ),
+            ),
+            child: Row(
+              children: [
+                const Icon(Icons.pan_tool_alt_outlined, size: 15, color: Color(0xFF1A3FC4)),
+                const SizedBox(width: 8),
+                const Text(
+                  'Horizontal & Vertical Scrolling: Click and drag with mouse, use trackpad, or use the scrollbar below to scroll columns.',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: Color(0xFF1E3A8A),
+                  ),
+                ),
+                const Spacer(),
+                InkWell(
+                  onTap: () {
+                    _horizontalScrollController.animateTo(
+                      _horizontalScrollController.position.maxScrollExtent,
+                      duration: const Duration(milliseconds: 300),
+                      curve: Curves.easeOut,
+                    );
+                  },
+                  child: const Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        'Jump to Status & Actions',
+                        style: TextStyle(
+                          fontSize: 11.5,
+                          fontWeight: FontWeight.w700,
+                          color: Color(0xFF1A3FC4),
+                        ),
+                      ),
+                      SizedBox(width: 4),
+                      Icon(Icons.arrow_forward, size: 13, color: Color(0xFF1A3FC4)),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          // Table Section with Visible Sticky Dual Scrollbars
           customers.isEmpty
             ? Padding(
-                padding: const EdgeInsets.all(48.0),
+                padding: const EdgeInsets.all(56.0),
                 child: Column(
                   children: [
-                    const Icon(Icons.people_outline, size: 64, color: Colors.grey),
+                    Container(
+                      width: 72,
+                      height: 72,
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFF1F5F9),
+                        shape: BoxShape.circle,
+                        border: Border.all(color: const Color(0xFFE2E8F0)),
+                      ),
+                      child: const Icon(Icons.people_outline, size: 36, color: Color(0xFF94A3B8)),
+                    ),
                     const SizedBox(height: 16),
                     Text(
                       searchController.text.isNotEmpty
-                        ? 'No customers match your search'
+                        ? 'No customers match your search criteria'
                         : 'No customers found\nClick "Add Customer" to create one',
                       textAlign: TextAlign.center,
-                      style: const TextStyle(color: Colors.grey),
+                      style: const TextStyle(
+                        color: Color(0xFF64748B),
+                        fontSize: 14,
+                        fontWeight: FontWeight.w500,
+                      ),
                     ),
                   ],
                 ),
               )
-            : SingleChildScrollView(
-                scrollDirection: Axis.horizontal,
-                child: DataTable(
-                  columnSpacing: 24,
-                  horizontalMargin: 24,
-                  headingRowColor: MaterialStateProperty.all(
-                    const Color(0xFF2563EB).withOpacity(0.1),
+            : Container(
+                height: 560,
+                decoration: const BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.only(
+                    bottomLeft: Radius.circular(10),
+                    bottomRight: Radius.circular(10),
                   ),
-                  headingTextStyle: const TextStyle(
-                    fontWeight: FontWeight.w700,
-                    fontSize: 12,
-                    color: Color(0xFF1E293B),
-                    letterSpacing: 0.5,
-                  ),
-                  columns: const [
-                    DataColumn(label: Text('EMPLOYEE ID')),
-                    DataColumn(label: Text('NAME')),
-                    DataColumn(label: Text('EMAIL')),
-                    DataColumn(label: Text('PHONE')),
-                    DataColumn(label: Text('COMPANY')),
-                    DataColumn(label: Text('DEPARTMENT')),
-                    DataColumn(label: Text('BRANCH')), // 🆕 Added Branch column
-                    DataColumn(label: Text('STATUS')),
-                    DataColumn(label: Text('ACTIONS')),
-                  ],
-                  rows: customers.map((customer) {
-                    return DataRow(
-                      cells: [
-                        DataCell(
-                          Text(
-                            customer.employeeId ?? 'N/A',
-                            style: const TextStyle(
-                              fontWeight: FontWeight.w700,
-                              fontFamily: 'monospace',
-                            ),
-                          ),
-                        ),
-                        DataCell(Text(customer.name)),
-                        DataCell(
-                          Text(
-                            customer.email,
-                            style: const TextStyle(fontSize: 12),
-                          ),
-                        ),
-                        DataCell(Text(customer.phoneNumber ?? 'N/A')),
-                        DataCell(Text(customer.companyName ?? 'N/A')),
-                        DataCell(Text(customer.department ?? 'N/A')),
-                        DataCell(Text(customer.branch ?? 'N/A')), // 🆕 Branch data
-                        DataCell(_buildStatusBadge(customer.status)),
-                        DataCell(
-                          Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              IconButton(
-                                onPressed: () => _navigateToDetails(customer),
-                                icon: const Icon(Icons.visibility, size: 18),
-                                color: const Color(0xFF2563EB),
-                                tooltip: 'View Details',
-                                padding: const EdgeInsets.all(8),
-                                constraints: const BoxConstraints(),
-                              ),
-                              const SizedBox(width: 4),
-                              IconButton(
-                                onPressed: () {
-                                  setState(() {
-                                    _editingCustomer = customer;
-                                    _showAddCustomerOverlay = true;
-                                  });
-                                },
-                                icon: const Icon(Icons.edit, size: 18),
-                                color: const Color(0xFFF59E0B),
-                                tooltip: 'Edit',
-                                padding: const EdgeInsets.all(8),
-                                constraints: const BoxConstraints(),
-                              ),
-                              const SizedBox(width: 4),
-                              IconButton(
-                                onPressed: () => _deleteCustomer(customer),
-                                icon: const Icon(Icons.delete, size: 18),
-                                color: const Color(0xFFEF4444),
-                                tooltip: 'Delete',
-                                padding: const EdgeInsets.all(8),
-                                constraints: const BoxConstraints(),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
-                    );
-                  }).toList(),
                 ),
-              ),
-        ],
-      ),
-    );
+                child: ScrollConfiguration(
+                  behavior: ScrollConfiguration.of(context).copyWith(
+                    dragDevices: {
+                      PointerDeviceKind.touch,
+                      PointerDeviceKind.mouse,
+                      PointerDeviceKind.trackpad,
+                      PointerDeviceKind.stylus,
+                    },
+                  ),
+                  child: RawScrollbar(
+                    controller: _horizontalScrollController,
+                    thumbVisibility: true,
+                    trackVisibility: true,
+                    thickness: 10,
+                    radius: const Radius.circular(5),
+                    thumbColor: const Color(0xFF1A3FC4),
+                    trackColor: const Color(0xFFE2E8F0),
+                    trackRadius: const Radius.circular(5),
+                    scrollbarOrientation: ScrollbarOrientation.bottom,
+                    child: SingleChildScrollView(
+                      controller: _horizontalScrollController,
+                      scrollDirection: Axis.horizontal,
+                      physics: const BouncingScrollPhysics(),
+                      child: ConstrainedBox(
+                        constraints: const BoxConstraints(minWidth: 1200),
+                        child: MouseRegion(
+                          cursor: SystemMouseCursors.grab,
+                          child: DataTable(
+                            border: const TableBorder(
+                              horizontalInside: BorderSide(color: Color(0xFFE2E8F0), width: 1),
+                              verticalInside: BorderSide(color: Color(0xFFE2E8F0), width: 1),
+                              top: BorderSide(color: Color(0xFF0F2557), width: 1),
+                              bottom: BorderSide(color: Color(0xFFE2E8F0), width: 1.5),
+                              left: BorderSide(color: Color(0xFFE2E8F0), width: 1),
+                              right: BorderSide(color: Color(0xFFE2E8F0), width: 1),
+                            ),
+                            columnSpacing: 24,
+                            horizontalMargin: 20,
+                            headingRowHeight: 56,
+                            dataRowMinHeight: 60,
+                            dataRowMaxHeight: 64,
+                            headingRowColor: WidgetStateProperty.all(
+                              const Color(0xFF0F2557),
+                            ),
+                            headingTextStyle: const TextStyle(
+                              fontWeight: FontWeight.w700,
+                              fontSize: 13,
+                              color: Colors.white,
+                              letterSpacing: 0.5,
+                            ),
+                            dataRowColor: WidgetStateProperty.resolveWith<Color>((states) {
+                              if (states.contains(WidgetState.hovered)) {
+                                return const Color(0xFFEFF6FF);
+                              }
+                              return Colors.white;
+                            }),
+                          columns: const [
+                            DataColumn(label: SizedBox(width: 110, child: Padding(padding: EdgeInsets.symmetric(horizontal: 6), child: Text('EMPLOYEE ID')))),
+                            DataColumn(label: SizedBox(width: 170, child: Padding(padding: EdgeInsets.symmetric(horizontal: 6), child: Text('NAME')))),
+                            DataColumn(label: SizedBox(width: 220, child: Padding(padding: EdgeInsets.symmetric(horizontal: 6), child: Text('EMAIL')))),
+                            DataColumn(label: SizedBox(width: 130, child: Padding(padding: EdgeInsets.symmetric(horizontal: 6), child: Text('PHONE')))),
+                            DataColumn(label: SizedBox(width: 160, child: Padding(padding: EdgeInsets.symmetric(horizontal: 6), child: Text('COMPANY')))),
+                            DataColumn(label: SizedBox(width: 150, child: Padding(padding: EdgeInsets.symmetric(horizontal: 6), child: Text('DEPARTMENT')))),
+                            DataColumn(label: SizedBox(width: 120, child: Padding(padding: EdgeInsets.symmetric(horizontal: 6), child: Text('BRANCH')))),
+                            DataColumn(label: SizedBox(width: 100, child: Padding(padding: EdgeInsets.symmetric(horizontal: 6), child: Text('STATUS')))),
+                            DataColumn(label: SizedBox(width: 120, child: Padding(padding: EdgeInsets.symmetric(horizontal: 6), child: Text('ACTIONS')))),
+                          ],
+                          rows: customers.map((customer) {
+                            final hasEmpId = customer.employeeId != null && 
+                                             customer.employeeId!.trim().isNotEmpty && 
+                                             customer.employeeId!.trim().toUpperCase() != 'N/A';
+                            return DataRow(
+                              cells: [
+                                // Employee ID
+                                DataCell(
+                                  SizedBox(
+                                    width: 110,
+                                    child: Padding(
+                                      padding: const EdgeInsets.symmetric(horizontal: 6),
+                                      child: Align(
+                                        alignment: Alignment.centerLeft,
+                                        child: hasEmpId
+                                            ? Container(
+                                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                                decoration: BoxDecoration(
+                                                  color: const Color(0xFFF1F5F9),
+                                                  borderRadius: BorderRadius.circular(6),
+                                                  border: Border.all(color: const Color(0xFFCBD5E1)),
+                                                ),
+                                                child: Text(
+                                                  customer.employeeId!,
+                                                  style: const TextStyle(
+                                                    fontWeight: FontWeight.w700,
+                                                    fontFamily: 'monospace',
+                                                    fontSize: 13,
+                                                    color: Color(0xFF0F2557),
+                                                  ),
+                                                ),
+                                              )
+                                            : const Text(
+                                                '—',
+                                                style: TextStyle(
+                                                  color: Color(0xFF94A3B8),
+                                                  fontSize: 14,
+                                                  fontWeight: FontWeight.w600,
+                                                ),
+                                              ),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                                
+                                // Name
+                                DataCell(
+                                  SizedBox(
+                                    width: 170,
+                                    child: Padding(
+                                      padding: const EdgeInsets.symmetric(horizontal: 6),
+                                      child: Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          CircleAvatar(
+                                            radius: 16,
+                                            backgroundColor: const Color(0xFF0F2557),
+                                            child: Text(
+                                              customer.name.isNotEmpty 
+                                                  ? customer.name[0].toUpperCase() 
+                                                  : 'C',
+                                              style: const TextStyle(
+                                                color: Colors.white,
+                                                fontSize: 13,
+                                                fontWeight: FontWeight.bold,
+                                              ),
+                                            ),
+                                          ),
+                                          const SizedBox(width: 10),
+                                          Expanded(
+                                            child: Text(
+                                              customer.name,
+                                              overflow: TextOverflow.ellipsis,
+                                              style: const TextStyle(
+                                                fontWeight: FontWeight.w700,
+                                                fontSize: 14,
+                                                color: Color(0xFF1E293B),
+                                              ),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                                
+                                // Email
+                                DataCell(
+                                  SizedBox(
+                                    width: 220,
+                                    child: Padding(
+                                      padding: const EdgeInsets.symmetric(horizontal: 6),
+                                      child: Text(
+                                        customer.email,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: const TextStyle(
+                                          fontSize: 13.5,
+                                          color: Color(0xFF475569),
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                                
+                                // Phone
+                                DataCell(
+                                  SizedBox(
+                                    width: 130,
+                                    child: Padding(
+                                      padding: const EdgeInsets.symmetric(horizontal: 6),
+                                      child: Text(
+                                        (customer.phoneNumber != null && customer.phoneNumber!.isNotEmpty)
+                                            ? customer.phoneNumber!
+                                            : '—',
+                                        overflow: TextOverflow.ellipsis,
+                                        style: const TextStyle(
+                                          fontSize: 13,
+                                          fontWeight: FontWeight.w500,
+                                          color: Color(0xFF334155),
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                                
+                                // Company Chip
+                                DataCell(
+                                  SizedBox(
+                                    width: 160,
+                                    child: Padding(
+                                      padding: const EdgeInsets.symmetric(horizontal: 6),
+                                      child: Align(
+                                        alignment: Alignment.centerLeft,
+                                        child: (customer.companyName != null && customer.companyName!.isNotEmpty)
+                                            ? Container(
+                                                padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 3),
+                                                decoration: BoxDecoration(
+                                                  color: const Color(0xFFEEF2FF),
+                                                  borderRadius: BorderRadius.circular(8),
+                                                  border: Border.all(color: const Color(0xFFC7D2FE)),
+                                                ),
+                                                child: Text(
+                                                  customer.companyName!,
+                                                  overflow: TextOverflow.ellipsis,
+                                                  style: const TextStyle(
+                                                    fontSize: 12.5,
+                                                    fontWeight: FontWeight.w700,
+                                                    color: Color(0xFF4338CA),
+                                                  ),
+                                                ),
+                                              )
+                                            : const Text('—', style: TextStyle(color: Color(0xFF94A3B8))),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                                
+                                // Department Chip
+                                DataCell(
+                                  SizedBox(
+                                    width: 150,
+                                    child: Padding(
+                                      padding: const EdgeInsets.symmetric(horizontal: 6),
+                                      child: Align(
+                                        alignment: Alignment.centerLeft,
+                                        child: (customer.department != null && customer.department!.isNotEmpty)
+                                            ? Container(
+                                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                                decoration: BoxDecoration(
+                                                  color: const Color(0xFFF1F5F9),
+                                                  borderRadius: BorderRadius.circular(6),
+                                                ),
+                                                child: Text(
+                                                  customer.department!,
+                                                  overflow: TextOverflow.ellipsis,
+                                                  style: const TextStyle(
+                                                    fontSize: 12.5,
+                                                    fontWeight: FontWeight.w600,
+                                                    color: Color(0xFF475569),
+                                                  ),
+                                                ),
+                                              )
+                                            : const Text('—', style: TextStyle(color: Color(0xFF94A3B8))),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                                
+                                // Branch
+                                DataCell(
+                                  SizedBox(
+                                    width: 120,
+                                    child: Padding(
+                                      padding: const EdgeInsets.symmetric(horizontal: 6),
+                                      child: Text(
+                                        (customer.branch != null && customer.branch!.isNotEmpty)
+                                            ? customer.branch!
+                                            : '—',
+                                        overflow: TextOverflow.ellipsis,
+                                        style: const TextStyle(
+                                          fontSize: 13,
+                                          color: Color(0xFF64748B),
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                                
+                                // Status Badge
+                                DataCell(
+                                  SizedBox(
+                                    width: 100,
+                                    child: Padding(
+                                      padding: const EdgeInsets.symmetric(horizontal: 6),
+                                      child: Align(
+                                        alignment: Alignment.centerLeft,
+                                        child: _buildStatusBadge(customer.status),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                                
+                                // Actions
+                                DataCell(
+                                  SizedBox(
+                                    width: 120,
+                                    child: Padding(
+                                      padding: const EdgeInsets.symmetric(horizontal: 4),
+                                      child: Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          // View Details
+                                          Container(
+                                            width: 32,
+                                            height: 32,
+                                            decoration: BoxDecoration(
+                                              color: const Color(0xFFEEF2FF),
+                                              borderRadius: BorderRadius.circular(8),
+                                              border: Border.all(color: const Color(0xFFC7D2FE)),
+                                            ),
+                                            child: IconButton(
+                                              onPressed: () => _navigateToDetails(customer),
+                                              icon: const Icon(Icons.visibility, size: 15),
+                                              color: const Color(0xFF1A3FC4),
+                                              tooltip: 'View Details',
+                                              padding: EdgeInsets.zero,
+                                            ),
+                                          ),
+                                          const SizedBox(width: 6),
+                                          
+                                          // Edit
+                                          Container(
+                                            width: 32,
+                                            height: 32,
+                                            decoration: BoxDecoration(
+                                              color: const Color(0xFFFEF3C7),
+                                              borderRadius: BorderRadius.circular(8),
+                                              border: Border.all(color: const Color(0xFFFCD34D)),
+                                            ),
+                                            child: IconButton(
+                                              onPressed: () async {
+                                                final canEdit = await PermissionRestrictedDialog.checkAndWarn(
+                                                  context,
+                                                  permissionKey: 'all_customers',
+                                                  moduleName: 'customers',
+                                                );
+                                                if (!canEdit) return;
+                                                if (!mounted) return;
+                                                setState(() {
+                                                  _editingCustomer = customer;
+                                                  _showAddCustomerOverlay = true;
+                                                });
+                                              },
+                                              icon: const Icon(Icons.edit, size: 15),
+                                              color: const Color(0xFF92400E),
+                                              tooltip: 'Edit Customer',
+                                              padding: EdgeInsets.zero,
+                                            ),
+                                          ),
+                                          const SizedBox(width: 6),
+                                          
+                                          // Delete
+                                          Container(
+                                            width: 32,
+                                            height: 32,
+                                            decoration: BoxDecoration(
+                                              color: const Color(0xFFFEE2E2),
+                                              borderRadius: BorderRadius.circular(8),
+                                              border: Border.all(color: const Color(0xFFFCA5A5)),
+                                            ),
+                                            child: IconButton(
+                                              onPressed: () => _deleteCustomer(customer),
+                                              icon: const Icon(Icons.delete, size: 15),
+                                              color: const Color(0xFF991B1B),
+                                              tooltip: 'Delete Customer',
+                                              padding: EdgeInsets.zero,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            );
+                          }).toList(),
+                        ),      // DataTable
+                      ),        // MouseRegion
+                    ),          // ConstrainedBox
+                  ),              // SingleChildScrollView (horizontal)
+                ),                  // RawScrollbar (horizontal)
+              ),                    // ScrollConfiguration
+            ),                      // Container
+          ],                      // Column children
+        ),                        // Column
+      );                          // outer Container
   }
 
   Widget _buildStatusBadge(String status) {
     Color backgroundColor;
     Color textColor;
+    Color borderColor;
     String text = status;
 
     switch (status.toLowerCase()) {
       case 'active':
-        backgroundColor = const Color(0xFF10B981).withOpacity(0.1);
-        textColor = const Color(0xFF10B981);
-        break;
-      case 'inactive':
-        backgroundColor = const Color(0xFFF59E0B).withOpacity(0.1);
-        textColor = const Color(0xFFF59E0B);
+        backgroundColor = const Color(0xFFECFDF5);
+        textColor = const Color(0xFF047857);
+        borderColor = const Color(0xFFA7F3D0);
         break;
       case 'pending':
-        backgroundColor = const Color(0xFFEF4444).withOpacity(0.1);
-        textColor = const Color(0xFFEF4444);
+        backgroundColor = const Color(0xFFFEF3C7);
+        textColor = const Color(0xFF92400E);
+        borderColor = const Color(0xFFFCD34D);
+        break;
+      case 'inactive':
+      case 'rejected':
+      case 'deleted':
+        backgroundColor = const Color(0xFFFEF2F2);
+        textColor = const Color(0xFFB91C1C);
+        borderColor = const Color(0xFFFECACA);
         break;
       default:
-        backgroundColor = const Color(0xFF64748B).withOpacity(0.1);
-        textColor = const Color(0xFF64748B);
+        backgroundColor = const Color(0xFFF1F5F9);
+        textColor = const Color(0xFF475569);
+        borderColor = const Color(0xFFCBD5E1);
     }
 
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
       decoration: BoxDecoration(
         color: backgroundColor,
-        borderRadius: BorderRadius.circular(6),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: borderColor),
       ),
       child: Text(
-        text,
+        text.toUpperCase(),
         style: TextStyle(
           color: textColor,
-          fontSize: 12,
-          fontWeight: FontWeight.w600,
+          fontSize: 10.5,
+          fontWeight: FontWeight.w700,
+          letterSpacing: 0.4,
         ),
       ),
     );
@@ -1545,13 +2136,19 @@ class _AdminAllCustomersPageState extends State<AdminAllCustomersPage> {
         search: searchController.text.isNotEmpty ? searchController.text : null,
         organization: selectedOrganization != 'All Organizations' ? selectedOrganization : null,
         department: selectedDepartment != 'All Departments' ? selectedDepartment : null,
+        city: _activeFilters['city']?.toString(),
+        state: _activeFilters['state']?.toString(),
+        country: _activeFilters['country']?.toString(),
+        area: _activeFilters['area']?.toString(),
+        startDate: _activeFilters['startDate'] != null ? (_activeFilters['startDate'] as DateTime).toIso8601String() : null,
+        endDate: _activeFilters['endDate'] != null ? (_activeFilters['endDate'] as DateTime).toIso8601String() : null,
       );
       
       if (!mounted) return;
       
-      print('✅ Customers refreshed successfully');
+      print('âœ… Customers refreshed successfully');
     } catch (e) {
-      print('❌ Error refreshing customers: $e');
+      print('âŒ Error refreshing customers: $e');
       
       if (!mounted) return;
       
@@ -1662,6 +2259,13 @@ class _AdminAllCustomersPageState extends State<AdminAllCustomersPage> {
   Future<void> _deleteCustomer(CustomerEntity customer) async {
     if (!mounted) return;
     
+    final canDelete = await PermissionRestrictedDialog.checkAndWarn(
+      context,
+      permissionKey: 'all_customers',
+      moduleName: 'customers',
+    );
+    if (!canDelete) return;
+
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (BuildContext dialogContext) {

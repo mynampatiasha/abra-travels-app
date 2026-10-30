@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'dart:convert';
 import 'package:intl/intl.dart';
 import 'maintenance_reports.dart';
 import 'schedule_maintenance.dart';
@@ -244,7 +245,7 @@ class _MaintenanceManagementScreenState
           maintenance['vendorName'] ?? '',
           maintenance['estimatedCost']?.toString() ?? '0',
           maintenance['description'] ?? '',
-          maintenance['createdBy'] ?? 'System',
+          _formatCreatedBy(maintenance['createdBy']),
           createdAt != null ? DateFormat('dd/MM/yyyy HH:mm').format(createdAt) : '',
         ]);
       }
@@ -461,7 +462,7 @@ class _MaintenanceManagementScreenState
                         _buildDetailSection(
                           'Audit Information',
                           [
-                            _buildDetailRow('Created By', maintenance['createdBy'] ?? 'System'),
+                            _buildDetailRow('Created By', _formatCreatedBy(maintenance['createdBy'])),
                             _buildDetailRow('Created At', _formatDateTime(maintenance['createdAt'])),
                             _buildDetailRow('Last Updated', _formatDateTime(maintenance['updatedAt'])),
                           ],
@@ -605,99 +606,45 @@ class _MaintenanceManagementScreenState
     required Widget child,
   }) {
     return Material(
-      color: Colors.black54,
-      child: Center(
-        child: Container(
-          width: MediaQuery.of(context).size.width * 0.95,
-          height: MediaQuery.of(context).size.height * 0.90,
-          margin: const EdgeInsets.all(20),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(16),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(0.3),
-                blurRadius: 20,
-                offset: const Offset(0, 10),
+      color: Colors.white,
+      child: Column(
+        children: [
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              border: Border(
+                bottom: BorderSide(color: Colors.grey.shade200, width: 1.0),
               ),
-            ],
-          ),
-          child: Column(
-            children: [
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: const BorderRadius.only(
-                    topLeft: Radius.circular(16),
-                    topRight: Radius.circular(16),
+            ),
+            child: Row(
+              children: [
+                IconButton(
+                  icon: const Icon(Icons.arrow_back),
+                  onPressed: _popOverlay,
+                  tooltip: 'Back',
+                  color: const Color(0xFF1B3661),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    title,
+                    style: const TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: Color(0xFF1B3661),
+                    ),
                   ),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withOpacity(0.1),
-                      blurRadius: 4,
-                      offset: const Offset(0, 2),
-                    ),
-                  ],
                 ),
-                child: Row(
-                  children: [
-                    IconButton(
-                      onPressed: _popOverlay,
-                      icon: const Icon(Icons.arrow_back, color: Colors.black),
-                      tooltip: 'Back',
-                    ),
-                    const SizedBox(width: 12),
-                    Icon(
-                      title == 'Schedule Maintenance'
-                          ? Icons.calendar_today_rounded
-                          : title == 'Maintenance Reports'
-                              ? Icons.analytics_rounded
-                              : Icons.store_mall_directory_rounded,
-                      color: kPrimaryColor,
-                      size: 24,
-                    ),
-                    const SizedBox(width: 8),
-                    Text(
-                      title,
-                      style: const TextStyle(
-                        color: Colors.black,
-                        fontSize: 20,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    const Spacer(),
-                    TextButton(
-                      onPressed: _clearAllOverlays,
-                      child: const Text(
-                        'Close',
-                        style: TextStyle(
-                          color: Colors.black,
-                          fontWeight: FontWeight.w600,
-                          fontSize: 16,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              Expanded(
-                child: ClipRRect(
-                  borderRadius: const BorderRadius.only(
-                    bottomLeft: Radius.circular(16),
-                    bottomRight: Radius.circular(16),
-                  ),
-                  child: child,
-                ),
-              ),
-            ],
+              ],
+            ),
           ),
-        ),
+          Expanded(child: child),
+        ],
       ),
     );
   }
 
-  @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.grey[50],
@@ -1253,7 +1200,7 @@ class _MaintenanceManagementScreenState
                     ),
                     DataCell(
                       Text(
-                        maintenance['createdBy']?.toString() ?? 'System',
+                        _formatCreatedBy(maintenance['createdBy']),
                         style: const TextStyle(fontSize: 13),
                       ),
                     ),
@@ -1266,6 +1213,20 @@ class _MaintenanceManagementScreenState
       ),
     );
   }
+  String _formatCreatedBy(dynamic createdBy) {
+    if (createdBy == null) return 'N/A';
+    if (createdBy is String) return createdBy;
+    if (createdBy is Map) {
+      if (createdBy['name'] != null && createdBy['name'].toString().isNotEmpty) {
+        return createdBy['name'].toString();
+      }
+      if (createdBy['email'] != null && createdBy['email'].toString().isNotEmpty) {
+        return createdBy['email'].toString();
+      }
+    }
+    return createdBy.toString();
+  }
+
 
   Widget _buildStatusBadge(String status) {
     Color backgroundColor;

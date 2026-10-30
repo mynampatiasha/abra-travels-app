@@ -1884,4 +1884,54 @@ extension RouteOptimizationExtension on RosterService {
       rethrow;
     }
   }
+
+  // ============================================================================
+  // ✅ ADMIN: Update roster details (edit overlay)
+  // ============================================================================
+
+  /// Update roster fields — calls PUT /api/roster/admin/update/:id
+  Future<bool> updateRosterDetails({
+    required String rosterId,
+    required Map<String, dynamic> data,
+  }) async {
+    try {
+      debugPrint('✏️ RosterService: Updating roster $rosterId');
+      final response = await _apiService.put(
+        '/api/roster/admin/update/$rosterId',
+        body: data,
+      );
+      if (response['success'] == true) {
+        debugPrint('✅ Roster updated successfully');
+        return true;
+      } else {
+        throw Exception(response['message'] ?? 'Failed to update roster');
+      }
+    } catch (e) {
+      debugPrint('❌ Error updating roster: $e');
+      rethrow;
+    }
+  }
+
+  // ============================================================================
+  // ✅ ADMIN: Delete (cancel) a roster
+  // ============================================================================
+
+  /// Admin delete roster — calls DELETE /api/roster/admin/delete/:id
+  Future<bool> adminDeleteRoster(String rosterId) async {
+    try {
+      debugPrint('🗑️ RosterService: Admin deleting roster $rosterId');
+      final response = await _apiService.delete(
+        '/api/roster/admin/delete/$rosterId',
+      );
+      if (response['success'] == true) {
+        debugPrint('✅ Roster deleted successfully');
+        return true;
+      } else {
+        throw Exception(response['message'] ?? 'Failed to delete roster');
+      }
+    } catch (e) {
+      debugPrint('❌ Error deleting roster: $e');
+      rethrow;
+    }
+  }
 }

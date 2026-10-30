@@ -122,6 +122,12 @@ class CustomerProvider extends ChangeNotifier {
     String? search,
     String? organization,
     String? department,
+    String? city,
+    String? state,
+    String? country,
+    String? area,
+    String? startDate,
+    String? endDate,
   }) async {
     try {
       print('\n🔍 FETCHING CUSTOMERS VIA CUSTOMER SERVICE');
@@ -137,7 +143,13 @@ class CustomerProvider extends ChangeNotifier {
         search: search,
         organization: organization,
         department: department,
-        limit: 100,
+        city: city,
+        state: state,
+        country: country,
+        area: area,
+        startDate: startDate,
+        endDate: endDate,
+        limit: 1000, // Increased limit to fetch all filtered results
       );
 
       print('✅ Received ${customerModels.length} customers from service');

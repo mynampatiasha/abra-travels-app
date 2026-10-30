@@ -3,6 +3,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'dart:ui';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:http/http.dart' as http;
 import 'package:url_launcher/url_launcher.dart';
@@ -1774,15 +1775,162 @@ class _TripOperationScreenState extends State<TripOperationScreen> {
     return Stack(
       children: [
         Scaffold(
-          backgroundColor: Colors.grey[50],
+          backgroundColor: const Color(0xFFF0F4F8),
+          appBar: AppBar(
+            flexibleSpace: Container(
+              decoration: const BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [Color(0xFF0F2557), Color(0xFF1A3FC4)],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
+              ),
+            ),
+            elevation: 2,
+            shadowColor: const Color(0x590F2557),
+            leading: IconButton(
+              icon: const Icon(Icons.arrow_back, color: Colors.white),
+              onPressed: () => Navigator.of(context).pop(),
+              tooltip: 'Back',
+            ),
+            title: const Text(
+              'Trip Operations',
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 20,
+                fontWeight: FontWeight.w700,
+                letterSpacing: 0.3,
+              ),
+            ),
+            actions: [
+              // Status dropdown
+              Container(
+                margin: const EdgeInsets.symmetric(vertical: 8),
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.15),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: DropdownButtonHideUnderline(
+                  child: DropdownButton<String>(
+                    value: _selectedStatus,
+                    dropdownColor: const Color(0xFF1A3FC4),
+                    icon: const Icon(Icons.arrow_drop_down, color: Colors.white),
+                    items: _statusFilters.map((status) {
+                      return DropdownMenuItem(
+                        value: status,
+                        child: Text(
+                          status == 'All' ? 'All Trips' : status.toUpperCase(),
+                          style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w600),
+                        ),
+                      );
+                    }).toList(),
+                    onChanged: (value) {
+                      if (value != null) {
+                        setState(() => _selectedStatus = value);
+                        _loadTrips();
+                      }
+                    },
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              // Search
+              SizedBox(
+                width: 220,
+                height: 38,
+                child: TextField(
+                  controller: _searchController,
+                  style: const TextStyle(color: Colors.white, fontSize: 14),
+                  decoration: InputDecoration(
+                    hintText: 'Search trips...',
+                    hintStyle: TextStyle(color: Colors.white.withOpacity(0.7), fontSize: 14),
+                    prefixIcon: const Icon(Icons.search, color: Colors.white, size: 20),
+                    suffixIcon: _searchController.text.isNotEmpty
+                        ? IconButton(
+                            icon: const Icon(Icons.clear, color: Colors.white, size: 18),
+                            onPressed: () {
+                              setState(() {
+                                _searchController.clear();
+                                _searchQuery = '';
+                                _applyFilters();
+                              });
+                            },
+                          )
+                        : null,
+                    filled: true,
+                    fillColor: Colors.white.withOpacity(0.15),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8),
+                      borderSide: BorderSide.none,
+                    ),
+                    contentPadding: const EdgeInsets.symmetric(vertical: 0, horizontal: 12),
+                    isDense: true,
+                  ),
+                  onChanged: (value) {
+                    setState(() {
+                      _searchQuery = value.toLowerCase();
+                      _applyFilters();
+                    });
+                  },
+                ),
+              ),
+              const SizedBox(width: 8),
+              // Refresh
+              IconButton(
+                icon: _isLoading && _trips.isNotEmpty
+                    ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                    : const Icon(Icons.refresh, color: Colors.white, size: 22),
+                onPressed: _isLoading ? null : _loadTrips,
+                tooltip: 'Refresh',
+              ),
+              const SizedBox(width: 4),
+              // Start New Trip
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 8),
+                child: ElevatedButton.icon(
+                  onPressed: _showStartNewTripOverlay,
+                  icon: const Icon(Icons.add, size: 18),
+                  label: const Text('Start New Trip', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.white,
+                    foregroundColor: const Color(0xFF0F2557),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                    elevation: 0,
+                    padding: const EdgeInsets.symmetric(horizontal: 14),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              // Export
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 8),
+                child: ElevatedButton.icon(
+                  onPressed: _isLoading ? null : _exportToExcel,
+                  icon: const Icon(Icons.file_download, size: 18),
+                  label: const Text('Export Excel', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF27AE60),
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                    elevation: 0,
+                    padding: const EdgeInsets.symmetric(horizontal: 14),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+            ],
+          ),
           body: _isLoading && _trips.isEmpty
               ? const Center(child: CircularProgressIndicator())
               : SingleChildScrollView(
                   controller: _scrollController,
+                  padding: const EdgeInsets.all(24),
                   child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      _buildTopBar(),
                       _buildFiltersSection(),
+                      const SizedBox(height: 24),
                       if (_errorMessage != null && _trips.isEmpty)
                         _buildErrorState()
                       else if (_trips.isEmpty)
@@ -2039,7 +2187,7 @@ class _TripOperationScreenState extends State<TripOperationScreen> {
       margin: const EdgeInsets.all(20),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: BorderRadius.circular(10),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withOpacity(0.05),
@@ -2055,8 +2203,8 @@ class _TripOperationScreenState extends State<TripOperationScreen> {
             decoration: BoxDecoration(
               color: Colors.grey[100],
               borderRadius: const BorderRadius.only(
-                topLeft: Radius.circular(8),
-                topRight: Radius.circular(8),
+                topLeft: Radius.circular(10),
+                topRight: Radius.circular(10),
               ),
             ),
             child: Row(
@@ -2081,176 +2229,193 @@ class _TripOperationScreenState extends State<TripOperationScreen> {
               ],
             ),
           ),
-          SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: SizedBox(
-              width: totalWidth,
-              child: Column(
-                children: [
-                  Container(
-                    color: kPrimaryColor,
-                    child: Row(children: [
-                      _hdr('', colCheck),
-                      _hdr('TRIP #', colTrip),
-                      _hdr('STATUS', colStatus),
-                      _hdr('CUSTOMER', colCustomer),
-                      _hdr('DRIVER', colDriver),
-                      _hdr('VEHICLE', colVehicle),
-                      _hdr('DISTANCE', colDist),
-                      _hdr('PICKUP TIME', colTime),
-                      _hdr('ACTIONS', colActions),
-                    ]),
-                  ),
-                  ListView.builder(
-                    shrinkWrap: true,
-                    physics: const NeverScrollableScrollPhysics(),
-                    itemCount: _filteredTrips.length,
-                    itemBuilder: (context, index) {
-                      final trip = _filteredTrips[index];
-                      final tripId = _extractTripId(trip);
-                      final isSelected =
-                          tripId != null && _selectedTrips.contains(tripId);
-                      final isEven = index % 2 == 0;
-                      final status =
-                          trip['status']?.toString() ?? 'unknown';
-                      final adminConfirmed = trip['adminConfirmed'] == true;
-
-                      return InkWell(
-                        onTap: () => _showTripHistory(trip),
-                        hoverColor: kPrimaryColor.withOpacity(0.04),
-                        child: Container(
-                          decoration: BoxDecoration(
-                            color: isEven
-                                ? Colors.grey.shade50
-                                : Colors.white,
-                            border: Border(
-                                bottom: BorderSide(
-                                    color: Colors.grey.shade200, width: 1)),
+          ScrollConfiguration(
+            behavior: ScrollConfiguration.of(context).copyWith(
+              dragDevices: {
+                PointerDeviceKind.touch,
+                PointerDeviceKind.mouse,
+                PointerDeviceKind.trackpad,
+                PointerDeviceKind.stylus,
+              },
+            ),
+            child: RawScrollbar(
+              controller: _scrollController,
+              thumbVisibility: true,
+              trackVisibility: true,
+              thickness: 10,
+              radius: const Radius.circular(5),
+              thumbColor: const Color(0xFF1A3FC4),
+              trackColor: const Color(0xFFE2E8F0),
+              trackRadius: const Radius.circular(5),
+              scrollbarOrientation: ScrollbarOrientation.bottom,
+              child: SingleChildScrollView(
+                controller: _scrollController,
+                scrollDirection: Axis.horizontal,
+                physics: const BouncingScrollPhysics(),
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(minWidth: 1200),
+                  child: MouseRegion(
+                    cursor: SystemMouseCursors.grab,
+                    child: DataTable(
+                      border: const TableBorder(
+                        horizontalInside: BorderSide(color: Color(0xFFE2E8F0), width: 1),
+                        verticalInside: BorderSide(color: Color(0xFFE2E8F0), width: 1),
+                        top: BorderSide(color: Color(0xFF0F2557), width: 1),
+                        bottom: BorderSide(color: Color(0xFFE2E8F0), width: 1.5),
+                        left: BorderSide(color: Color(0xFFE2E8F0), width: 1),
+                        right: BorderSide(color: Color(0xFFE2E8F0), width: 1),
+                      ),
+                      columnSpacing: 24,
+                      horizontalMargin: 20,
+                      headingRowHeight: 56,
+                      dataRowMinHeight: 60,
+                      dataRowMaxHeight: 64,
+                      headingRowColor: WidgetStateProperty.all(
+                        const Color(0xFF0F2557),
+                      ),
+                      headingTextStyle: const TextStyle(
+                        fontWeight: FontWeight.w700,
+                        fontSize: 13,
+                        color: Colors.white,
+                        letterSpacing: 0.5,
+                      ),
+                      dataRowColor: WidgetStateProperty.resolveWith<Color>((states) {
+                        if (states.contains(WidgetState.hovered)) {
+                          return const Color(0xFFEFF6FF);
+                        }
+                        return Colors.white;
+                      }),
+                      columns: [
+                        DataColumn(
+                          label: Checkbox(
+                            value: _selectAll,
+                            onChanged: (v) {
+                              setState(() {
+                                _selectAll = v ?? false;
+                                if (_selectAll) {
+                                  _selectedTrips.addAll(_filteredTrips
+                                      .map((t) => _extractTripId(t) ?? '')
+                                      .where((id) => id.isNotEmpty));
+                                } else {
+                                  _selectedTrips.clear();
+                                }
+                              });
+                            },
+                            fillColor: WidgetStateProperty.resolveWith((states) {
+                              if (states.contains(WidgetState.selected)) return Colors.white;
+                              return Colors.transparent;
+                            }),
+                            checkColor: const Color(0xFF0F2557),
+                            side: const BorderSide(color: Colors.white, width: 1.5),
                           ),
-                          child: Row(children: [
-                            SizedBox(
-                              width: colCheck,
-                              child: Checkbox(
-                                value: isSelected,
-                                onChanged: (v) => tripId != null
-                                    ? _toggleSelection(tripId)
-                                    : null,
-                              ),
-                            ),
-                            _tblCell(
-                              trip['tripNumber'] ?? 'N/A',
-                              colTrip,
-                              fontWeight: FontWeight.bold,
-                              color: kPrimaryColor,
-                              fontSize: 13,
-                            ),
-                            SizedBox(
-                              width: colStatus,
-                              child: Padding(
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 14, vertical: 10),
-                                child: _buildStatusBadge(status,
-                                    adminConfirmed: adminConfirmed),
-                              ),
-                            ),
-                            SizedBox(
-                              width: colCustomer,
-                              child: Padding(
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 14, vertical: 10),
-                                child: Column(
-                                  crossAxisAlignment:
-                                      CrossAxisAlignment.start,
-                                  mainAxisAlignment:
-                                      MainAxisAlignment.center,
-                                  children: [
-                                    Text(
-                                      trip['customerName'] ??
-                                          trip['customer']?['name'] ??
-                                          'N/A',
-                                      style: const TextStyle(
-                                          fontSize: 15,
-                                          fontWeight: FontWeight.w600),
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                    ),
-                                    Text(
-                                      trip['customerPhone'] ??
-                                          trip['customer']?['phone'] ??
-                                          '',
-                                      style: TextStyle(
-                                          fontSize: 14,
-                                          color: Colors.grey[600]),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
-                            SizedBox(
-                              width: colDriver,
-                              child: Padding(
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 14, vertical: 10),
-                                child: Column(
-                                  crossAxisAlignment:
-                                      CrossAxisAlignment.start,
-                                  mainAxisAlignment:
-                                      MainAxisAlignment.center,
-                                  children: [
-                                    Text(
-                                      trip['driverName'] ?? '—',
-                                      style: TextStyle(
-                                        fontSize: 15,
-                                        fontWeight: FontWeight.w500,
-                                        color: trip['driverName'] != null
-                                            ? kTextPrimaryColor
-                                            : Colors.grey.shade400,
-                                      ),
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                    ),
-                                    Text(
-                                      trip['driverPhone'] ?? '',
-                                      style: TextStyle(
-                                          fontSize: 14,
-                                          color: Colors.grey[600]),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
-                            _tblCell(
-                              trip['vehicleNumber'] ?? '—',
-                              colVehicle,
-                              color: trip['vehicleNumber'] != null
-                                  ? kTextPrimaryColor
-                                  : Colors.grey.shade400,
-                            ),
-                            _tblCell(
-                              '${trip['distance']?.toStringAsFixed(1) ?? '0'} km',
-                              colDist,
-                              fontWeight: FontWeight.w600,
-                            ),
-                            _tblCell(
-                              _formatDateTime(trip['scheduledPickupTime']),
-                              colTime,
-                              fontSize: 12,
-                            ),
-                            SizedBox(
-                              width: colActions,
-                              child: Padding(
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 10, vertical: 8),
-                                child: _buildActionButtons(
-                                    trip, status, adminConfirmed),
-                              ),
-                            ),
-                          ]),
                         ),
-                      );
-                    },
+                        const DataColumn(label: SizedBox(width: 140, child: Text('TRIP #'))),
+                        const DataColumn(label: SizedBox(width: 120, child: Text('STATUS'))),
+                        const DataColumn(label: SizedBox(width: 170, child: Text('CUSTOMER'))),
+                        const DataColumn(label: SizedBox(width: 170, child: Text('DRIVER'))),
+                        const DataColumn(label: SizedBox(width: 120, child: Text('VEHICLE'))),
+                        const DataColumn(label: SizedBox(width: 90, child: Text('DISTANCE'))),
+                        const DataColumn(label: SizedBox(width: 140, child: Text('PICKUP TIME'))),
+                        const DataColumn(label: SizedBox(width: 250, child: Text('ACTIONS'))),
+                      ],
+                      rows: _filteredTrips.map((trip) {
+                        final tripId = _extractTripId(trip);
+                        final isSelected = tripId != null && _selectedTrips.contains(tripId);
+                        final status = trip['status']?.toString() ?? 'unknown';
+                        final adminConfirmed = trip['adminConfirmed'] == true;
+
+                        return DataRow(
+                          selected: isSelected,
+                          onSelectChanged: (v) => tripId != null ? _toggleSelection(tripId) : null,
+                          cells: [
+                            DataCell(
+                              Checkbox(
+                                value: isSelected,
+                                onChanged: (v) => tripId != null ? _toggleSelection(tripId) : null,
+                              ),
+                            ),
+                            DataCell(
+                              InkWell(
+                                onTap: () => _showTripHistory(trip),
+                                child: Text(
+                                  trip['tripNumber'] ?? 'N/A',
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    color: kPrimaryColor,
+                                    fontSize: 14,
+                                  ),
+                                ),
+                              ),
+                            ),
+                            DataCell(_buildStatusBadge(status, adminConfirmed: adminConfirmed)),
+                            DataCell(
+                              Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Text(
+                                    trip['customerName'] ?? trip['customer']?['name'] ?? 'N/A',
+                                    style: const TextStyle(fontSize: 14.5, fontWeight: FontWeight.w600),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                  Text(
+                                    trip['customerPhone'] ?? trip['customer']?['phone'] ?? '',
+                                    style: TextStyle(fontSize: 13, color: Colors.grey[600]),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            DataCell(
+                              Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Text(
+                                    trip['driverName'] ?? '—',
+                                    style: TextStyle(
+                                      fontSize: 14.5,
+                                      fontWeight: FontWeight.w500,
+                                      color: trip['driverName'] != null ? kTextPrimaryColor : Colors.grey.shade400,
+                                    ),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                  Text(
+                                    trip['driverPhone'] ?? '',
+                                    style: TextStyle(fontSize: 13, color: Colors.grey[600]),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            DataCell(
+                              Text(
+                                trip['vehicleNumber'] ?? '—',
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  color: trip['vehicleNumber'] != null ? kTextPrimaryColor : Colors.grey.shade400,
+                                ),
+                              ),
+                            ),
+                            DataCell(
+                              Text(
+                                '${trip['distance']?.toStringAsFixed(1) ?? '0'} km',
+                                style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+                              ),
+                            ),
+                            DataCell(
+                              Text(
+                                _formatDateTime(trip['scheduledPickupTime']),
+                                style: const TextStyle(fontSize: 13.5),
+                              ),
+                            ),
+                            DataCell(_buildActionButtons(trip, status, adminConfirmed)),
+                          ],
+                        );
+                      }).toList(),
+                    ),
                   ),
-                ],
+                ),
               ),
             ),
           ),

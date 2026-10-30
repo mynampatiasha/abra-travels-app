@@ -21,6 +21,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:universal_html/html.dart' as html;
 import 'package:csv/csv.dart'; // ✅ NEW: For CSV export
 import 'package:abra_fleet/core/utils/file_helper.dart'; // ✅ NEW: For File operations
+import 'package:abra_fleet/core/widgets/permission_restricted_dialog.dart';
 
 class DriverListPage extends StatefulWidget {
   final AuthRepository authRepository;
@@ -1025,6 +1026,13 @@ class _DriverListPageState extends State<DriverListPage> with SingleTickerProvid
 
   // ✏️ SHOW EDIT DRIVER DIALOG
   Future<void> _showEditDriverDialog(Map<String, dynamic> driver) async {
+    final canEdit = await PermissionRestrictedDialog.checkAndWarn(
+      context,
+      permissionKey: 'drivers',
+      moduleName: 'drivers',
+    );
+    if (!canEdit) return;
+
     final nameController = TextEditingController(
       text: driver['name'] ?? _getNestedValue(driver, 'personalInfo.name', '')
     );
@@ -1215,11 +1223,9 @@ class _DriverListPageState extends State<DriverListPage> with SingleTickerProvid
       final response = await widget.driverService.updateDriver(
         driverId,
         {
-          'personalInfo': {
-            'name': updateData['name'],
-            'email': updateData['email'],
-            'phone': updateData['phone'],
-          },
+          'name': updateData['name'],
+          'email': updateData['email'],
+          'phone': updateData['phone'],
           'status': updateData['status'],
         },
       );
@@ -1255,6 +1261,13 @@ class _DriverListPageState extends State<DriverListPage> with SingleTickerProvid
 
   // 🗑️ DELETE DRIVER
   Future<void> _deleteDriver(String? driverId, String driverName) async {
+    final canDelete = await PermissionRestrictedDialog.checkAndWarn(
+      context,
+      permissionKey: 'drivers',
+      moduleName: 'drivers',
+    );
+    if (!canDelete) return;
+
     if (driverId == null || driverId.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -1310,7 +1323,10 @@ class _DriverListPageState extends State<DriverListPage> with SingleTickerProvid
       if (!mounted) return;
       Navigator.pop(context);
 
-      if (response == true) {
+      final isSuccess = response == true ||
+          (response is Map && (response['success'] == true || response['status'] == 'success'));
+
+      if (isSuccess) {
         if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
@@ -1321,7 +1337,8 @@ class _DriverListPageState extends State<DriverListPage> with SingleTickerProvid
         );
         await _fetchDrivers();
       } else {
-        throw Exception('Failed to delete driver');
+        final errorMsg = (response is Map ? response['message'] : null) ?? 'Failed to delete driver';
+        throw Exception(errorMsg);
       }
     } catch (e) {
       if (!mounted) return;

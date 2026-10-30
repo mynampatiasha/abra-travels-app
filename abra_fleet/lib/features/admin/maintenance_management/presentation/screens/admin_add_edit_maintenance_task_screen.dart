@@ -6,6 +6,7 @@ import 'package:provider/provider.dart';
 import 'package:intl/intl.dart'; // For date formatting
 import 'package:abra_fleet/features/admin/maintenance_management/domain/entities/maintenance_task_entity.dart';
 import 'package:abra_fleet/features/admin/maintenance_management/presentation/providers/maintenance_provider.dart';
+import 'package:abra_fleet/core/widgets/permission_restricted_dialog.dart';
 // Assuming VehicleProvider might be used for a real vehicle dropdown eventually
 // import 'package:abra_fleet/features/admin/vehicle_management/presentation/providers/vehicle_provider.dart';
 // import 'package:abra_fleet/features/admin/vehicle_management/domain/entities/vehicle_entity.dart';
@@ -185,6 +186,13 @@ class _AdminAddEditMaintenanceTaskScreenState extends State<AdminAddEditMaintena
 
   Future<void> _deleteTask() async {
     if (!_isEditMode || widget.task == null) return;
+
+    final canDelete = await PermissionRestrictedDialog.checkAndWarn(
+      context,
+      permissionKey: 'maintenance_management',
+      moduleName: 'maintenance tasks',
+    );
+    if (!canDelete) return;
 
     final maintenanceProvider = Provider.of<MaintenanceProvider>(context, listen: false);
     final scaffoldMessenger = ScaffoldMessenger.of(context);

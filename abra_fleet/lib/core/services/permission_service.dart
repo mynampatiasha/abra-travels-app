@@ -1,8 +1,12 @@
 // lib/core/services/permission_service.dart
 // ============================================================================
-// 🔐 PERMISSION SERVICE - ✅ CORRECTED VERSION
+// 🔐 PERMISSION SERVICE — BILLING-STYLE (thin wrapper)
 // ============================================================================
-// ✅ FIXED: All navigation keys now map to ACTUAL MongoDB permission keys
+// The admin_main_shell.dart now loads permissions once at login and checks
+// them synchronously from its local _permissions map (same as billing_main_shell).
+//
+// This service is kept for backward compatibility with any other callers.
+// It reads from SharedPreferences cache (written by admin_main_shell on load).
 // ============================================================================
 
 import 'package:flutter/foundation.dart';
@@ -12,22 +16,15 @@ import 'package:abra_fleet/core/services/safe_api_service.dart';
 
 class PermissionService {
   final SafeApiService _api = SafeApiService();
-  
-  // Cache permissions to avoid repeated API calls
-  Map<String, dynamic> _permissionsCache = {};
+
+  // In-memory cache (mirrors what admin_main_shell stores in _permissions)
+  Map<String, dynamic> _cache = {};
   DateTime? _lastFetchTime;
   static const Duration _cacheDuration = Duration(minutes: 5);
 
-  // ============================================================================
-  // 🗺️ NAVIGATION TO PERMISSION MAPPING - ✅ FULLY CORRECTED
-  // ============================================================================
-  // This maps NavigationKeys to the ACTUAL permission keys stored in MongoDB
-  
+  // ── Navigation key → permission key map ──────────────────────────────────
   static const Map<String, String> navigationToPermissionMap = {
-    // Dashboard - Available to everyone
     'dashboard': 'dashboard',
-    
-    // HRM - Correct MongoDB keys
     'hrm_employees': 'hrm_employees',
     'hrm_departments': 'hrm_departments',
     'hrm_attendance': 'hrm_attendance',
@@ -36,333 +33,200 @@ class PermissionService {
     'hrm_notice_board': 'hrm_notice_board',
     'hrm_kpq': 'hrm_kpq',
     'hrm_kpi_evaluation': 'hrm_kpi_evaluation',
-    
-    // TMS - Correct MongoDB keys
     'raise_ticket': 'raise_ticket',
     'my_tickets': 'my_tickets',
     'all_tickets': 'all_tickets',
     'closed_tickets': 'closed_tickets',
-    
-    // Feedback Management
     'feedback_management': 'feedback_management',
-    
-    // Client Management
     'client_details': 'client_details',
-    
-    // Customer Management
     'all_customers': 'all_customers',
     'pending_approvals': 'pending_approvals',
     'pending_rosters': 'pending_rosters',
-    
-    // Driver Management
     'drivers': 'drivers',
     'driver_list': 'drivers',
     'driver_trip_reports': 'driver_feedback',
     'driver_feedback': 'driver_feedback',
-    
-    // Vehicle Management
     'vehicle_master': 'vehicle_master',
     'vehicle_checklist': 'vehicle_checklist',
     'gps_tracking': 'gps_tracking',
     'maintenance_management': 'maintenance_management',
-    
-    // Operations
     'trip_operation': 'trip_operation',
     'operations_pending_rosters': 'pending_rosters',
     'operations_admin_trips': 'trip_operation',
     'operations_client_trips': 'client_details',
-    
-    // Fleet Map
     'fleet_map': 'vehicle_master',
-    
-    // Trips Summary
     'trips_summary': 'trips_summary',
-    
-    // SOS Alerts
     'resolved_alerts': 'resolved_alerts',
     'incomplete_alerts': 'incomplete_alerts',
-    
-    // Finance/Billing
     'finance': 'billing',
     'billing': 'billing',
-    
-    // Reports
     'reports': 'reports',
-    
-    // Role Access Control
     'role_access_control': 'role_access_control',
-    
-    // Tours & Travels
     'tt_tour_packages': 'tt_tour_packages',
     'tt_custom_quotes': 'tt_custom_quotes',
     'tt_sales_leads': 'tt_sales_leads',
     'tt_manual_leads': 'tt_manual_leads',
     'tt_careers': 'tt_careers',
+    'customer_analytics': 'customer_analytics_al',
+    'meta_ads_analytics': 'meta_ads_analytics_al',
+    'google_ads_analytics': 'google_ads_analytics_al',
+    'search_console': 'search_console_al',
+    'content_studio': 'youtube_studio_al',
+    'video_insights': 'youtube_studio_al',
+    'content_and_posts': 'social_media_al',
+    'reports_and_insights': 'social_media_al',
+    'hrm_workforce_journey': 'hrm_workforce_journey',
+    'hrm_hiring_process': 'hrm_hiring_process',
+    'hrm_screening_kpq': 'hrm_screening_kpq',
+    'hrm_onboarding': 'hrm_onboarding',
+    'hrm_training_oje': 'hrm_training_oje',
+    'hrm_employee_checklist': 'hrm_employee_checklist',
+    'hrm_employee_evaluation': 'hrm_employee_evaluation',
+    'hrm_exit_initiation': 'hrm_exit_initiation',
+    'hrm_exit_handover': 'hrm_exit_handover',
+    'hrm_exit_interview': 'hrm_exit_interview',
+    'hrm_exit_settlement': 'hrm_exit_settlement',
+    'expense_tracker': 'expense_tracker',
+    'essential_purchases': 'essential_purchases',
   };
 
-  // ============================================================================
-  // 📥 GET USER PERMISSIONS
-  // ============================================================================
+  // ── Read permissions (SharedPreferences first, then backend) ─────────────
   Future<Map<String, dynamic>> getUserPermissions() async {
     try {
-      // Check cache first
-      if (_permissionsCache.isNotEmpty && _lastFetchTime != null) {
-        final now = DateTime.now();
-        if (now.difference(_lastFetchTime!) < _cacheDuration) {
-          debugPrint('🔐 Using cached permissions (${_permissionsCache.keys.length} items)');
-          return _permissionsCache;
+      // In-memory cache
+      if (_cache.isNotEmpty && _lastFetchTime != null) {
+        if (DateTime.now().difference(_lastFetchTime!) < _cacheDuration) {
+          return _cache;
         }
       }
 
-      debugPrint('🔐 ========================================');
-      debugPrint('🔐 FETCHING USER PERMISSIONS FROM BACKEND');
-      debugPrint('🔐 ========================================');
-      
-      // Get current user email from SharedPreferences
       final prefs = await SharedPreferences.getInstance();
-      final userEmail = prefs.getString('user_email');
-      
-      if (userEmail == null) {
-        debugPrint('❌ No user email found in SharedPreferences');
-        return {};
+
+      // SharedPreferences cache (written by admin_main_shell)
+      final cached = prefs.getString('user_permissions');
+      if (cached != null && cached.isNotEmpty) {
+        final decoded = jsonDecode(cached);
+        if (decoded is Map<String, dynamic>) {
+          _cache = decoded;
+          _lastFetchTime = DateTime.now();
+          debugPrint('🔐 PermissionService: ${_cache.length} permissions from cache');
+          return _cache;
+        }
       }
 
-      debugPrint('🔐 Loading permissions for: $userEmail');
+      // Fallback: fetch from backend
+      final email = prefs.getString('user_email') ?? '';
+      if (email.isEmpty) return {};
 
-      // Fetch permissions from backend
       final response = await _api.safeGet(
-        '/api/employee-management/permissions/$userEmail',
-        context: 'User Permissions',
+        '/api/employee-management/permissions/$email',
+        context: 'PermissionService.getUserPermissions',
         fallback: {'success': false, 'data': {}},
       );
 
       if (response['success'] == true && response['data'] != null) {
-        final permissions = response['data']['permissions'] as Map<String, dynamic>? ?? {};
-        
-        debugPrint('✅ Permissions loaded successfully: ${permissions.keys.length} items');
-        debugPrint('🔐 Permission keys: ${permissions.keys.join(", ")}');
-        
-        // Log each permission for debugging
-        permissions.forEach((key, value) {
-          if (value is Map) {
-            debugPrint('   📋 $key: can_access=${value['can_access']}, edit_delete=${value['edit_delete']}');
-          }
-        });
-        
-        // Cache the permissions
-        _permissionsCache = permissions;
-        _lastFetchTime = DateTime.now();
-        
-        // Also save to SharedPreferences for offline access
-        await prefs.setString('user_permissions', jsonEncode(permissions));
-        
-        debugPrint('🔐 ========================================');
-        debugPrint('✅ PERMISSIONS CACHED SUCCESSFULLY');
-        debugPrint('🔐 ========================================');
-        
-        return permissions;
-      } else {
-        debugPrint('⚠️ Failed to load permissions from backend, checking cache...');
-        
-        // Try to load from SharedPreferences
-        final cachedPermissions = prefs.getString('user_permissions');
-        if (cachedPermissions != null) {
-          debugPrint('✅ Using cached permissions from SharedPreferences');
-          _permissionsCache = jsonDecode(cachedPermissions) as Map<String, dynamic>;
-          return _permissionsCache;
+        dynamic raw = response['data'];
+        if (raw is Map && raw.containsKey('permissions')) raw = raw['permissions'];
+
+        if (raw is Map<String, dynamic>) {
+          final Map<String, dynamic> normalised = {};
+          raw.forEach((key, value) {
+            if (value is Map) {
+              final ca = value['can_access'];
+              final ed = value['edit_delete'];
+              normalised[key] = {
+                'can_access': ca == true || ca == 1 || ca == '1' || ca == 'true',
+                'edit_delete': ed == true || ed == 1 || ed == '1' || ed == 'true',
+              };
+            } else if (value is bool) {
+              normalised[key] = {'can_access': value, 'edit_delete': false};
+            } else {
+              normalised[key] = {'can_access': false, 'edit_delete': false};
+            }
+          });
+          await prefs.setString('user_permissions', jsonEncode(normalised));
+          _cache = normalised;
+          _lastFetchTime = DateTime.now();
+          return _cache;
         }
       }
 
       return {};
     } catch (e) {
-      debugPrint('❌ Error loading permissions: $e');
-      
-      // Try to load from SharedPreferences as fallback
-      try {
-        final prefs = await SharedPreferences.getInstance();
-        final cachedPermissions = prefs.getString('user_permissions');
-        if (cachedPermissions != null) {
-          debugPrint('✅ Using cached permissions from SharedPreferences (fallback)');
-          _permissionsCache = jsonDecode(cachedPermissions) as Map<String, dynamic>;
-          return _permissionsCache;
-        }
-      } catch (cacheError) {
-        debugPrint('❌ Failed to load cached permissions: $cacheError');
-      }
-      
+      debugPrint('❌ PermissionService.getUserPermissions error: $e');
       return {};
     }
   }
 
-  // ============================================================================
-  // 🔍 CHECK IF USER HAS ACCESS
-  // ============================================================================
-  Future<bool> hasAccess(String permissionKey) async {
-    try {
-      final permissions = await getUserPermissions();
-      
-      if (permissions.isEmpty) {
-        debugPrint('⚠️ No permissions loaded for key: $permissionKey');
-        return false;
-      }
-
-      final permission = permissions[permissionKey];
-      
-      if (permission == null) {
-        debugPrint('⚠️ Permission not found: $permissionKey');
-        debugPrint('   Available: ${permissions.keys.join(", ")}');
-        return false;
-      }
-
-      // Handle different data types for can_access
-      final canAccess = permission['can_access'];
-      
-      bool result = false;
-      if (canAccess is bool) {
-        result = canAccess;
-        debugPrint('🔐 Permission $permissionKey: $result (bool)');
-      } else if (canAccess is int) {
-        result = canAccess == 1;
-        debugPrint('🔐 Permission $permissionKey: $result (int: $canAccess)');
-      } else if (canAccess is String) {
-        result = canAccess.toLowerCase() == 'true' || canAccess == '1';
-        debugPrint('🔐 Permission $permissionKey: $result (string: "$canAccess")');
-      } else {
-        debugPrint('⚠️ Invalid can_access type for $permissionKey: ${canAccess.runtimeType}');
-      }
-      
-      return result;
-    } catch (e) {
-      debugPrint('❌ Error checking access for $permissionKey: $e');
-      return false;
+  // ── Synchronous check against in-memory cache ─────────────────────────────
+  bool hasPermissionSync(String permissionKey) {
+    final perm = _cache[permissionKey];
+    if (perm == null) return false;
+    if (perm is Map) {
+      final ca = perm['can_access'];
+      return ca == true || ca == 1 || ca == '1' || ca == 'true';
     }
-  }
-
-  // ============================================================================
-  // 🗺️ GET PERMISSION KEY FROM NAVIGATION KEY
-  // ============================================================================
-  String? getPermissionKey(String navigationKey) {
-    final permissionKey = navigationToPermissionMap[navigationKey];
-    
-    if (permissionKey == null) {
-      debugPrint('⚠️ No permission mapping for navigation key: $navigationKey');
-      debugPrint('   Available mappings: ${navigationToPermissionMap.keys.join(", ")}');
-    }
-    
-    return permissionKey;
-  }
-
-  // ============================================================================
-  // 🔍 CHECK NAVIGATION ACCESS
-  // ============================================================================
-  Future<bool> hasNavigationAccess(String navigationKey) async {
-    debugPrint('🔍 ========================================');
-    debugPrint('🔍 Checking navigation access: $navigationKey');
-    
-    final permissionKey = getPermissionKey(navigationKey);
-    
-    if (permissionKey == null) {
-      debugPrint('❌ No permission mapping for: $navigationKey');
-      debugPrint('🔍 ========================================');
-      return false;
-    }
-
-    debugPrint('🔍 Permission key: $permissionKey');
-    final hasAccessResult = await hasAccess(permissionKey);
-    debugPrint('🔍 Result: $navigationKey -> $permissionKey = $hasAccessResult');
-    debugPrint('🔍 ========================================');
-    
-    return hasAccessResult;
-  }
-
-  // ============================================================================
-  // 🔍 CHECK IF USER CAN EDIT/DELETE
-  // ============================================================================
-  Future<bool> canEditDelete(String permissionKey) async {
-    try {
-      final permissions = await getUserPermissions();
-      
-      if (permissions.isEmpty) {
-        return false;
-      }
-
-      final permission = permissions[permissionKey];
-      
-      if (permission == null) {
-        return false;
-      }
-
-      // Handle different data types for edit_delete
-      final editDelete = permission['edit_delete'];
-      
-      if (editDelete is bool) return editDelete;
-      if (editDelete is int) return editDelete == 1;
-      if (editDelete is String) {
-        return editDelete.toLowerCase() == 'true' || editDelete == '1';
-      }
-
-      return false;
-    } catch (e) {
-      debugPrint('❌ Error checking edit/delete permission: $e');
-      return false;
-    }
-  }
-
-  // ============================================================================
-  // 🔍 CHECK IF USER HAS ANY OF THE GIVEN PERMISSIONS
-  // ============================================================================
-  Future<bool> hasAnyPermission(List<String> permissionKeys) async {
-    for (final key in permissionKeys) {
-      if (await hasAccess(key)) {
-        debugPrint('✅ Found permission: $key');
-        return true;
-      }
-    }
-    debugPrint('❌ No permissions found in: ${permissionKeys.join(", ")}');
+    if (perm is bool) return perm;
+    if (perm is int) return perm == 1;
     return false;
   }
 
-  // ============================================================================
-  // 🗑️ CLEAR CACHE
-  // ============================================================================
+  // ── Async wrappers (kept for backward compat) ─────────────────────────────
+  Future<bool> hasAccess(String permissionKey) async {
+    final permissions = await getUserPermissions();
+    final perm = permissions[permissionKey];
+    if (perm == null) return false;
+    if (perm is Map) {
+      final ca = perm['can_access'];
+      return ca == true || ca == 1 || ca == '1' || ca == 'true';
+    }
+    if (perm is bool) return perm;
+    if (perm is int) return perm == 1;
+    return false;
+  }
+
+  Future<bool> hasNavigationAccess(String navigationKey) async {
+    final permKey = navigationToPermissionMap[navigationKey];
+    if (permKey == null) return false;
+    return hasAccess(permKey);
+  }
+
+  Future<bool> canEditDelete(String permissionKey) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final role = (prefs.getString('user_role') ?? '').toLowerCase();
+      if (role == 'super_admin' || role == 'admin') {
+        return true;
+      }
+    } catch (_) {}
+
+    final permissions = await getUserPermissions();
+    final perm = permissions[permissionKey];
+    if (perm == null) return false;
+    if (perm is Map) {
+      final ed = perm['edit_delete'];
+      return ed == true || ed == 1 || ed == '1' || ed == 'true';
+    }
+    return false;
+  }
+
+  Future<bool> hasAnyPermission(List<String> permissionKeys) async {
+    for (final key in permissionKeys) {
+      if (await hasAccess(key)) return true;
+    }
+    return false;
+  }
+
+  String? getPermissionKey(String navigationKey) =>
+      navigationToPermissionMap[navigationKey];
+
   void clearCache() {
-    debugPrint('🗑️ Clearing permission cache');
-    _permissionsCache.clear();
+    _cache.clear();
     _lastFetchTime = null;
   }
 
-  // ============================================================================
-  // 🔄 REFRESH PERMISSIONS
-  // ============================================================================
   Future<void> refreshPermissions() async {
-    debugPrint('🔄 Forcing permission refresh');
     clearCache();
     await getUserPermissions();
-  }
-
-  // ============================================================================
-  // 📊 GET PERMISSION SUMMARY (FOR DEBUGGING)
-  // ============================================================================
-  Future<void> logPermissionSummary() async {
-    final permissions = await getUserPermissions();
-    
-    debugPrint('📊 ========================================');
-    debugPrint('📊 PERMISSION SUMMARY');
-    debugPrint('📊 ========================================');
-    debugPrint('📊 Total permissions: ${permissions.keys.length}');
-    
-    if (permissions.isEmpty) {
-      debugPrint('⚠️ No permissions loaded');
-    } else {
-      permissions.forEach((key, value) {
-        if (value is Map) {
-          final canAccess = value['can_access'];
-          final editDelete = value['edit_delete'];
-          debugPrint('   $key: access=$canAccess, edit=$editDelete');
-        }
-      });
-    }
-    
-    debugPrint('📊 ========================================');
   }
 }

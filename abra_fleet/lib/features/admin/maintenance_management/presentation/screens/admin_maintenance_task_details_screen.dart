@@ -10,6 +10,7 @@ import 'package:abra_fleet/features/admin/maintenance_management/domain/entities
 import 'package:abra_fleet/features/admin/maintenance_management/presentation/providers/maintenance_provider.dart';
 // Import the Add/Edit screen to navigate to it
 import 'package:abra_fleet/features/admin/maintenance_management/presentation/screens/admin_add_edit_maintenance_task_screen.dart';
+import 'package:abra_fleet/core/widgets/permission_restricted_dialog.dart';
 
 // Assuming DataState enum is defined in MaintenanceProvider or a shared location
 // If not, ensure it's accessible. For this example, we assume 'DataState' is part of MaintenanceProvider.
@@ -168,6 +169,14 @@ class AdminMaintenanceTaskDetailsScreen extends StatelessWidget {
                 icon: const Icon(Icons.edit_note_rounded),
                 tooltip: 'Edit Task',
                 onPressed: () async {
+                  final canEdit = await PermissionRestrictedDialog.checkAndWarn(
+                    context,
+                    permissionKey: 'maintenance_management',
+                    moduleName: 'maintenance tasks',
+                  );
+                  if (!canEdit) return;
+                  if (!context.mounted) return;
+
                   final result = await Navigator.push(
                     context,
                     MaterialPageRoute(

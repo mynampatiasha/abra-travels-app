@@ -36,30 +36,27 @@ class _SplashScreenState extends State<SplashScreen> {
 
     _userSubscription = authRepository.user.listen((user) {
       if (!mounted) return;
-      
-      Future.delayed(const Duration(milliseconds: 1500), () { // Keep a slight delay for splash visibility
-        if (!mounted) return;
 
-        if (user.isAuthenticated && user.role != null && user.role!.isNotEmpty) {
-          print('[SplashScreen] User Authenticated. Role: ${user.role}. Navigating to MainAppShell.');
-          if (mounted) {
-            Navigator.of(context).pushReplacement(
-              MaterialPageRoute(builder: (_) => const MainAppShell()), // Navigate to MainAppShell
-            );
-          }
-        } else {
-          if (user.isAuthenticated && (user.role == null || user.role!.isEmpty)) {
-            print('[SplashScreen] User Authenticated but role is missing/empty. Navigating to Welcome Screen.');
-          } else {
-            print('[SplashScreen] User Unauthenticated. Navigating to Welcome Screen.');
-          }
-          if (mounted) {
-            Navigator.of(context).pushReplacement(
-              MaterialPageRoute(builder: (_) => const WelcomeScreen()),
-            );
-          }
+      // ── Navigate immediately — no artificial delay ──────────────────────
+      if (user.isAuthenticated && user.role != null && user.role!.isNotEmpty) {
+        print('[SplashScreen] User Authenticated. Role: ${user.role}. Navigating to MainAppShell.');
+        if (mounted) {
+          Navigator.of(context).pushReplacement(
+            MaterialPageRoute(builder: (_) => const MainAppShell()),
+          );
         }
-      });
+      } else {
+        if (user.isAuthenticated && (user.role == null || user.role!.isEmpty)) {
+          print('[SplashScreen] User Authenticated but role is missing/empty. Navigating to Welcome Screen.');
+        } else {
+          print('[SplashScreen] User Unauthenticated. Navigating to Welcome Screen.');
+        }
+        if (mounted) {
+          Navigator.of(context).pushReplacement(
+            MaterialPageRoute(builder: (_) => const WelcomeScreen()),
+          );
+        }
+      }
     }, onError: (error) {
       print('[SplashScreen] Error in auth stream: $error. Navigating to Welcome Screen.');
       if (mounted) {

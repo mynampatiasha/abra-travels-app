@@ -20,7 +20,13 @@ router.get('/', async (req, res) => {
       search,
       organization,
       department,
-      fullDetails = false
+      city,
+        state,
+        country,
+        area,
+        startDate,
+        endDate,
+        fullDetails = false
     } = req.query;
 
     const skip = (parseInt(page) - 1) * parseInt(limit);
@@ -30,14 +36,14 @@ router.get('/', async (req, res) => {
     
     // ✅ ALWAYS exclude deleted customers unless explicitly requested
     if (status && status.toLowerCase() === 'deleted') {
-      filter.status = 'deleted';
+      filter.status = { $regex: /^deleted$/i };
     } else {
       // Exclude deleted customers by default
-      filter.status = { $ne: 'deleted' };
+      filter.status = { $not: { $regex: /^deleted$/i } };
       
       // If specific status requested, override the filter
       if (status && status !== 'All') {
-        filter.status = status.toLowerCase();
+        filter.status = { $regex: new RegExp(`^${status}$`, 'i') };
       }
     }
     
@@ -60,6 +66,26 @@ router.get('/', async (req, res) => {
         { phone: { $regex: search, $options: 'i' } }
       ];
     }
+
+      if (city || state || country || area) {
+        let addressMatches = [];
+        if (city) addressMatches.push(city);
+        if (state) addressMatches.push(state);
+        if (country) addressMatches.push(country);
+        if (area) addressMatches.push(area);
+        
+        addressMatches.forEach(matchStr => {
+          if (!filter.$and) filter.$and = [];
+          filter.$and.push({ address: { $regex: matchStr, $options: 'i' } });
+        });
+      }
+      
+      if (startDate || endDate) {
+        filter.createdAt = {};
+        if (startDate) filter.createdAt.$gte = new Date(startDate);
+        if (endDate) filter.createdAt.$lte = new Date(endDate);
+      }
+
 
     console.log('🔍 Filter:', JSON.stringify(filter, null, 2));
 
@@ -105,10 +131,10 @@ router.get('/', async (req, res) => {
       },
       summary: {
         total: totalCount,
-        active: await req.db.collection('customers').countDocuments({ status: 'active' }),
-        inactive: await req.db.collection('customers').countDocuments({ status: 'inactive' }),
-        pending: await req.db.collection('customers').countDocuments({ status: 'pending' }),
-        deleted: await req.db.collection('customers').countDocuments({ status: 'deleted' })
+        active: await req.db.collection('customers').countDocuments({ status: { $regex: /^active$/i } }),
+        inactive: await req.db.collection('customers').countDocuments({ status: { $regex: /^inactive$/i } }),
+        pending: await req.db.collection('customers').countDocuments({ status: { $regex: /^pending$/i } }),
+        deleted: await req.db.collection('customers').countDocuments({ status: { $regex: /^deleted$/i } })
       }
     });
 

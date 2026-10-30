@@ -7,6 +7,7 @@ import 'package:flutter/foundation.dart';
 import 'package:intl/intl.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:abra_fleet/core/services/driver_service.dart';
+import 'package:abra_fleet/core/widgets/permission_restricted_dialog.dart';
 
 class DriverDetailsPage extends StatefulWidget {
   final Map<String, dynamic> driver;
@@ -49,7 +50,14 @@ class _DriverDetailsPageState extends State<DriverDetailsPage> {
           IconButton(
             icon: const Icon(Icons.edit),
             tooltip: 'Edit Driver',
-            onPressed: () {
+            onPressed: () async {
+              final canEdit = await PermissionRestrictedDialog.checkAndWarn(
+                context,
+                permissionKey: 'drivers',
+                moduleName: 'drivers',
+              );
+              if (!canEdit) return;
+              if (!mounted) return;
               // Navigate back and pass a flag to open edit dialog
               Navigator.pop(context, {'action': 'edit', 'driver': widget.driver});
             },
@@ -694,6 +702,13 @@ class _DriverDetailsPageState extends State<DriverDetailsPage> {
   }
 
   Future<void> _deleteDocument(dynamic doc) async {
+    final canDelete = await PermissionRestrictedDialog.checkAndWarn(
+      context,
+      permissionKey: 'drivers',
+      moduleName: 'driver documents',
+    );
+    if (!canDelete) return;
+
     try {
       showDialog(
         context: context,
@@ -926,6 +941,13 @@ class _DriverDetailsPageState extends State<DriverDetailsPage> {
 
   // ✏️ SHOW EDIT DRIVER DIALOG
   Future<void> _showEditDriverDialog() async {
+    final canEdit = await PermissionRestrictedDialog.checkAndWarn(
+      context,
+      permissionKey: 'drivers',
+      moduleName: 'drivers',
+    );
+    if (!canEdit) return;
+
     const primaryColor = Color(0xFF1B7FA8);
     const textPrimaryColor = Color(0xFF2C3E50);
     const textSecondaryColor = Color(0xFF7F8C8D);

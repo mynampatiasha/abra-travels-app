@@ -8,6 +8,7 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:abra_fleet/app/config/api_config.dart';
+import 'package:abra_fleet/features/admin/otp_monitoring/otp_override_approval_screen.dart';
 
 class AdminNotificationsScreen extends StatefulWidget {
   const AdminNotificationsScreen({super.key});
@@ -41,6 +42,8 @@ class _AdminNotificationsScreenState extends State<AdminNotificationsScreen> {
     'document_expired', 'document_expiring_soon',
     'trip_created_admin', 'trip_accepted_admin', 'trip_declined_admin',
     'system', 'test',
+    // ✅ OTP override — admin must approve/reject quickly
+    'otp_override_request',
   ];
 
   @override
@@ -698,9 +701,36 @@ class _AdminNotificationsScreenState extends State<AdminNotificationsScreen> {
             if (_isSelectionMode) {
               _toggleNotificationSelection(notificationId);
             } else {
-              _showNotificationDetails(notification);
-              if (!isRead) {
-                _markAsRead(notificationId);
+              // ✅ OTP override — go directly to approval screen, no detail popup
+              if (type == 'otp_override_request') {
+                final data = notification['data'] as Map<String, dynamic>? ?? {};
+                if (!isRead) _markAsRead(notificationId);
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => OtpOverrideApprovalScreen(otpRecord: {
+                      ...data,
+                      'passengerName': data['passengerName'] ?? notification['title'] ?? 'Passenger',
+                      'passengerEmail': data['passengerEmail'] ?? '',
+                      'passengerPhone': data['passengerPhone'] ?? '',
+                      'tripGroupId': data['tripGroupId'] ?? '',
+                      'stopId': data['stopId'] ?? '',
+                      'passengerId': data['passengerId'] ?? '',
+                      'overrideReason': data['reason'] ?? '',
+                      'overridePhoto': data['photoUrl'],
+                      'overrideRequestedBy': data['driverId'] ?? '',
+                      'overrideRequestedAt': notification['createdAt'],
+                      'attempts': data['attempts'] ?? 3,
+                      'type': data['otpType'] ?? 'step_in',
+                      'overrideStatus': 'requested',
+                    }),
+                  ),
+                );
+              } else {
+                _showNotificationDetails(notification);
+                if (!isRead) {
+                  _markAsRead(notificationId);
+                }
               }
             }
           },
@@ -846,6 +876,52 @@ class _AdminNotificationsScreenState extends State<AdminNotificationsScreen> {
                           ],
                         ],
                       ),
+
+                      // ✅ OTP Override — prominent "Review Now" action button
+                      if (type == 'otp_override_request') ...[
+                        const SizedBox(height: 10),
+                        SizedBox(
+                          width: double.infinity,
+                          child: ElevatedButton.icon(
+                            onPressed: () {
+                              final data = notification['data'] as Map<String, dynamic>? ?? {};
+                              if (!isRead) _markAsRead(notificationId);
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (_) => OtpOverrideApprovalScreen(otpRecord: {
+                                    ...data,
+                                    'passengerName': data['passengerName'] ?? 'Passenger',
+                                    'passengerEmail': data['passengerEmail'] ?? '',
+                                    'passengerPhone': data['passengerPhone'] ?? '',
+                                    'tripGroupId': data['tripGroupId'] ?? '',
+                                    'stopId': data['stopId'] ?? '',
+                                    'passengerId': data['passengerId'] ?? '',
+                                    'overrideReason': data['reason'] ?? '',
+                                    'overridePhoto': data['photoUrl'],
+                                    'overrideRequestedBy': data['driverId'] ?? '',
+                                    'overrideRequestedAt': notification['createdAt'],
+                                    'attempts': data['attempts'] ?? 3,
+                                    'type': data['otpType'] ?? 'step_in',
+                                    'overrideStatus': 'requested',
+                                  }),
+                                ),
+                              );
+                            },
+                            icon: const Icon(Icons.admin_panel_settings, size: 16, color: Colors.white),
+                            label: const Text(
+                              'Review Override Now →',
+                              style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13),
+                            ),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.orange.shade700,
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                              padding: const EdgeInsets.symmetric(vertical: 10),
+                              elevation: 0,
+                            ),
+                          ),
+                        ),
+                      ],
                     ],
                   ),
                 ),
@@ -914,6 +990,11 @@ class _AdminNotificationsScreenState extends State<AdminNotificationsScreen> {
       case 'document_expiring_soon':
         iconData = Icons.description;
         color = Colors.orange;
+        break;
+      // ✅ OTP override — urgent, needs immediate attention
+      case 'otp_override_request':
+        iconData = Icons.admin_panel_settings;
+        color = isRead ? Colors.orange.shade300 : Colors.orange.shade700;
         break;
       default:
         iconData = Icons.notifications;

@@ -85,7 +85,7 @@ class _FuelEfficiencyScreenState extends State<FuelEfficiencyScreen> {
               DataColumn(label: const Text('Efficiency (km/L)'), onSort: onSort, numeric: true),
             ],
             rows: _reports.map((report) => DataRow(cells: [
-              DataCell(Text(report.vehicleId)),
+              DataCell(Text(report.vehicleId.length > 20 ? '-' : report.vehicleId)),
               DataCell(Text(report.totalDistance.toStringAsFixed(1))),
               DataCell(Text(report.fuelConsumed.toStringAsFixed(1))),
               DataCell(Text(report.efficiency.toStringAsFixed(2), style: const TextStyle(fontWeight: FontWeight.bold))),

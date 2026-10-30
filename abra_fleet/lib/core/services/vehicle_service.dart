@@ -329,6 +329,8 @@ class VehicleService {
     String? country,
     String? state,
     String? city,
+    double? depotLat,
+    double? depotLng,
   }) async {
     try {
       final headers = await _getHeaders();
@@ -350,6 +352,8 @@ class VehicleService {
         if (country != null && country.isNotEmpty) 'country': country,
         if (state != null && state.isNotEmpty) 'state': state,
         if (city != null && city.isNotEmpty) 'city': city,
+        if (depotLat != null) 'depotLat': depotLat,
+        if (depotLng != null) 'depotLng': depotLng,
       };
 
       print('=== CREATE VEHICLE REQUEST ===');

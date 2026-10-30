@@ -85,7 +85,7 @@ class _VehicleUtilizationScreenState extends State<VehicleUtilizationScreen> {
               DataColumn(label: const Text('Utilization'), onSort: onSort, numeric: true),
             ],
             rows: _reports.map((report) => DataRow(cells: [
-              DataCell(Text(report.vehicleId)),
+              DataCell(Text(report.vehicleId.length > 20 ? '-' : report.vehicleId)),
               DataCell(Text(report.totalDistance.toStringAsFixed(1))),
               DataCell(Text(report.activeHours.toString())),
               DataCell(Text('${(report.utilization * 100).toStringAsFixed(1)}%', style: const TextStyle(fontWeight: FontWeight.bold))),

@@ -43,6 +43,8 @@ class _AddVehicleScreenState extends State<AddVehicleScreen> {
   late TextEditingController _countryController;
   late TextEditingController _stateController;
   late TextEditingController _cityController;
+  late TextEditingController _depotLatController;
+  late TextEditingController _depotLngController;
 
   // Dropdown values
   String? _selectedVehicleType;
@@ -99,6 +101,12 @@ class _AddVehicleScreenState extends State<AddVehicleScreen> {
     _cityController = TextEditingController(
       text: widget.initialData?['city'] ?? '',
     );
+    _depotLatController = TextEditingController(
+      text: widget.initialData?['depotLocation']?['coordinates']?[1]?.toString() ?? '',
+    );
+    _depotLngController = TextEditingController(
+      text: widget.initialData?['depotLocation']?['coordinates']?[0]?.toString() ?? '',
+    );
 
     // Set dropdown values
     if (widget.isEditMode && widget.initialData != null) {
@@ -132,6 +140,8 @@ class _AddVehicleScreenState extends State<AddVehicleScreen> {
     _countryController.dispose();
     _stateController.dispose();
     _cityController.dispose();
+    _depotLatController.dispose();
+    _depotLngController.dispose();
     super.dispose();
   }
 
@@ -178,6 +188,9 @@ class _AddVehicleScreenState extends State<AddVehicleScreen> {
         final country = _countryController.text.trim().isNotEmpty ? _countryController.text.trim() : null;
         final state = _stateController.text.trim().isNotEmpty ? _stateController.text.trim() : null;
         final city = _cityController.text.trim().isNotEmpty ? _cityController.text.trim() : null;
+        
+        final depotLat = _depotLatController.text.trim().isNotEmpty ? double.tryParse(_depotLatController.text.trim()) : null;
+        final depotLng = _depotLngController.text.trim().isNotEmpty ? double.tryParse(_depotLngController.text.trim()) : null;
 
         print('=== SUBMITTING FORM ===');
         print('Mode: ${widget.isEditMode ? "EDIT" : "CREATE"}');
@@ -208,6 +221,8 @@ class _AddVehicleScreenState extends State<AddVehicleScreen> {
             if (country != null) 'country': country,
             if (state != null) 'state': state,
             if (city != null) 'city': city,
+            if (depotLat != null) 'depotLat': depotLat,
+            if (depotLng != null) 'depotLng': depotLng,
           };
           
           print('Update payload: $vehicleData');
@@ -233,6 +248,8 @@ class _AddVehicleScreenState extends State<AddVehicleScreen> {
             country: country,
             state: state,
             city: city,
+            depotLat: depotLat,
+            depotLng: depotLng,
           );
         }
 
@@ -522,6 +539,32 @@ class _AddVehicleScreenState extends State<AddVehicleScreen> {
                       hint: 'e.g., Bangalore',
                       icon: Icons.location_city_outlined,
                       validator: null,
+                    ),
+                    const SizedBox(height: 16),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: _buildTextFormField(
+                            controller: _depotLatController,
+                            label: 'Depot Latitude',
+                            hint: 'e.g., 12.9716',
+                            icon: Icons.my_location_outlined,
+                            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                            validator: null,
+                          ),
+                        ),
+                        const SizedBox(width: 16),
+                        Expanded(
+                          child: _buildTextFormField(
+                            controller: _depotLngController,
+                            label: 'Depot Longitude',
+                            hint: 'e.g., 77.5946',
+                            icon: Icons.my_location_outlined,
+                            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                            validator: null,
+                          ),
+                        ),
+                      ],
                     ),
                   ],
                 ),

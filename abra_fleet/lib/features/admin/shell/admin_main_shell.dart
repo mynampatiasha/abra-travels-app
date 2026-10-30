@@ -46,6 +46,7 @@ import 'package:abra_fleet/features/auth/domain/entities/user_entity.dart';
 import 'package:abra_fleet/features/auth/presentation/screens/welcome_screen.dart';
 import 'package:abra_fleet/features/admin/reports/presentation/screens/admin_reports_screen.dart';
 import 'package:abra_fleet/features/admin/dashboard/presentation/screens/admin_dashboard_screen.dart';
+import 'package:abra_fleet/features/admin/dashboard/welcome_greeting_screen.dart'; // Non-admin landing screen
 
 // Vehicle Management Screens
 import 'package:abra_fleet/features/admin/vehicle_admin_management/maintainace_managemnt/maintainance_management.dart';
@@ -89,10 +90,11 @@ import 'package:abra_fleet/features/admin/client_management/admin_client_trips.d
 // Customer Management Screens
 import 'package:abra_fleet/features/admin/customer_management/admin_all_customers.dart';
 import 'package:abra_fleet/features/admin/customer_management/admin_pending_customers.dart';
+import 'package:abra_fleet/features/admin/driver_management/admin_pending_drivers.dart';
 
 // Roster Management - Updated to use modified_pending_screen.dart
 import 'package:abra_fleet/features/admin/customer_management/notification/roster_model.dart';
-import 'package:abra_fleet/features/admin/customer_management/notification/modified_pending_screen.dart';
+import 'package:abra_fleet/features/admin/customer_management/notification/modified_pending_screen_edit_delete_pending_rosters.dart';
 import 'package:abra_fleet/features/admin/customer_management/notification/roster_assignment_screen.dart';
 import 'package:abra_fleet/features/admin/customer_management/notification/approved_rosters_screen.dart';
 import 'package:abra_fleet/features/admin/customer_management/notification/edit_roster_assignment_screen.dart';
@@ -198,6 +200,7 @@ class NavigationKeys {
 
   // Driver Management Sub-items (39-41) - NEW
   static const String driverList = 'driver_list';                   // Index 39
+  static const String pendingDriverApprovals = 'pending_driver_approvals'; // Index 40
   static const String driverTripReports = 'driver_trip_reports';    // Index 40
   static const String driverFeedback = 'driver_feedback';           // Index 41
 
@@ -1579,10 +1582,14 @@ class _AdminMainShellState extends State<AdminMainShell>
   // Safe API Service
   final SafeApiService _safeApi = SafeApiService();
 
-  // Permission Service
-  final PermissionService _permissionService = PermissionService();
-  Map<String, dynamic> _userPermissions = {};
+  // ✅ Permission state (billing-style: load once, check locally)
+  // Structure: { 'permission_key': { 'can_access': true/false, 'edit_delete': true/false } }
+  Map<String, dynamic> _permissions = {};
   bool _permissionsLoaded = false;
+
+  // Kept for backward-compat with the remaining references in this file
+  Map<String, dynamic> get _userPermissions => _permissions;
+  final PermissionService _permissionService = PermissionService();
 
   static int _persistedSelectedIndex = 0;
   static bool _isFirstBuild = true;
@@ -1671,6 +1678,7 @@ class _AdminMainShellState extends State<AdminMainShell>
   
   // Driver Management Sub-items (39-41) - NEW
   NavigationKeys.driverList: 39,         // Driver Management > Drivers
+  NavigationKeys.pendingDriverApprovals: 40, // Driver Management > Pending Driver Approvals
   NavigationKeys.driverTripReports: 40,  // Driver Management > Trip Reports
   NavigationKeys.driverFeedback: 41,     // Driver Management > Driver Feedback
 };
@@ -1858,7 +1866,7 @@ class _AdminMainShellState extends State<AdminMainShell>
     //   },
     //   {'title': 'Vehicle Reports', 'navKey': NavigationKeys.vehicleReports},
     //   {'title': 'All Customers', 'navKey': NavigationKeys.allCustomers},
-    //   {'title': 'Pending Approvals', 'navKey': NavigationKeys.pendingApprovals},
+    //   {'title': 'Pending Customers Approval', 'navKey': NavigationKeys.pendingApprovals},
     //   {'title': 'Pending Rosters', 'navKey': NavigationKeys.pendingRosters},
     //   {'title': 'Client Details', 'navKey': NavigationKeys.clientDetails},
     //   {'title': 'Trips Summary', 'navKey': NavigationKeys.tripsSummary},
@@ -1932,117 +1940,151 @@ class _AdminMainShellState extends State<AdminMainShell>
  void _initializeUserRole() async {
     try {
       debugPrint('🔐 ========================================');
-      debugPrint('🔐 INITIALIZING USER ROLE');
+      debugPrint('🔐 LOADING SESSION (billing-style)');
       debugPrint('🔐 ========================================');
 
-      final authRepo = Provider.of<AuthRepository>(context, listen: false);
-      final user = authRepo.currentUser;
-      debugPrint('🔐 Current User Email: ${user.email}');
+      // ✅ Step 1: Read role + email from SharedPreferences (saved at login)
+      final prefs = await SharedPreferences.getInstance();
+      String role = prefs.getString('user_role') ?? '';
+      String email = prefs.getString('user_email') ?? '';
 
-      // ✅ Show loading spinner - do NOT default to admin
+      // Fallback: AuthRepository (only when prefs are empty)
+      if (role.isEmpty || email.isEmpty) {
+        try {
+          final authRepo = Provider.of<AuthRepository>(context, listen: false);
+          if (role.isEmpty) role = authRepo.currentUser.role ?? 'employee';
+          if (email.isEmpty) email = authRepo.currentUser.email ?? '';
+        } catch (_) {
+          if (role.isEmpty) role = 'employee';
+        }
+      }
+      debugPrint('🔐 Role: $role  |  Email: $email');
+
+      // Normalise role string
+      if (role.toLowerCase() == 'admin') role = 'super_admin';
+
+      // Safety net (from the previous loader): the primary admin account must
+      // never fall through to the employee view.
+      if (role.toLowerCase() == 'employee' &&
+          email.toLowerCase() == 'admin@abrafleet.com') {
+        role = 'super_admin';
+      }
+
+      final isAdmin = role == 'super_admin' || role == 'admin';
+
+      // ✅ Step 2: Load permissions for non-admin users
+      Map<String, dynamic> loadedPermissions = {};
+
+      if (!isAdmin && email.isNotEmpty) {
+        try {
+          debugPrint('🔐 Loading permissions for: $email');
+
+          // Fast path: SharedPreferences cache
+          final cached = prefs.getString('user_permissions');
+          if (cached != null && cached.isNotEmpty) {
+            final decoded = jsonDecode(cached);
+            if (decoded is Map<String, dynamic>) {
+              loadedPermissions = decoded;
+              debugPrint('🔐 Permissions from cache: ${loadedPermissions.length} keys');
+            }
+          }
+
+          // Always refresh from backend in the background (keeps cache fresh)
+          _refreshPermissionsFromBackend(email, prefs);
+        } catch (e) {
+          debugPrint('❌ Permission load error: $e');
+          // Leave loadedPermissions empty - the sidebar degrades gracefully
+        }
+      } else if (isAdmin) {
+        // Admins: clear stale cached permissions so _hasPermission always returns true
+        await prefs.remove('user_permissions');
+        debugPrint('🔐 Admin user - skipping permission load');
+      }
+
+      // ✅ Step 3: setState once - sidebar rebuilds synchronously
       if (mounted) {
         setState(() {
-          _userRole = null;
-          _permissionsLoaded = false;
-          _userPermissions = {};
+          _userRole = role;
+          _permissions = loadedPermissions;
+          _permissionsLoaded = true;
         });
-      }
-
-      // ✅ Fetch real role from backend with 10 second timeout
-      try {
-        final currentUser = await widget.authRepository
-            .getCurrentUserWithRole()
-            .timeout(const Duration(seconds: 10));
-
-        debugPrint('🔐 Role from backend: ${currentUser.role}');
-
-        String fetchedRole = currentUser.role ?? 'employee';
-        if (fetchedRole.toLowerCase() == 'admin') {
-          fetchedRole = 'super_admin';
-        }
-
-        if (mounted) {
-          setState(() {
-            _userRole = fetchedRole;
-          });
-          debugPrint('✅ Real Role Confirmed: $_userRole');
-        }
-      } catch (roleError) {
-        debugPrint('⚠️ Could not fetch role: $roleError');
-        handleSilentError(roleError, context: 'Fetch User Role');
-        // Fallback - never default to admin for unknown users
-        if (mounted) {
-          setState(() {
-            _userRole = user.email == 'admin@abrafleet.com'
-                ? 'super_admin'
-                : 'employee';
-          });
-        }
-      }
-
-      // ✅ Now load permissions based on confirmed role
-      final isAdmin =
-          _userRole == 'super_admin' || _userRole == 'admin';
-
-      if (!isAdmin) {
-        try {
-          debugPrint('📋 Loading permissions for employee: ${user.email}');
-          final permissionService = PermissionService();
-          final permissions =
-              await permissionService.getUserPermissions();
-          if (mounted) {
-            setState(() {
-              _userPermissions = permissions;
-              _permissionsLoaded = true;
-            });
-            debugPrint(
-                '✅ Permissions loaded: ${_userPermissions.length} keys');
-          }
-        } catch (permError) {
-          debugPrint('⚠️ Could not load permissions: $permError');
-          handleSilentError(permError, context: 'Load Permissions');
-          if (mounted) {
-            setState(() {
-              _userPermissions = {};
-              _permissionsLoaded = true;
-            });
-          }
-        }
-      } else {
-        if (mounted) {
-          setState(() {
-            _userPermissions = {};
-            _permissionsLoaded = true;
-          });
-        }
+        debugPrint('✅ Session loaded. Role=$_userRole, Permissions=${_permissions.length} keys');
       }
 
       _initializeScreens();
     } catch (e) {
       debugPrint('❌ Critical error in _initializeUserRole: $e');
       handleSilentError(e, context: 'Initialize User Role');
-      // Last resort fallback
-      final authRepo = Provider.of<AuthRepository>(context, listen: false);
-      final user = authRepo.currentUser;
+      // Safe fallback - never default to admin for unknown users
       if (mounted) {
         setState(() {
-          _userRole = user.email == 'admin@abrafleet.com'
-              ? 'super_admin'
-              : 'employee';
+          _userRole = 'employee';
+          _permissions = {};
           _permissionsLoaded = true;
-          _userPermissions = {};
         });
         _initializeScreens();
       }
     }
   }
 
+  /// Fetches fresh permissions from the backend and updates SharedPreferences + state.
+  /// Runs in the background after the first render - never blocks the UI.
+  Future<void> _refreshPermissionsFromBackend(String email, SharedPreferences prefs) async {
+    try {
+      final response = await _safeApi.safeGet(
+        '/api/employee-management/permissions/$email',
+        context: 'Refresh Permissions',
+        fallback: {'success': false, 'data': {}},
+      );
+
+      if (response['success'] == true && response['data'] != null) {
+        dynamic raw = response['data'];
+        if (raw is Map && raw.containsKey('permissions')) {
+          raw = raw['permissions'];
+        }
+
+        if (raw is Map<String, dynamic>) {
+          // Normalise values to bool (same as billing _canAccessRoute)
+          final Map<String, dynamic> normalised = {};
+          raw.forEach((key, value) {
+            if (value is Map) {
+              final ca = value['can_access'];
+              final ed = value['edit_delete'];
+              normalised[key] = {
+                'can_access': ca == true || ca == 1 || ca == '1' || ca == 'true',
+                'edit_delete': ed == true || ed == 1 || ed == '1' || ed == 'true',
+              };
+            } else if (value is bool) {
+              normalised[key] = {'can_access': value, 'edit_delete': false};
+            } else {
+              normalised[key] = {'can_access': false, 'edit_delete': false};
+            }
+          });
+
+          // Save to cache
+          await prefs.setString('user_permissions', jsonEncode(normalised));
+
+          // Update state if still mounted
+          if (mounted) {
+            setState(() {
+              _permissions = normalised;
+            });
+            debugPrint('✅ Permissions refreshed from backend: ${normalised.length} keys');
+          }
+        }
+      }
+    } catch (e) {
+      debugPrint('⚠️ Background permission refresh failed: $e');
+      // Non-fatal - cached permissions are still in use
+    }
+  }
+
   void _initializeScreens() {
   _adminScreens = [
     // Main Navigation (0-13)
-    AdminDashboardScreen(
-      onNavigateRequest: _navigateToTabByIndex,
-    ), // Index 0 - Dashboard
+    (_userRole == 'super_admin' || _userRole == 'admin')
+        ? AdminDashboardScreen(onNavigateRequest: _navigateToTabByIndex)
+        : const WelcomeGreetingScreen(), // Index 0 - Dashboard (non-admin users get the welcome screen)
     
     const HrmPortalScreen(), // Index 1 - HRM (renamed from "HRM Portal")
     
@@ -2126,7 +2168,8 @@ class _AdminMainShellState extends State<AdminMainShell>
       driverService: _driverService,
       vehicleService: _vehicleService,
     ), // Index 39 - Driver List
-    const TripVerificationScreen(), // Index 40 - Trip Reports (Trip Verification)
+    const AdminPendingDriversPage(), // Index 40
+    const TripVerificationScreen(), // Index 41 - Trip Reports (Trip Verification)
     const DriverFeedbackPage(), // Index 41 - Driver Feedback
   ];
 
@@ -2158,7 +2201,7 @@ class _AdminMainShellState extends State<AdminMainShell>
     {'title': 'Closed Tickets', 'icon': Icons.check_circle},
     {'title': 'Client Details', 'icon': Icons.business},
     {'title': 'All Customers', 'icon': Icons.people},
-    {'title': 'Pending Approvals', 'icon': Icons.pending_actions},
+    {'title': 'Pending Customers Approval', 'icon': Icons.pending_actions},
     {'title': 'Pending Rosters', 'icon': Icons.schedule},
     {'title': 'Vehicle Master', 'icon': Icons.directions_car},
     {'title': 'Trip Operation', 'icon': Icons.local_shipping},
@@ -3126,129 +3169,47 @@ class _AdminMainShellState extends State<AdminMainShell>
 // Replace the existing method starting around line 1320 with this:
 // ============================================================================
 
-  Future<bool> _checkNavigationPermission(String navKey) async {
-    debugPrint('🔐 ========================================');
-    debugPrint('🔐 PERMISSION CHECK FOR: $navKey');
-    debugPrint('🔐 ========================================');
-    debugPrint('🔐 Current user role: $_userRole');
-    debugPrint('🔐 Permissions loaded: $_permissionsLoaded');
+  // ============================================================================
+  // BILLING-STYLE PERMISSION CHECKS - synchronous, no extra API calls.
+  // Everything reads the locally loaded _permissions map (see _initializeUserRole).
+  // ============================================================================
 
-    // ✅ Admin always has access - no permission check needed
-    if (_userRole == 'super_admin' || _userRole == 'admin') {
-      debugPrint('✅ ADMIN ACCESS GRANTED for: $navKey');
-      debugPrint('🔐 ========================================');
-      return true;
-    }
+  bool _checkNavigationPermission(String navKey) {
+    // Admins always have access
+    if (_userRole == 'super_admin' || _userRole == 'admin') return true;
 
-    // ✅ Wait for permissions to load if not loaded yet
-    if (!_permissionsLoaded) {
-      debugPrint('⏳ Permissions not loaded, waiting...');
-      // Give it a moment to load
-      await Future.delayed(const Duration(milliseconds: 500));
-
-      if (!_permissionsLoaded) {
-        debugPrint('❌ Permissions still not loaded after wait');
-        debugPrint('🔐 ========================================');
-
-        // ✅ SILENTLY ALLOW ACCESS - Don't block UI with messages
-        debugPrint('🔇 Allowing access (permissions loading in background)');
-        return true; // ← CHANGED: Don't block, allow access
-      }
-    }
-
-    // ✅ Use PermissionService to get the correct permission key
-    final permissionKey = PermissionService.navigationToPermissionMap[navKey];
-    if (permissionKey == null) {
-      debugPrint('❌ No permission mapping found for: $navKey');
-      debugPrint(
-          '🔐 Available mappings: ${PermissionService.navigationToPermissionMap.keys.toList()}');
-      debugPrint('🔐 ========================================');
+    // Single source of truth for nav-key -> permission-key mapping
+    final permKey = PermissionService.navigationToPermissionMap[navKey];
+    if (permKey == null) {
+      debugPrint('⚠️ No permission mapping found for: $navKey');
       return false;
     }
-
-    debugPrint('🔐 Permission key for $navKey: $permissionKey');
-    debugPrint('🔐 User permissions: ${_userPermissions.keys.toList()}');
-
-    // ✅ Check permission
-    final hasAccess = await _permissionService.hasNavigationAccess(navKey);
-    debugPrint('🔐 Permission result for $permissionKey: $hasAccess');
-
-    if (!hasAccess) {
-      debugPrint('❌ ACCESS DENIED for: $navKey');
-      debugPrint('🔐 Reason: User does not have "$permissionKey" permission');
-    } else {
-      debugPrint('✅ ACCESS GRANTED for: $navKey');
-    }
-
-    debugPrint('🔐 ========================================');
-    return hasAccess;
+    return _hasPermission(permKey);
   }
 
-// ============================================================================
-// ✅ FIX 3: UPDATE _hasPermission() METHOD
-// Replace the existing method starting around line 1380 with this:
-// ============================================================================
-
   bool _hasPermission(String permissionKey) {
-    // Admin always has permission
-    if (_userRole == 'super_admin' || _userRole == 'admin') {
-      return true;
+    // Admins always have full access
+    if (_userRole == 'super_admin' || _userRole == 'admin') return true;
+
+    // Permissions not loaded yet - hide item (prevents flash of wrong content)
+    if (!_permissionsLoaded) return false;
+
+    final perm = _permissions[permissionKey];
+    if (perm == null) return false;
+
+    if (perm is Map) {
+      final ca = perm['can_access'];
+      return ca == true || ca == 1 || ca == '1' || ca == 'true';
     }
-
-    // ✅ Check if permissions are loaded
-    if (!_permissionsLoaded) {
-      debugPrint('⚠️ Permissions not loaded yet for: $permissionKey');
-      return false; // Don't show items until permissions are loaded
-    }
-
-    // Check if permission exists
-    final permission = _userPermissions[permissionKey];
-    if (permission == null) {
-      debugPrint('⚠️ Permission not found: $permissionKey');
-      debugPrint('   Available: ${_userPermissions.keys.join(", ")}');
-      return false;
-    }
-
-    // Handle different data types for can_access
-    final canAccess = permission['can_access'];
-
-    // ✅ Detailed logging for debugging
-    debugPrint('🔍 Permission check: $permissionKey');
-    debugPrint('   Raw value: $canAccess (${canAccess.runtimeType})');
-
-    bool result = false;
-    if (canAccess is bool) {
-      result = canAccess;
-    } else if (canAccess is int) {
-      result = canAccess == 1;
-    } else if (canAccess is String) {
-      result = canAccess.toLowerCase() == 'true' || canAccess == '1';
-    }
-
-    debugPrint('   Result: $result');
-    return result;
+    if (perm is bool) return perm;
+    if (perm is int) return perm == 1;
+    return false;
   }
 
   bool _hasAnyPermission(List<String> permissionKeys) {
-    // Admin always has permission
-    if (_userRole == 'super_admin' || _userRole == 'admin') {
-      return true;
-    }
-
-    // ✅ If permissions not loaded, return false (don't show error)
-    if (!_permissionsLoaded) {
-      return false;
-    }
-
-    for (final key in permissionKeys) {
-      if (_hasPermission(key)) {
-        debugPrint('✅ Found permission: $key');
-        return true;
-      }
-    }
-
-    debugPrint('❌ No permissions found in: $permissionKeys');
-    return false;
+    if (_userRole == 'super_admin' || _userRole == 'admin') return true;
+    if (!_permissionsLoaded) return false;
+    return permissionKeys.any((k) => _hasPermission(k));
   }
 
   // ============================================================================
@@ -3270,6 +3231,28 @@ void _navigateToTab(String navigationKey) async {
         _selectedNavigationKey = NavigationKeys.drivers;
         _persistedSelectedIndex = _selectedIndex;
         _contextualView = null;
+      });
+    }
+    return;
+  }
+
+  // ✅ SPECIAL HANDLING: Pending Driver Approvals - Navigate to separate page
+  if (navigationKey == NavigationKeys.pendingDriverApprovals) {
+    debugPrint('👥 PENDING DRIVERS: Navigating to separate page');
+    if (mounted) {
+      final isMobile = MediaQuery.of(context).size.width <= 768;
+      if (isMobile && _scaffoldKey.currentState?.isDrawerOpen == true) {
+        Navigator.of(context).pop();
+      }
+      
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => const AdminPendingDriversPage(),
+        ),
+      ).then((_) {
+        // Refresh when returning
+        setState(() {});
       });
     }
     return;
@@ -3411,6 +3394,18 @@ void _navigateToTab(String navigationKey) async {
     return;
   }
 
+  // ✅ SPECIAL HANDLING: Client Details - Navigate to separate page
+  if (navigationKey == NavigationKeys.clientDetails) {
+    debugPrint('🏢 CLIENT DETAILS: Navigating to separate page');
+    if (mounted) {
+      Navigator.push(
+        context,
+        MaterialPageRoute(builder: (context) => const ClientAdminDashboard()),
+      );
+    }
+    return;
+  }
+
   // ✅ SPECIAL HANDLING: Finance Module - Navigate to separate page
   if (navigationKey == NavigationKeys.finance) {
     debugPrint('💰 FINANCE MODULE: Navigating to separate page');
@@ -3485,7 +3480,7 @@ void _navigateToTab(String navigationKey) async {
   }
 
   // ✅ Check permission BEFORE attempting navigation
-  final hasPermission = await _checkNavigationPermission(navigationKey);
+  final hasPermission = _checkNavigationPermission(navigationKey);
 
   if (!hasPermission) {
     debugPrint('❌ NAVIGATION BLOCKED: No permission for $navigationKey');
@@ -3593,6 +3588,16 @@ void _navigateToTab(String navigationKey) async {
 
         // ✅ Clear permission cache
         _permissionService.clearCache();
+        try {
+          final prefs = await SharedPreferences.getInstance();
+          await prefs.remove('user_permissions');
+        } catch (_) {}
+        if (mounted) {
+          setState(() {
+            _permissions = {};
+            _permissionsLoaded = false;
+          });
+        }
 
         final authRepository =
             Provider.of<AuthRepository>(context, listen: false);
@@ -4309,7 +4314,15 @@ List<Widget> _buildRoleBasedNavigation(bool isMobile) {
     // ✅ EMPLOYEES - Permission-based access
     
     // HRM
-    if (_hasAnyPermission(['hrm_employees', 'hrm_departments', 'hrm_leave_requests', 'hrm_payroll', 'hrm_notice_board', 'hrm_attendance'])) {
+    if (_hasAnyPermission([
+      'hrm_employees', 'hrm_departments', 'hrm_leave_requests', 'hrm_payroll', 'hrm_notice_board', 'hrm_attendance',
+      'hrm_kpq', 'hrm_kpi_evaluation',
+      // Screening Hub
+      'hrm_screening_hub', 'hrm_workforce_journey', 'hrm_hiring_process', 'hrm_screening_kpq',
+      'hrm_onboarding', 'hrm_training_oje', 'hrm_employee_checklist', 'hrm_employee_evaluation',
+      // Exit Process
+      'hrm_exit_process', 'hrm_exit_initiation', 'hrm_exit_handover', 'hrm_exit_interview', 'hrm_exit_settlement',
+    ])) {
       navigationItems.add(_buildHrmDropdown(context, isMobile));
     }
     
@@ -4420,7 +4433,12 @@ List<Widget> _buildRoleBasedNavigation(bool isMobile) {
       final allDriverSubItems = [
         {
           'title': 'Drivers',
-          'navKey': NavigationKeys.driverList, // ✅ CHANGED: Use driverList instead of drivers
+          'navKey': NavigationKeys.driverList,
+          'permission': 'drivers'
+        },
+        {
+          'title': 'Pending Driver Approval',
+          'navKey': NavigationKeys.pendingDriverApprovals,
           'permission': 'drivers'
         },
         {
@@ -4450,6 +4468,7 @@ List<Widget> _buildRoleBasedNavigation(bool isMobile) {
       final currentScreenIndex = _navigationMap[_selectedNavigationKey] ?? 0;
       final isDriverSectionActive = [
         _navigationMap[NavigationKeys.driverList], // ✅ CHANGED
+        _navigationMap[NavigationKeys.pendingDriverApprovals],
         _navigationMap[NavigationKeys.driverTripReports],
         _navigationMap[NavigationKeys.driverFeedback],
       ].contains(currentScreenIndex);
@@ -4476,6 +4495,9 @@ List<Widget> _buildRoleBasedNavigation(bool isMobile) {
               switch (item['navKey'] as String) {
                 case NavigationKeys.driverList:
                   itemIcon = Icons.list_alt;
+                  break;
+                case NavigationKeys.pendingDriverApprovals:
+                  itemIcon = Icons.how_to_reg;
                   break;
                 case NavigationKeys.driverTripReports:
                   itemIcon = Icons.description;
@@ -4846,7 +4868,7 @@ List<Widget> _buildRoleBasedNavigation(bool isMobile) {
           'permission': 'all_customers'
         },
         {
-          'title': 'Pending Approvals',
+          'title': 'Pending Customers Approval',
           'navKey': NavigationKeys.pendingApprovals,
           'permission': 'pending_approvals'
         },
@@ -5055,34 +5077,167 @@ List<Widget> _buildRoleBasedNavigation(bool isMobile) {
           'permission': 'hrm_payroll',
         },
         {
+          'title': 'KPI_FOLDER',
+          'url': '',
+          'icon': Icons.bar_chart,
+          'permission': 'hrm_kpi', // folder placeholder - rendered as the KPI group below
+        },
+        {
           'title': 'Notice Board',
           'url': 'https://abra-travels.com/hrm/hr-notices.php',
           'icon': Icons.announcement,
           'permission': 'hrm_notice_board',
         },
         {
-          'title': 'KPQ',
-          'url': 'https://www.abra-travels.com/hrm/hr-kpq.php',
-          'icon': Icons.quiz,
-          'permission': 'hrm_kpq',
+          'title': 'Expense Tracker',
+          'url': 'https://abra-travels.com/hrm/digital-expenses-finance-suite.php',
+          'icon': Icons.money,
+          'permission': 'expense_tracker',
         },
         {
-          'title': 'KPI Evaluation',
-          'url': 'https://www.abra-travels.com/hrm/hr-kpi-evaluation.php',
-          'icon': Icons.assessment,
-          'permission': 'hrm_kpi_evaluation',
+          'title': 'Essential Purchases',
+          'url': 'https://abra-travels.com/hrm/hr-pantry.php',
+          'icon': Icons.shopping_cart,
+          'permission': 'essential_purchases',
         },
       ];
 
       // Filter based on permissions
       final hrmSubItems = allHrmSubItems.where((item) {
+        if (item['title'] == 'KPI_FOLDER') {
+          return _hasPermission('hrm_kpi') ||
+              _hasPermission('hrm_kpq') ||
+              _hasPermission('hrm_kpi_evaluation');
+        }
         final permission = item['permission'] as String?;
         if (permission == null) return true;
         if (_userRole == 'super_admin' || _userRole == 'admin') return true;
         return _hasPermission(permission);
       }).toList();
 
-      if (hrmSubItems.isEmpty) return const SizedBox.shrink();
+      // ✅ Visibility of the Screening Hub / Exit Process groups (admins see all)
+      bool can(String permission) =>
+          _userRole == 'super_admin' || _userRole == 'admin' || _hasPermission(permission);
+      final showExitProcess = const [
+        'hrm_exit_process',
+        'hrm_exit_initiation',
+        'hrm_exit_handover',
+        'hrm_exit_interview',
+        'hrm_exit_settlement',
+      ].any(can);
+      final showScreeningHub = showExitProcess ||
+          const [
+            'hrm_screening_hub',
+            'hrm_workforce_journey',
+            'hrm_hiring_process',
+            'hrm_screening_kpq',
+            'hrm_onboarding',
+            'hrm_training_oje',
+            'hrm_employee_checklist',
+            'hrm_employee_evaluation',
+          ].any(can);
+
+      // Hide HRM only when there is nothing at all to show
+      if (hrmSubItems.isEmpty && !showScreeningHub) return const SizedBox.shrink();
+
+      // ✅ Shared WebView navigation for every HRM menu entry
+      Future<void> navigateToHrmWebView(String title, String baseUrl) async {
+        print('👥 ========================================');
+        print('👥 HRM NAVIGATION CLICKED');
+        print('👥 Title: $title');
+        print('👥 Base URL: $baseUrl');
+        print('👥 ========================================');
+
+        // ✅ STEP 1: Get user data from SharedPreferences
+        final prefs = await SharedPreferences.getInstance();
+        final userDataString = prefs.getString('user_data');
+        final token = prefs.getString('token');
+
+        print('📦 SharedPreferences Data:');
+        print('   - user_data exists: ${userDataString != null}');
+        print('   - token exists: ${token != null}');
+
+        String? userEmail;
+        String? userName;
+
+        if (userDataString != null) {
+          try {
+            final userData = jsonDecode(userDataString);
+            userEmail = userData['email'];
+            userName = userData['name'];
+            print('✅ Parsed user_data:');
+            print('   - Email: $userEmail');
+            print('   - Name: $userName');
+            print('   - Full data: $userData');
+          } catch (e) {
+            print('❌ Error parsing user_data: $e');
+          }
+        } else {
+          print('⚠️ user_data is NULL in SharedPreferences');
+        }
+
+        // ✅ STEP 2: Build final URL with email parameter
+        String finalUrl = baseUrl;
+        if (userEmail != null && userEmail.isNotEmpty) {
+          final separator = baseUrl.contains('?') ? '&' : '?';
+          finalUrl = '$baseUrl${separator}user_email=${Uri.encodeComponent(userEmail)}';
+          print('✅ Final URL with email: $finalUrl');
+        } else {
+          print('❌ CRITICAL: No user email found!');
+          print('   This will cause "Access Denied" error in PHP');
+          print('   PHP expects user_email parameter to identify user');
+
+          // Show error dialog
+          if (context.mounted) {
+            showDialog(
+              context: context,
+              builder: (context) => AlertDialog(
+                title: const Text('Authentication Error'),
+                content: const Text(
+                  'User email not found. Please log out and log in again.\n\n'
+                  'Technical: user_data missing from SharedPreferences'
+                ),
+                actions: [
+                  TextButton(
+                    onPressed: () => Navigator.pop(context),
+                    child: const Text('OK'),
+                  ),
+                ],
+              ),
+            );
+          }
+          return; // Don't navigate if no email
+        }
+
+        print('👥 ========================================');
+        print('🚀 Opening WebView with URL: $finalUrl');
+        print('👥 ========================================');
+
+        // ✅ STEP 3: Navigate to WebView screen
+        if (context.mounted) {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => ToursTravelsWebViewScreen(
+                url: finalUrl,
+                title: 'HRM - $title',
+              ),
+            ),
+          );
+        }
+      }
+
+      // ✅ Permission-gated sub item used inside the nested groups
+      Widget buildHrmSubItem(String title, String url, IconData icon, String permission) {
+        if (!can(permission)) return const SizedBox.shrink();
+        return _buildSubMenuItem(
+          title: title,
+          icon: icon,
+          isMobile: isMobile,
+          isSelected: false,
+          onTap: () => navigateToHrmWebView(title, url),
+        );
+      }
 
       return Container(
         margin: const EdgeInsets.symmetric(vertical: 4),
@@ -5095,102 +5250,63 @@ List<Widget> _buildRoleBasedNavigation(bool isMobile) {
           child: ExpansionTile(
             leading: const Icon(Icons.people_alt, color: Colors.white),
             title: isMobile ? const SizedBox.shrink() : const Text('HRM', style: TextStyle(color: Colors.white)),
-            children: hrmSubItems.map<Widget>((item) {
-              return _buildSubMenuItem(
-                title: item['title'] as String,
-                icon: item['icon'] as IconData?,
-                isMobile: isMobile,
-                isSelected: false,
-                onTap: () async {
-                  final baseUrl = item['url'] as String;
-                  final title = item['title'] as String;
-                  
-                  print('👥 ========================================');
-                  print('👥 HRM NAVIGATION CLICKED');
-                  print('👥 Title: $title');
-                  print('👥 Base URL: $baseUrl');
-                  print('👥 ========================================');
-                  
-                  // ✅ STEP 1: Get user data from SharedPreferences
-                  final prefs = await SharedPreferences.getInstance();
-                  final userDataString = prefs.getString('user_data');
-                  final token = prefs.getString('token');
-                  
-                  print('📦 SharedPreferences Data:');
-                  print('   - user_data exists: ${userDataString != null}');
-                  print('   - token exists: ${token != null}');
-                  
-                  String? userEmail;
-                  String? userName;
-                  
-                  if (userDataString != null) {
-                    try {
-                      final userData = jsonDecode(userDataString);
-                      userEmail = userData['email'];
-                      userName = userData['name'];
-                      print('✅ Parsed user_data:');
-                      print('   - Email: $userEmail');
-                      print('   - Name: $userName');
-                      print('   - Full data: $userData');
-                    } catch (e) {
-                      print('❌ Error parsing user_data: $e');
-                    }
-                  } else {
-                    print('⚠️ user_data is NULL in SharedPreferences');
-                  }
-                  
-                  // ✅ STEP 2: Build final URL with email parameter
-                  String finalUrl = baseUrl;
-                  if (userEmail != null && userEmail.isNotEmpty) {
-                    final separator = baseUrl.contains('?') ? '&' : '?';
-                    finalUrl = '$baseUrl${separator}user_email=${Uri.encodeComponent(userEmail)}';
-                    print('✅ Final URL with email: $finalUrl');
-                  } else {
-                    print('❌ CRITICAL: No user email found!');
-                    print('   This will cause "Access Denied" error in PHP');
-                    print('   PHP expects user_email parameter to identify user');
-                    
-                    // Show error dialog
-                    if (context.mounted) {
-                      showDialog(
+            children: [
+              // ✅ Screening Hub (Workforce Journey → Employee Evaluation + Exit Process)
+              if (showScreeningHub)
+                _buildNestedExpansionTile(
+                  context: context,
+                  title: 'Screening Hub',
+                  icon: Icons.filter_alt,
+                  isMobile: isMobile,
+                  children: [
+                    buildHrmSubItem('Workforce Journey', 'https://www.abra-travels.com/hrm/hr-employee-overall-data.php', Icons.timeline, 'hrm_workforce_journey'),
+                    buildHrmSubItem('Screening', 'https://www.abra-travels.com/hrm/hr_screening.php', Icons.check_box, 'hrm_hiring_process'),
+                    buildHrmSubItem('Screening KPQ', 'https://www.abra-travels.com/hrm/hr-managing-rounds-kpq.php', Icons.question_answer, 'hrm_screening_kpq'),
+                    buildHrmSubItem('Onboarding', 'https://www.abra-travels.com/hrm/hr-employee-onboarding-pending-list.php', Icons.person_add, 'hrm_onboarding'),
+                    buildHrmSubItem('Training and OJE', 'https://www.abra-travels.com/hrm/hr-OJE.php', Icons.school, 'hrm_training_oje'),
+                    buildHrmSubItem('Employee Checklist', 'https://www.abra-travels.com/hrm/hr-employee-preview-checklist.php', Icons.checklist, 'hrm_employee_checklist'),
+                    buildHrmSubItem('Employee Evaluation', 'https://www.abra-travels.com/hrm/hr-employee-OJE.php', Icons.star, 'hrm_employee_evaluation'),
+                    // ✅ Exit Process (nested one level deeper)
+                    if (showExitProcess)
+                      _buildNestedExpansionTile(
                         context: context,
-                        builder: (context) => AlertDialog(
-                          title: const Text('Authentication Error'),
-                          content: const Text(
-                            'User email not found. Please log out and log in again.\n\n'
-                            'Technical: user_data missing from SharedPreferences'
-                          ),
-                          actions: [
-                            TextButton(
-                              onPressed: () => Navigator.pop(context),
-                              child: const Text('OK'),
-                            ),
-                          ],
-                        ),
-                      );
-                    }
-                    return; // Don't navigate if no email
-                  }
-                  
-                  print('👥 ========================================');
-                  print('🚀 Opening WebView with URL: $finalUrl');
-                  print('👥 ========================================');
-
-                  // ✅ STEP 3: Navigate to WebView screen
-                  if (context.mounted) {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => ToursTravelsWebViewScreen(
-                          url: finalUrl,
-                          title: 'HRM - $title',
-                        ),
+                        title: 'Exit Process',
+                        icon: Icons.logout,
+                        isMobile: isMobile,
+                        paddingLeft: 32.0,
+                        children: [
+                          buildHrmSubItem('Exit Initiation', 'https://www.abra-travels.com/hrm/hr-exit-initiation.php', Icons.send, 'hrm_exit_initiation'),
+                          buildHrmSubItem('Exit Handover', 'https://www.abra-travels.com/hrm/hr-exit-handover.php', Icons.swap_horiz, 'hrm_exit_handover'),
+                          buildHrmSubItem('Exit Interview', 'https://www.abra-travels.com/hrm/hr-exit-employee-interview.php', Icons.forum, 'hrm_exit_interview'),
+                          buildHrmSubItem('Settlement & Clearance', 'https://www.abra-travels.com/hrm/hr-exit-settlement.php', Icons.assignment_turned_in, 'hrm_exit_settlement'),
+                        ],
                       ),
-                    );
-                  }
-                },
-              );
-            }).toList(),
+                  ],
+                ),
+              ...hrmSubItems.map<Widget>((item) {
+                if (item['title'] == 'KPI_FOLDER') {
+                  return _buildNestedExpansionTile(
+                    context: context,
+                    title: 'KPI',
+                    icon: Icons.bar_chart,
+                    isMobile: isMobile,
+                    children: [
+                      buildHrmSubItem('KPQ', 'https://www.abra-travels.com/hrm/hr-kpq.php', Icons.quiz, 'hrm_kpq'),
+                      buildHrmSubItem('KPI Evaluation', 'https://www.abra-travels.com/hrm/hr-kpi-evaluation.php', Icons.assessment, 'hrm_kpi_evaluation'),
+                    ],
+                  );
+                }
+                final title = item['title'] as String;
+                final baseUrl = item['url'] as String;
+                return _buildSubMenuItem(
+                  title: title,
+                  icon: item['icon'] as IconData?,
+                  isMobile: isMobile,
+                  isSelected: false,
+                  onTap: () => navigateToHrmWebView(title, baseUrl),
+                );
+              }),
+            ],
             iconColor: Colors.white,
             collapsedIconColor: Colors.white,
           ),
@@ -5738,6 +5854,31 @@ onTap: () async {
     ),
   );
 }
+
+    Widget _buildNestedExpansionTile({
+      required BuildContext context,
+      required String title,
+      required IconData icon,
+      required bool isMobile,
+      required List<Widget> children,
+      double paddingLeft = 16.0,
+    }) {
+      // Icon-only/mobile sidebar: show the group's items flat instead of hiding them
+      if (isMobile) return Column(mainAxisSize: MainAxisSize.min, children: children);
+      return Padding(
+        padding: EdgeInsets.only(left: paddingLeft),
+        child: Theme(
+          data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+          child: ExpansionTile(
+            leading: Icon(icon, color: Colors.white, size: 24),
+            title: Text(title, style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w500)),
+            iconColor: Colors.white,
+            collapsedIconColor: Colors.white,
+            children: children,
+          ),
+        ),
+      );
+    }
 
     Widget _buildSubMenuItem({
       required String title,

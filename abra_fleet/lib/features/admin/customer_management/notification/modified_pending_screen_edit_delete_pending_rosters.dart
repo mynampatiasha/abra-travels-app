@@ -5700,7 +5700,7 @@ Future<void> _confirmManualAssignment(
 
                 const SizedBox(height: 16),
                 
-                // Action Buttons Row (NEW: Auto Button)
+                // Action Buttons Row (Edit, Delete, Auto, Assign)
                 Row(
                   children: [
                     Expanded(
@@ -5723,6 +5723,42 @@ Future<void> _confirmManualAssignment(
                       ),
                     ),
 
+                    // ✅ Edit Button
+                    SizedBox(
+                      height: 36,
+                      width: 36,
+                      child: IconButton(
+                        onPressed: () => _showEditRosterOverlay(roster),
+                        icon: const Icon(Icons.edit, size: 16),
+                        tooltip: 'Edit Roster',
+                        padding: EdgeInsets.zero,
+                        style: IconButton.styleFrom(
+                          backgroundColor: const Color(0xFFEFF6FF),
+                          foregroundColor: const Color(0xFF2563EB),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+
+                    // ✅ Delete Button
+                    SizedBox(
+                      height: 36,
+                      width: 36,
+                      child: IconButton(
+                        onPressed: () => _deleteRoster(roster),
+                        icon: const Icon(Icons.delete_outline, size: 16),
+                        tooltip: 'Delete Roster',
+                        padding: EdgeInsets.zero,
+                        style: IconButton.styleFrom(
+                          backgroundColor: const Color(0xFFFEF2F2),
+                          foregroundColor: const Color(0xFFDC2626),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+
                     // Smart Auto Assign Button (Mini)
                     SizedBox(
                       height: 36,
@@ -5739,7 +5775,7 @@ Future<void> _confirmManualAssignment(
                         ),
                       ),
                     ),
-                    const SizedBox(width: 8),
+                    const SizedBox(width: 6),
                     // Manual Assign Button
                     SizedBox(
                       height: 36,
@@ -6383,7 +6419,7 @@ Future<void> _confirmManualAssignment(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('Assign ${_selectedRosterIds.length} Rosters', 
+              Text('Manage ${_selectedRosterIds.length} Rosters', 
                 style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
               const SizedBox(height: 24),
               
@@ -6416,6 +6452,20 @@ Future<void> _confirmManualAssignment(
                 onTap: () {
                    Navigator.pop(context);
                    // Logic for manual single assignment
+                },
+              ),
+              const Divider(),
+              // ✅ NEW: Bulk Delete Option
+              ListTile(
+                leading: const CircleAvatar(
+                  backgroundColor: Colors.red,
+                  child: Icon(Icons.delete_outline, color: Colors.white),
+                ),
+                title: const Text('Delete Selected'),
+                subtitle: Text('Remove ${_selectedRosterIds.length} pending rosters'),
+                onTap: () {
+                  Navigator.pop(context);
+                  _bulkDeleteRosters();
                 },
               ),
             ],
@@ -6569,6 +6619,552 @@ Future<void> _confirmManualAssignment(
     } catch (e) {
       // debugPrint('❌ Batch optimization failed: $e');
       rethrow;
+    }
+  }
+
+  // ============================================================================
+  // ✅ EDIT ROSTER OVERLAY
+  // ============================================================================
+
+  void _showEditRosterOverlay(Map<String, dynamic> roster) {
+    final rosterId = (roster['_id'] ?? roster['id'] ?? '').toString();
+
+    // Pre-fill controllers from existing roster data
+    final employeeDetails = roster['employeeDetails'] ?? {};
+    final nameCtrl = TextEditingController(
+      text: roster['customerName']?.toString() ?? employeeDetails['name']?.toString() ?? '',
+    );
+    final emailCtrl = TextEditingController(
+      text: roster['customerEmail']?.toString() ?? employeeDetails['email']?.toString() ?? '',
+    );
+    final phoneCtrl = TextEditingController(
+      text: roster['phoneNumber']?.toString() ?? employeeDetails['phoneNumber']?.toString() ?? '',
+    );
+    final companyCtrl = TextEditingController(
+      text: roster['companyName']?.toString() ?? employeeDetails['companyName']?.toString() ?? '',
+    );
+    final officeCtrl = TextEditingController(
+      text: roster['officeLocation']?.toString() ?? '',
+    );
+    final pickupCtrl = TextEditingController(
+      text: roster['pickupLocation']?.toString() ?? roster['loginPickupAddress']?.toString() ?? '',
+    );
+    final dropCtrl = TextEditingController(
+      text: roster['dropLocation']?.toString() ?? roster['logoutDropAddress']?.toString() ?? '',
+    );
+    final startTimeCtrl = TextEditingController(
+      text: roster['startTime']?.toString() ?? roster['fromTime']?.toString() ?? '',
+    );
+    final endTimeCtrl = TextEditingController(
+      text: roster['endTime']?.toString() ?? roster['toTime']?.toString() ?? '',
+    );
+    final notesCtrl = TextEditingController(
+      text: roster['notes']?.toString() ?? '',
+    );
+
+    String selectedRosterType = (roster['rosterType'] ?? 'both').toString();
+    final formKey = GlobalKey<FormState>();
+    bool isSaving = false;
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) {
+          return Dialog(
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            insetPadding: const EdgeInsets.symmetric(horizontal: 32, vertical: 24),
+            child: Container(
+              width: 680,
+              constraints: const BoxConstraints(maxHeight: 700),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(16),
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // ── Header ──────────────────────────────────────────────
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 18),
+                    decoration: BoxDecoration(
+                      color: _kPrimary,
+                      borderRadius: const BorderRadius.only(
+                        topLeft: Radius.circular(16),
+                        topRight: Radius.circular(16),
+                      ),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.edit, color: Colors.white, size: 22),
+                        const SizedBox(width: 12),
+                        const Expanded(
+                          child: Text(
+                            'Edit Roster',
+                            style: TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.w700,
+                              color: Colors.white,
+                            ),
+                          ),
+                        ),
+                        IconButton(
+                          onPressed: () => Navigator.of(ctx).pop(),
+                          icon: const Icon(Icons.close, color: Colors.white),
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints(),
+                        ),
+                      ],
+                    ),
+                  ),
+
+                  // ── Form Body ────────────────────────────────────────────
+                  Expanded(
+                    child: SingleChildScrollView(
+                      padding: const EdgeInsets.all(24),
+                      child: Form(
+                        key: formKey,
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            // Roster ID (read-only info)
+                            if (rosterId.isNotEmpty)
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                margin: const EdgeInsets.only(bottom: 20),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFFF8FAFC),
+                                  borderRadius: BorderRadius.circular(8),
+                                  border: Border.all(color: _kBorder),
+                                ),
+                                child: Row(
+                                  children: [
+                                    const Icon(Icons.tag, size: 14, color: Color(0xFF94A3B8)),
+                                    const SizedBox(width: 8),
+                                    Text(
+                                      'Roster ID: $rosterId',
+                                      style: const TextStyle(fontSize: 12, color: Color(0xFF64748B)),
+                                    ),
+                                  ],
+                                ),
+                              ),
+
+                            // Section: Employee Info
+                            _editSectionLabel('Employee Information'),
+                            const SizedBox(height: 12),
+                            Row(
+                              children: [
+                                Expanded(child: _editField(nameCtrl, 'Full Name', Icons.person_outline, required: true)),
+                                const SizedBox(width: 16),
+                                Expanded(child: _editField(emailCtrl, 'Email', Icons.email_outlined, required: true)),
+                              ],
+                            ),
+                            const SizedBox(height: 16),
+                            Row(
+                              children: [
+                                Expanded(child: _editField(phoneCtrl, 'Phone Number', Icons.phone_outlined)),
+                                const SizedBox(width: 16),
+                                Expanded(child: _editField(companyCtrl, 'Company Name', Icons.business_outlined)),
+                              ],
+                            ),
+
+                            const SizedBox(height: 24),
+
+                            // Section: Roster Details
+                            _editSectionLabel('Roster Details'),
+                            const SizedBox(height: 12),
+
+                            // Roster Type Selector
+                            Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Text(
+                                  'Roster Type',
+                                  style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: _kText),
+                                ),
+                                const SizedBox(height: 8),
+                                Row(
+                                  children: ['login', 'logout', 'both'].map((type) {
+                                    final isSelected = selectedRosterType == type;
+                                    return Padding(
+                                      padding: const EdgeInsets.only(right: 10),
+                                      child: GestureDetector(
+                                        onTap: () => setDialogState(() => selectedRosterType = type),
+                                        child: Container(
+                                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                                          decoration: BoxDecoration(
+                                            color: isSelected ? _kPrimary : const Color(0xFFF1F5F9),
+                                            borderRadius: BorderRadius.circular(8),
+                                            border: Border.all(
+                                              color: isSelected ? _kPrimary : _kBorder,
+                                            ),
+                                          ),
+                                          child: Text(
+                                            type[0].toUpperCase() + type.substring(1),
+                                            style: TextStyle(
+                                              fontSize: 13,
+                                              fontWeight: FontWeight.w600,
+                                              color: isSelected ? Colors.white : _kText,
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                    );
+                                  }).toList(),
+                                ),
+                              ],
+                            ),
+
+                            const SizedBox(height: 16),
+                            _editField(officeCtrl, 'Office Location', Icons.location_city_outlined),
+                            const SizedBox(height: 16),
+                            Row(
+                              children: [
+                                Expanded(child: _editField(pickupCtrl, 'Pickup Location', Icons.location_on_outlined)),
+                                const SizedBox(width: 16),
+                                Expanded(child: _editField(dropCtrl, 'Drop Location', Icons.flag_outlined)),
+                              ],
+                            ),
+                            const SizedBox(height: 16),
+                            Row(
+                              children: [
+                                Expanded(child: _editField(startTimeCtrl, 'Start Time (HH:mm)', Icons.access_time)),
+                                const SizedBox(width: 16),
+                                Expanded(child: _editField(endTimeCtrl, 'End Time (HH:mm)', Icons.access_time_filled)),
+                              ],
+                            ),
+                            const SizedBox(height: 16),
+                            _editField(notesCtrl, 'Notes (optional)', Icons.notes_outlined, maxLines: 3),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+
+                  // ── Footer Actions ───────────────────────────────────────
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF8FAFC),
+                      border: Border(top: BorderSide(color: _kBorder)),
+                      borderRadius: const BorderRadius.only(
+                        bottomLeft: Radius.circular(16),
+                        bottomRight: Radius.circular(16),
+                      ),
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.end,
+                      children: [
+                        TextButton(
+                          onPressed: isSaving ? null : () => Navigator.of(ctx).pop(),
+                          child: const Text('Cancel', style: TextStyle(color: Color(0xFF64748B))),
+                        ),
+                        const SizedBox(width: 12),
+                        ElevatedButton.icon(
+                          onPressed: isSaving
+                              ? null
+                              : () async {
+                                  if (!formKey.currentState!.validate()) return;
+                                  setDialogState(() => isSaving = true);
+
+                                  try {
+                                    // Build updated fields
+                                    final updatedData = <String, dynamic>{
+                                      'rosterType': selectedRosterType,
+                                      'officeLocation': officeCtrl.text.trim(),
+                                      'pickupLocation': pickupCtrl.text.trim(),
+                                      'dropLocation': dropCtrl.text.trim(),
+                                      'startTime': startTimeCtrl.text.trim(),
+                                      'endTime': endTimeCtrl.text.trim(),
+                                      'notes': notesCtrl.text.trim(),
+                                      'customerName': nameCtrl.text.trim(),
+                                      'customerEmail': emailCtrl.text.trim(),
+                                      'phoneNumber': phoneCtrl.text.trim(),
+                                      'companyName': companyCtrl.text.trim(),
+                                      // Also update nested employeeDetails
+                                      'employeeDetails': {
+                                        ...Map<String, dynamic>.from(
+                                          roster['employeeDetails'] is Map
+                                              ? roster['employeeDetails'] as Map
+                                              : {},
+                                        ),
+                                        'name': nameCtrl.text.trim(),
+                                        'email': emailCtrl.text.trim(),
+                                        'phoneNumber': phoneCtrl.text.trim(),
+                                        'companyName': companyCtrl.text.trim(),
+                                      },
+                                    };
+
+                                    // Call backend PUT /api/roster/admin/edit-assignment/:id
+                                    // (reuses the existing admin edit endpoint)
+                                    final response = await widget.rosterService.updateRosterDetails(
+                                      rosterId: rosterId,
+                                      data: updatedData,
+                                    );
+
+                                    if (!ctx.mounted) return;
+                                    Navigator.of(ctx).pop();
+
+                                    if (response) {
+                                      _showSnackBar('✅ Roster updated successfully', backgroundColor: Colors.green);
+                                      await _loadPendingRosters(forceRefresh: true);
+                                    } else {
+                                      _showSnackBar('Failed to update roster', backgroundColor: Colors.red);
+                                    }
+                                  } catch (e) {
+                                    setDialogState(() => isSaving = false);
+                                    _showSnackBar('Error: ${e.toString()}', backgroundColor: Colors.red);
+                                  }
+                                },
+                          icon: isSaving
+                              ? const SizedBox(
+                                  width: 16,
+                                  height: 16,
+                                  child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                                )
+                              : const Icon(Icons.save, size: 18),
+                          label: Text(isSaving ? 'Saving...' : 'Save Changes'),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: _kPrimary,
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  /// Helper: section label for edit overlay
+  Widget _editSectionLabel(String label) {
+    return Row(
+      children: [
+        Container(width: 3, height: 16, color: _kPrimary),
+        const SizedBox(width: 8),
+        Text(
+          label,
+          style: const TextStyle(
+            fontSize: 14,
+            fontWeight: FontWeight.w700,
+            color: _kText,
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// Helper: text field for edit overlay
+  Widget _editField(
+    TextEditingController ctrl,
+    String label,
+    IconData icon, {
+    bool required = false,
+    int maxLines = 1,
+  }) {
+    return TextFormField(
+      controller: ctrl,
+      maxLines: maxLines,
+      style: const TextStyle(fontSize: 14, color: _kText),
+      validator: required
+          ? (v) => (v == null || v.trim().isEmpty) ? '$label is required' : null
+          : null,
+      decoration: InputDecoration(
+        labelText: label,
+        labelStyle: const TextStyle(fontSize: 13, color: _kHint),
+        prefixIcon: Icon(icon, size: 18, color: _kHint),
+        filled: true,
+        fillColor: _kBg,
+        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(8),
+          borderSide: const BorderSide(color: _kBorder),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(8),
+          borderSide: const BorderSide(color: _kBorder),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(8),
+          borderSide: const BorderSide(color: _kPrimary, width: 1.5),
+        ),
+        errorBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(8),
+          borderSide: const BorderSide(color: Colors.red),
+        ),
+      ),
+    );
+  }
+
+  // ============================================================================
+  // ✅ DELETE SINGLE ROSTER
+  // ============================================================================
+
+  Future<void> _deleteRoster(Map<String, dynamic> roster) async {
+    final rosterId = (roster['_id'] ?? roster['id'] ?? '').toString();
+    final name = roster['customerName']?.toString() ??
+        (roster['employeeDetails'] is Map
+            ? roster['employeeDetails']['name']?.toString()
+            : null) ??
+        'this roster';
+
+    if (rosterId.isEmpty) {
+      _showSnackBar('Cannot delete: roster ID is missing', backgroundColor: Colors.red);
+      return;
+    }
+
+    // Confirmation dialog
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        title: const Row(
+          children: [
+            Icon(Icons.warning_amber_rounded, color: Colors.red, size: 26),
+            SizedBox(width: 10),
+            Text('Delete Roster', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
+          ],
+        ),
+        content: Text(
+          'Are you sure you want to delete the roster for "$name"?\n\nThis action cannot be undone.',
+          style: const TextStyle(fontSize: 14, height: 1.5),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Cancel', style: TextStyle(color: Color(0xFF64748B))),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red,
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            ),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true) return;
+
+    try {
+      setState(() => _isLoading = true);
+
+      final success = await widget.rosterService.adminDeleteRoster(rosterId);
+
+      if (success) {
+        // Remove from local lists immediately for instant UI feedback
+        setState(() {
+          _allPendingRosters.removeWhere(
+            (r) => (r['_id'] ?? r['id']).toString() == rosterId,
+          );
+          _selectedRosterIds.remove(rosterId);
+          _applyFilters();
+          _isLoading = false;
+        });
+        _showSnackBar('✅ Roster deleted successfully', backgroundColor: Colors.green);
+      } else {
+        setState(() => _isLoading = false);
+        _showSnackBar('Failed to delete roster', backgroundColor: Colors.red);
+      }
+    } catch (e) {
+      setState(() => _isLoading = false);
+      _showSnackBar('Error deleting roster: ${e.toString()}', backgroundColor: Colors.red);
+    }
+  }
+
+  // ============================================================================
+  // ✅ BULK DELETE ROSTERS
+  // ============================================================================
+
+  Future<void> _bulkDeleteRosters() async {
+    if (_selectedRosterIds.isEmpty) return;
+
+    final count = _selectedRosterIds.length;
+
+    // Confirmation dialog
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        title: const Row(
+          children: [
+            Icon(Icons.warning_amber_rounded, color: Colors.red, size: 26),
+            SizedBox(width: 10),
+            Text('Bulk Delete', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
+          ],
+        ),
+        content: Text(
+          'Are you sure you want to delete $count selected roster${count != 1 ? 's' : ''}?\n\nThis action cannot be undone.',
+          style: const TextStyle(fontSize: 14, height: 1.5),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Cancel', style: TextStyle(color: Color(0xFF64748B))),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red,
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            ),
+            child: Text('Delete $count Roster${count != 1 ? 's' : ''}'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true) return;
+
+    setState(() => _isLoading = true);
+
+    int successCount = 0;
+    int failCount = 0;
+    final idsToDelete = Set<String>.from(_selectedRosterIds);
+
+    for (final rosterId in idsToDelete) {
+      try {
+        final success = await widget.rosterService.adminDeleteRoster(rosterId);
+        if (success) {
+          successCount++;
+          setState(() {
+            _allPendingRosters.removeWhere(
+              (r) => (r['_id'] ?? r['id']).toString() == rosterId,
+            );
+            _selectedRosterIds.remove(rosterId);
+          });
+        } else {
+          failCount++;
+        }
+      } catch (_) {
+        failCount++;
+      }
+    }
+
+    _applyFilters();
+    setState(() => _isLoading = false);
+
+    if (failCount == 0) {
+      _showSnackBar(
+        '✅ Successfully deleted $successCount roster${successCount != 1 ? 's' : ''}',
+        backgroundColor: Colors.green,
+      );
+    } else {
+      _showSnackBar(
+        '⚠️ Deleted $successCount, failed $failCount roster${failCount != 1 ? 's' : ''}',
+        backgroundColor: Colors.orange,
+      );
     }
   }
 }

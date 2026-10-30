@@ -1055,6 +1055,8 @@ app.get('/api/tickets/public-employees', async (req, res) => {
 });
 
 // ✅ TMS (Ticket Management System) Routes
+const otpRoutes = require('./routes/otp_router');
+app.use('/api/otp', otpRoutes);
 app.use('/api/tickets', verifyJWT, tmsRoutes);
 console.log('✅ TMS routes mounted at /api/tickets');
 

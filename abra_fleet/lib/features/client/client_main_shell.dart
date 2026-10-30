@@ -28,6 +28,9 @@ import 'client_reports_dashboard.dart';
 import 'client_based_all_vehicles.dart';
 import 'package:abra_fleet/features/notifications/presentation/screens/client_notifications_screen.dart';
 import 'package:abra_fleet/core/services/client_notification_service.dart';
+import 'package:abra_fleet/core/services/floating_notification_service.dart';
+import 'dart:async';
+import 'package:firebase_messaging/firebase_messaging.dart'; // 🔥 FCM for instant notifications
 import 'package:abra_fleet/features/auth/domain/repositories/auth_repository.dart';
 import 'package:abra_fleet/features/auth/presentation/screens/welcome_screen.dart';
 import 'package:abra_fleet/core/services/api_service.dart';
@@ -198,6 +201,12 @@ class _ClientMainShellState extends State<ClientMainShell>
   };
 
   final _notificationService = ClientNotificationService();
+  final _floatingNotificationService = FloatingNotificationService();
+  StreamSubscription<Map<String, dynamic>>? _notificationSubscription;
+  StreamSubscription<RemoteMessage>? _fcmSubscription; // 🔥 FCM instant delivery
+  // 🔥 Duplicate prevention
+  final Set<String> _processedNotificationIds = {};
+  static const int _maxProcessedIds = 100;
 
   String? _userId;
   String? _userName;
@@ -318,6 +327,38 @@ class _ClientMainShellState extends State<ClientMainShell>
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
         _notificationService.setupListener(context);
+
+        // 🔥 FCM LISTENER — instant delivery (PRIMARY)
+        _fcmSubscription = FirebaseMessaging.onMessage.listen((RemoteMessage message) {
+          if (!mounted) return;
+          final notifId = message.messageId ?? DateTime.now().millisecondsSinceEpoch.toString();
+          if (_processedNotificationIds.contains(notifId)) return;
+          _processedNotificationIds.add(notifId);
+          if (_processedNotificationIds.length > _maxProcessedIds) {
+            _processedNotificationIds.remove(_processedNotificationIds.first);
+          }
+          _showClientBanner({
+            'type'    : message.data['type'] ?? 'general',
+            'title'   : message.notification?.title ?? 'New Notification',
+            'message' : message.notification?.body ?? '',
+            'priority': message.data['priority'] ?? 'normal',
+          });
+        });
+
+        // 🔔 Listen for incoming notifications and show floating banner (SECONDARY)
+        _notificationSubscription =
+            _notificationService.onNewNotification.listen((notification) {
+          if (!mounted) return;
+          final notifId = (notification['id'] ?? notification['_id'] ??
+              DateTime.now().millisecondsSinceEpoch.toString()).toString();
+          if (_processedNotificationIds.contains(notifId)) return;
+          _processedNotificationIds.add(notifId);
+          if (_processedNotificationIds.length > _maxProcessedIds) {
+            _processedNotificationIds.remove(_processedNotificationIds.first);
+          }
+          _showClientBanner(notification);
+        });
+
         _setupPolling();
       }
     });
@@ -464,8 +505,56 @@ class _ClientMainShellState extends State<ClientMainShell>
   @override
   void dispose() {
     _fadeController.dispose();
+    _notificationSubscription?.cancel();
+    _fcmSubscription?.cancel(); // 🔥 Cancel FCM subscription
     _notificationService.dispose();
+    _floatingNotificationService.dispose();
+    _processedNotificationIds.clear();
     super.dispose();
+  }
+
+  void _showClientBanner(Map<String, dynamic> notification) {
+    if (!mounted) return;
+    final type     = notification['type']?.toString() ?? 'general';
+    final title    = notification['title']?.toString() ?? 'New Notification';
+    final body     = notification['message']?.toString() ??
+                     notification['body']?.toString() ?? '';
+    final priority = notification['priority']?.toString() ?? 'normal';
+
+    const iconMap = {
+      'roster_assignment_updated'     : '📋',
+      'roster_bulk_import_completed'  : '📋',
+      'roster_optimization_completed' : '📋',
+      'employee_bulk_import_completed': '👥',
+      'employee_added'                : '👤',
+      'employee_updated'              : '👤',
+      'trip_confirmed'                : '✅',
+      'multiple_trips_assigned'       : '🚗',
+      'invoice_generated'             : '💰',
+      'monthly_report_ready'          : '📊',
+      'billing_summary_ready'         : '💰',
+      'feedback_received'             : '⭐',
+      'sos_alert'                     : '🚨',
+      'driver_unavailable'            : '⚠️',
+      'capacity_exceeded'             : '⚠️',
+    };
+    const colorMap = {
+      'urgent': Color(0xFFDC2626),
+      'high'  : Color(0xFFD97706),
+      'normal': Color(0xFF1D4ED8),
+      'low'   : Color(0xFF059669),
+    };
+
+    _floatingNotificationService.showFloatingNotification(
+      context: context,
+      title: title,
+      body: body,
+      icon: iconMap[type] ?? '🔔',
+      type: type,
+      priority: priority,
+      backgroundColor: colorMap[priority] ?? const Color(0xFF1D4ED8),
+      duration: const Duration(seconds: 5),
+    );
   }
 
   // ─────────────────────────────────────────────────────────────

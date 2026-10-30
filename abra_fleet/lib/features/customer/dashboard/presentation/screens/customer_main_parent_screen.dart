@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'dart:async';
+import 'package:firebase_messaging/firebase_messaging.dart'; // 🔥 FCM for instant notifications
 
 // Import your app's auth and login screen files
 import 'package:abra_fleet/features/auth/domain/repositories/auth_repository.dart';
@@ -10,6 +12,9 @@ import 'my_trips_screen.dart';
 
 // Import NotificationService
 import 'package:abra_fleet/core/services/notification_service.dart';
+
+// Floating notification
+import 'package:abra_fleet/core/services/floating_notification_service.dart';
 
 import 'package:abra_fleet/features/client/organization_model.dart';
 
@@ -33,7 +38,13 @@ class _CustomerMainScreenState extends State<CustomerMainScreen> {
 
   // Notification Service instance
   final NotificationService _notificationService = NotificationService();
+  StreamSubscription<Map<String, dynamic>>? _notificationSubscription;
+  StreamSubscription<RemoteMessage>? _fcmSubscription; // 🔥 FCM instant delivery
+  final FloatingNotificationService _floatingNotificationService = FloatingNotificationService();
   bool _notificationsInitialized = false;
+  // 🔥 Duplicate prevention
+  final Set<String> _processedNotificationIds = {};
+  static const int _maxProcessedIds = 100;
    // Organization data
   OrganizationModel? _organization;
   bool _isLoadingOrganization = true;
@@ -114,19 +125,44 @@ class _CustomerMainScreenState extends State<CustomerMainScreen> {
   // Initialize notification service
   Future<void> _initializeNotifications() async {
     try {
-      debugPrint(' Initializing NotificationService in CustomerMainScreen...');
+      debugPrint('Initializing NotificationService in CustomerMainScreen...');
       await _notificationService.initialize();
-      
-      if (mounted) {
-        setState(() {
-          _notificationsInitialized = true;
+
+      // 🔥 FCM LISTENER — instant delivery (PRIMARY)
+      _fcmSubscription = FirebaseMessaging.onMessage.listen((RemoteMessage message) {
+        if (!mounted) return;
+        final notifId = message.messageId ?? DateTime.now().millisecondsSinceEpoch.toString();
+        if (_processedNotificationIds.contains(notifId)) return;
+        _processedNotificationIds.add(notifId);
+        if (_processedNotificationIds.length > _maxProcessedIds) {
+          _processedNotificationIds.remove(_processedNotificationIds.first);
+        }
+        _showBanner({
+          'type'    : message.data['type'] ?? 'general',
+          'title'   : message.notification?.title ?? 'New Notification',
+          'message' : message.notification?.body ?? '',
+          'priority': message.data['priority'] ?? 'normal',
         });
-      }
-      
+      });
+
+      // 🔔 OneSignal stream — backup (SECONDARY)
+      _notificationSubscription =
+          _notificationService.onNewNotification.listen((notification) {
+        if (!mounted) return;
+        final notifId = (notification['id'] ?? notification['_id'] ??
+            DateTime.now().millisecondsSinceEpoch.toString()).toString();
+        if (_processedNotificationIds.contains(notifId)) return;
+        _processedNotificationIds.add(notifId);
+        if (_processedNotificationIds.length > _maxProcessedIds) {
+          _processedNotificationIds.remove(_processedNotificationIds.first);
+        }
+        _showBanner(notification);
+      });
+
+      if (mounted) setState(() => _notificationsInitialized = true);
       debugPrint('✅ NotificationService initialized successfully');
     } catch (e) {
       debugPrint('❌ Error initializing NotificationService: $e');
-      
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -137,6 +173,47 @@ class _CustomerMainScreenState extends State<CustomerMainScreen> {
         );
       }
     }
+  }
+
+  void _showBanner(Map<String, dynamic> notification) {
+    final type     = notification['type']?.toString() ?? 'general';
+    final title    = notification['title']?.toString() ?? 'New Notification';
+    final body     = notification['message']?.toString() ??
+                     notification['body']?.toString() ?? '';
+    final priority = notification['priority']?.toString() ?? 'normal';
+
+    const iconMap = {
+      'trip_started'           : '🚗',
+      'trip_completed'         : '✅',
+      'trip_cancelled'         : '❌',
+      'driver_arrived'         : '📍',
+      'eta_15min'              : '⏰',
+      'eta_5min'               : '⏰',
+      'leave_approved'         : '✅',
+      'leave_rejected'         : '❌',
+      'address_change_approved': '📍',
+      'address_change_rejected': '❌',
+      'feedback_request'       : '⭐',
+      'roster_assigned'        : '📋',
+      'payment_received'       : '💰',
+    };
+    const colorMap = {
+      'urgent': Color(0xFFDC2626),
+      'high'  : Color(0xFFD97706),
+      'normal': Color(0xFF1D4ED8),
+      'low'   : Color(0xFF059669),
+    };
+
+    _floatingNotificationService.showFloatingNotification(
+      context: context,
+      title: title,
+      body: body,
+      icon: iconMap[type] ?? '🔔',
+      type: type,
+      priority: priority,
+      backgroundColor: colorMap[priority] ?? const Color(0xFF1D4ED8),
+      duration: const Duration(seconds: 5),
+    );
   }
 
   Future<void> _fetchOrganization() async {
@@ -167,8 +244,11 @@ class _CustomerMainScreenState extends State<CustomerMainScreen> {
 
   @override
   void dispose() {
-    // ✅ ADD THIS: Dispose notification service
+    _notificationSubscription?.cancel();
+    _fcmSubscription?.cancel(); // 🔥 Cancel FCM subscription
     _notificationService.dispose();
+    _floatingNotificationService.dispose();
+    _processedNotificationIds.clear();
     super.dispose();
   }
 

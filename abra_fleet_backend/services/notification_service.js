@@ -429,12 +429,45 @@ class NotificationService {
       
       const db = await this.getMongoConnection();
       
-      // Get all users with this role
-      const users = await db.collection('users').find({ role: userRole }).toArray();
+      // ✅ FIX: For admin/super_admin, query employee_admins collection first
+      // then fall back to users collection. Admins are stored in employee_admins.
+      let users = [];
+      
+      if (userRole === 'admin' || userRole === 'super_admin' || userRole === 'all_admins') {
+        // Query employee_admins collection (primary admin store)
+        const adminUsers = await db.collection('employee_admins').find({
+          $or: [
+            { role: userRole },
+            { role: 'admin' },
+            { role: 'super_admin' },
+            { isActive: true }  // Get all active admins
+          ]
+        }).toArray();
+        
+        // Also check users collection for any admins there
+        const usersAdmins = await db.collection('users').find({
+          $or: [{ role: 'admin' }, { role: 'super_admin' }]
+        }).toArray();
+        
+        // Merge, deduplicate by email
+        const seen = new Set();
+        for (const u of [...adminUsers, ...usersAdmins]) {
+          const key = u.email || u._id.toString();
+          if (!seen.has(key)) {
+            seen.add(key);
+            users.push(u);
+          }
+        }
+        
+        console.log(`\n✅ Found ${adminUsers.length} in employee_admins + ${usersAdmins.length} in users = ${users.length} unique admins`);
+      } else {
+        // For non-admin roles, query users collection
+        users = await db.collection('users').find({ role: userRole }).toArray();
+      }
       
       console.log(`\nFound ${users.length} users with role '${userRole}':`);
       users.forEach((user, index) => {
-        console.log(`   ${index + 1}. ID: ${user._id} | Email: ${user.email || 'N/A'} | Name: ${user.name || 'N/A'}`);
+        console.log(`   ${index + 1}. ID: ${user._id} | Email: ${user.email || 'N/A'} | Name: ${user.name || user.name_parson || 'N/A'}`);
       });
       
       if (users.length === 0) {
@@ -451,8 +484,10 @@ class NotificationService {
       for (const user of users) {
         try {
           console.log(`   → Sending to user ${user._id}...`);
+          // Use 'admin' as the userType for all admin variants
+          const userType = (userRole === 'admin' || userRole === 'super_admin' || userRole === 'all_admins') ? 'admin' : userRole;
           await this.sendRealTimeNotification(
-            userRole,
+            userType,
             user._id.toString(),
             notification
           );

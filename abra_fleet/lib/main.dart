@@ -113,14 +113,13 @@ FIREBASE_PROJECT_ID=abrafleet-cec94
 ''');
   }
 
-  // Initialize Backend Connection Manager
+  // Initialize Backend Connection Manager in background — never blocks startup
   final connectionManager = BackendConnectionManager();
-  try {
-    await connectionManager.initialize();
+  connectionManager.initialize().then((_) {
     print("✅ Backend Connection Manager initialized");
-  } catch (e) {
+  }).catchError((e) {
     print("❌ Backend Connection Manager initialization failed: $e");
-  }
+  });
 
   if (kDebugMode) {
     debugPrint("🔍 Debug mode is enabled");
@@ -685,38 +684,70 @@ class _AuthWrapperWithFCMState extends State<AuthWrapperWithFCM> {
     _initializeAuthState();
   }
 
-  /// Initialize JWT authentication state on app start
+  /// Initialize JWT authentication state on app start.
+  ///
+  /// ✅ FIX: Uses a LOCAL-ONLY token check (no network call) so that a web
+  /// page reload never gets redirected to the login screen just because the
+  /// backend hasn't responded yet.  The backend is verified in the background
+  /// AFTER the dashboard is already visible.
   Future<void> _initializeAuthState() async {
     try {
       final authRepo = Provider.of<AuthRepository>(context, listen: false);
-      
-      // Check if there's a stored JWT token
+
+      // ── Step 1: local check (instant, no network) ──────────────────────
+      // getAuthToken() now only reads SharedPreferences and decodes the JWT
+      // expiry locally — same approach as the Finance app's _AuthGate.
       final token = await authRepo.getAuthToken();
-      
+
       if (token != null && token.isNotEmpty) {
-        // Get current user with role
-        final currentUser = await authRepo.getCurrentUserWithRole();
-        
-        if (currentUser != UserEntity.empty && currentUser.isAuthenticated) {
-          debugPrint('✅ AuthWrapper: Found existing JWT authenticated user: ${currentUser.email}');
+        // ── Step 2: build a UserEntity from locally-stored data ───────────
+        // Avoid a blocking network call; use whatever we cached last time.
+        final storedUser = await (authRepo as JwtAuthRepositoryImpl).getStoredUserFast();
+
+        if (storedUser != null && storedUser.isAuthenticated) {
+          debugPrint('✅ AuthWrapper: Local token + user found — showing dashboard immediately');
+          if (!mounted) return;
           setState(() {
-            _lastKnownUser = currentUser;
+            _lastKnownUser = storedUser;
             _isInitializing = false;
           });
-          
-          // Initialize session AND FCM
-          await _initializeSession(context);
+
+          // Set the token in ApiService so subsequent calls work
+          final connectionManager =
+              Provider.of<BackendConnectionManager>(context, listen: false);
+          connectionManager.apiService.setAuthToken(token);
+          _hasInitializedSession = true;
+
+          // ── Step 3: background backend verification ───────────────────
+          // If the token has been revoked server-side, sign the user out
+          // silently — but never block the initial render on this.
+          authRepo.verifyTokenWithBackend().then((valid) {
+            if (!valid && mounted) {
+              debugPrint('⚠️ AuthWrapper: Backend rejected token — signing out');
+              authRepo.signOut();
+              if (mounted) {
+                setState(() {
+                  _lastKnownUser = null;
+                  _hasInitializedSession = false;
+                  _hasInitializedFCM = false;
+                });
+              }
+            }
+          });
+
           await _initializeFCMForUser();
           return;
         }
       }
-      
-      debugPrint('ℹ️ AuthWrapper: No authenticated user found');
+
+      debugPrint('ℹ️ AuthWrapper: No valid local token — showing welcome screen');
+      if (!mounted) return;
       setState(() {
         _isInitializing = false;
       });
     } catch (e) {
       debugPrint('❌ AuthWrapper: Error initializing auth state: $e');
+      if (!mounted) return;
       setState(() {
         _isInitializing = false;
       });
@@ -794,13 +825,23 @@ class _AuthWrapperWithFCMState extends State<AuthWrapperWithFCM> {
     final role = user.role.toString().toLowerCase().trim();
     debugPrint('✅ AuthWrapper - Role: "$role", Loading Dashboard...');
 
-    if (role == 'customer' || role == 'driver' || role == 'admin' || role == 'super_admin' || role == 'superadmin') {
+    // Roles that go to the main fleet management shell
+    const mainShellRoles = {
+      'customer', 'driver',
+      'admin', 'super_admin', 'superadmin', 'org_admin',
+      'fleet_manager', 'hr_manager', 'operations', 'finance',
+      'employee', 'staff', 'manager',
+    };
+
+    if (mainShellRoles.contains(role)) {
       return const MainAppShell();
     } else if (role == 'client') {
       return const ClientMainShell();
     } else {
-      debugPrint('⚠️ AuthWrapper: Unknown role: $role');
-      return const ContactSupportScreen();
+      debugPrint('⚠️ AuthWrapper: Unknown role: $role — defaulting to MainAppShell');
+      // Default to MainAppShell instead of ContactSupportScreen so valid
+      // employees with unexpected role strings still get a usable UI.
+      return const MainAppShell();
     }
   }
 
@@ -857,10 +898,10 @@ class _AuthWrapperWithFCMState extends State<AuthWrapperWithFCM> {
           return const WelcomeScreen();
         }
 
-        // If user exists but has no role, show contact support
+        // If user exists but has no role, default to main shell
         if (user.role == null || user.role.toString().trim().isEmpty) {
-          debugPrint('AuthWrapper: User has no role');
-          return const ContactSupportScreen();
+          debugPrint('AuthWrapper: User has no role — defaulting to MainAppShell');
+          return _buildMainAppWithSession(context, user);
         }
 
         // User has valid role, proceed with session initialization

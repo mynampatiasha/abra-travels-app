@@ -8,10 +8,12 @@
 // ✅ Navy glassmorphism card — pure white text everywhere
 // ✅ All font sizes +2px
 // ✅ Post-login splash screen injected for all roles
+// ✅ AutofillGroup for password manager support
 // ============================================================================
 
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:abra_fleet/features/auth/domain/repositories/auth_repository.dart';
 import 'package:abra_fleet/features/auth/data/repositories/jwt_auth_repository_impl.dart';
@@ -99,6 +101,7 @@ class _LoginScreenState extends State<LoginScreen> with TickerProviderStateMixin
       );
       return;
     }
+    TextInput.finishAutofillContext();
     Navigator.of(context).pushReplacement(
       PageRouteBuilder(
         pageBuilder: (_, __, ___) => PostLoginSplashScreen(
@@ -141,7 +144,7 @@ class _LoginScreenState extends State<LoginScreen> with TickerProviderStateMixin
         _navigateBasedOnRole(user.role ?? 'customer', userName);
       }
     } catch (e) {
-      debugPrint('❌ Login error: $e');
+      debugPrint('Login error: $e');
       if (mounted) {
         String msg = 'Login failed';
         if (e.toString().contains('Invalid credentials') ||
@@ -237,11 +240,17 @@ class _LoginScreenState extends State<LoginScreen> with TickerProviderStateMixin
       mainAxisSize: MainAxisSize.min,
       children: [
         Container(
-          width: 50, height: 50,
+          width: 50,
+          height: 50,
           decoration: BoxDecoration(
             color: Colors.white,
             shape: BoxShape.circle,
-            boxShadow: [BoxShadow(color: _blueAccent.withOpacity(0.45), blurRadius: 20, spreadRadius: 2)],
+            boxShadow: [
+              BoxShadow(
+                  color: _blueAccent.withOpacity(0.45),
+                  blurRadius: 20,
+                  spreadRadius: 2),
+            ],
           ),
           child: ClipOval(
             child: Padding(
@@ -255,12 +264,19 @@ class _LoginScreenState extends State<LoginScreen> with TickerProviderStateMixin
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text('ABRA TRAVELS',
-                style: TextStyle(color: Colors.white, fontSize: 17,
-                    fontWeight: FontWeight.w800, letterSpacing: 2)),
-            Text('Fleet Management Platform',
-                style: TextStyle(color: Colors.white, fontSize: 10,
-                    letterSpacing: 0.8)),
+            Text(
+              'ABRA TRAVELS',
+              style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 17,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: 2),
+            ),
+            Text(
+              'Fleet Management Platform',
+              style: TextStyle(
+                  color: Colors.white, fontSize: 10, letterSpacing: 0.8),
+            ),
           ],
         ),
       ],
@@ -270,10 +286,10 @@ class _LoginScreenState extends State<LoginScreen> with TickerProviderStateMixin
   // ── Horizontal 4-step row ──────────────────────────────────────────────────
   Widget _buildHorizontalSteps() {
     final steps = [
-      (Icons.lock_outline_rounded,   '01', 'Secure Login'),
-      (Icons.verified_user_rounded,  '02', 'Role Verified'),
-      (Icons.check_circle_outline,   '03', 'Access Granted'),
-      (Icons.dashboard_rounded,      '04', 'Dashboard Ready'),
+      (Icons.lock_outline_rounded,  '01', 'Secure Login'),
+      (Icons.verified_user_rounded, '02', 'Role Verified'),
+      (Icons.check_circle_outline,  '03', 'Access Granted'),
+      (Icons.dashboard_rounded,     '04', 'Dashboard Ready'),
     ];
 
     return Row(
@@ -301,7 +317,8 @@ class _LoginScreenState extends State<LoginScreen> with TickerProviderStateMixin
           mainAxisSize: MainAxisSize.min,
           children: [
             Container(
-              width: 38, height: 38,
+              width: 38,
+              height: 38,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
                 gradient: const LinearGradient(
@@ -310,7 +327,10 @@ class _LoginScreenState extends State<LoginScreen> with TickerProviderStateMixin
                   end: Alignment.bottomRight,
                 ),
                 boxShadow: [
-                  BoxShadow(color: _blueAccent.withOpacity(0.4), blurRadius: 12, spreadRadius: 1),
+                  BoxShadow(
+                      color: _blueAccent.withOpacity(0.4),
+                      blurRadius: 12,
+                      spreadRadius: 1),
                 ],
               ),
               child: Icon(s.$1, color: Colors.white, size: 17),
@@ -344,168 +364,214 @@ class _LoginScreenState extends State<LoginScreen> with TickerProviderStateMixin
         borderRadius: BorderRadius.circular(24),
         border: Border.all(color: Colors.white.withOpacity(0.12)),
         boxShadow: [
-          BoxShadow(color: Colors.black.withOpacity(0.25), blurRadius: 40, offset: const Offset(0, 16)),
+          BoxShadow(
+              color: Colors.black.withOpacity(0.25),
+              blurRadius: 40,
+              offset: const Offset(0, 16)),
         ],
       ),
-      child: Form(
-        key: _formKey,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            const Text('Sign In',
-                style: TextStyle(color: Colors.white, fontSize: 26,
-                    fontWeight: FontWeight.w800, letterSpacing: -0.5)),
-            const SizedBox(height: 4),
-            const Text('Enter your credentials to continue',
-                style: TextStyle(color: Colors.white, fontSize: 13)),
-            const SizedBox(height: 28),
-
-            _buildField(
-              controller: _emailCtrl,
-              label: 'Email Address',
-              hint: 'you@abragroup.com',
-              icon: Icons.email_outlined,
-              keyboardType: TextInputType.emailAddress,
-              validator: (v) {
-                if (v == null || v.isEmpty) return 'Please enter your email';
-                if (!RegExp(r'^[^@]+@[^@]+\.[^@]+').hasMatch(v))
-                  return 'Enter a valid email';
-                return null;
-              },
-            ),
-            const SizedBox(height: 16),
-
-            _buildField(
-              controller: _passCtrl,
-              label: 'Password',
-              hint: '••••••••',
-              icon: Icons.lock_outline_rounded,
-              obscureText: _obscure,
-              suffixIcon: IconButton(
-                icon: Icon(
-                  _obscure ? Icons.visibility_off_outlined : Icons.visibility_outlined,
-                  color: Colors.white, size: 20,
-                ),
-                onPressed: () => setState(() => _obscure = !_obscure),
+      child: AutofillGroup(
+        child: Form(
+          key: _formKey,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const Text(
+                'Sign In',
+                style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 26,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: -0.5),
               ),
-              validator: (v) {
-                if (v == null || v.isEmpty) return 'Please enter your password';
-                return null;
-              },
-            ),
-            const SizedBox(height: 8),
-
-            Align(
-              alignment: Alignment.centerRight,
-              child: TextButton(
-                onPressed: _isLoading
-                    ? null
-                    : () => Navigator.of(context).push(MaterialPageRoute(
-                        builder: (_) => const ForgotPasswordScreen())),
-                style: TextButton.styleFrom(
-                  foregroundColor: _blueAccent,
-                  padding: EdgeInsets.zero,
-                  minimumSize: Size.zero,
-                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                ),
-                child: const Text('Forgot Password?',
-                    style: TextStyle(fontSize: 13,
-                        fontWeight: FontWeight.w600, color: Colors.white)),
+              const SizedBox(height: 4),
+              const Text(
+                'Enter your credentials to continue',
+                style: TextStyle(color: Colors.white, fontSize: 13),
               ),
-            ),
-            const SizedBox(height: 24),
-
-            ScaleTransition(
-              scale: _btnScale,
-              child: GestureDetector(
-                onTapDown: (_) => _btnCtrl.forward(),
-                onTapUp: (_) => _btnCtrl.reverse(),
-                onTapCancel: () => _btnCtrl.reverse(),
-                child: ElevatedButton(
-                  onPressed: _isLoading ? null : _login,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: _blueAccent,
-                    disabledBackgroundColor: _blueAccent.withOpacity(0.5),
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(vertical: 16),
-                    elevation: 0,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              const SizedBox(height: 28),
+              _buildField(
+                controller: _emailCtrl,
+                label: 'Email Address',
+                hint: 'you@abragroup.com',
+                icon: Icons.email_outlined,
+                keyboardType: TextInputType.emailAddress,
+                autofillHints: const [AutofillHints.email],
+                textInputAction: TextInputAction.next,
+                validator: (v) {
+                  if (v == null || v.isEmpty) return 'Please enter your email';
+                  if (!RegExp(r'^[^@]+@[^@]+\.[^@]+').hasMatch(v)) {
+                    return 'Enter a valid email';
+                  }
+                  return null;
+                },
+              ),
+              const SizedBox(height: 16),
+              _buildField(
+                controller: _passCtrl,
+                label: 'Password',
+                hint: '••••••••',
+                icon: Icons.lock_outline_rounded,
+                obscureText: _obscure,
+                autofillHints: const [AutofillHints.password],
+                textInputAction: TextInputAction.done,
+                onFieldSubmitted: (_) {
+                  if (!_isLoading) _login();
+                },
+                suffixIcon: IconButton(
+                  icon: Icon(
+                    _obscure
+                        ? Icons.visibility_off_outlined
+                        : Icons.visibility_outlined,
+                    color: Colors.white,
+                    size: 20,
                   ),
-                  child: _isLoading
-                      ? const SizedBox(width: 20, height: 20,
-                          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                      : const Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Text('Sign In', style: TextStyle(fontSize: 16,
-                                fontWeight: FontWeight.w700, letterSpacing: 0.5)),
-                            SizedBox(width: 8),
-                            Icon(Icons.arrow_forward_rounded, size: 18),
-                          ],
-                        ),
+                  onPressed: () => setState(() => _obscure = !_obscure),
                 ),
+                validator: (v) {
+                  if (v == null || v.isEmpty) return 'Please enter your password';
+                  return null;
+                },
               ),
-            ),
-            const SizedBox(height: 20),
-
-            Row(children: [
-              Expanded(child: Divider(color: Colors.white.withOpacity(0.12))),
-              const Padding(
-                padding: EdgeInsets.symmetric(horizontal: 12),
-                child: Text('or', style: TextStyle(color: Colors.white, fontSize: 12)),
-              ),
-              Expanded(child: Divider(color: Colors.white.withOpacity(0.12))),
-            ]),
-            const SizedBox(height: 20),
-
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                const Text("Don't have an account?",
-                    style: TextStyle(color: Colors.white, fontSize: 13)),
-                TextButton(
+              const SizedBox(height: 8),
+              Align(
+                alignment: Alignment.centerRight,
+                child: TextButton(
                   onPressed: _isLoading
                       ? null
                       : () => Navigator.of(context).push(MaterialPageRoute(
-                          builder: (_) => const RegistrationScreen())),
+                          builder: (_) => const ForgotPasswordScreen())),
                   style: TextButton.styleFrom(
-                    padding: const EdgeInsets.only(left: 6),
+                    foregroundColor: _blueAccent,
+                    padding: EdgeInsets.zero,
                     minimumSize: Size.zero,
                     tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                   ),
-                  child: const Text('Register Now',
-                      style: TextStyle(fontSize: 13,
-                          fontWeight: FontWeight.w700, color: _goldAccent)),
+                  child: const Text(
+                    'Forgot Password?',
+                    style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.white),
+                  ),
                 ),
-              ],
-            ),
-            const SizedBox(height: 16),
-
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-              decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.04),
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: Colors.white.withOpacity(0.08)),
               ),
-              child: const Row(
-                mainAxisAlignment: MainAxisAlignment.center,
+              const SizedBox(height: 24),
+              ScaleTransition(
+                scale: _btnScale,
+                child: GestureDetector(
+                  onTapDown: (_) => _btnCtrl.forward(),
+                  onTapUp: (_) => _btnCtrl.reverse(),
+                  onTapCancel: () => _btnCtrl.reverse(),
+                  child: ElevatedButton(
+                    onPressed: _isLoading ? null : _login,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: _blueAccent,
+                      disabledBackgroundColor: _blueAccent.withOpacity(0.5),
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                      elevation: 0,
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12)),
+                    ),
+                    child: _isLoading
+                        ? const SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(
+                                strokeWidth: 2, color: Colors.white))
+                        : const Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Text(
+                                'Sign In',
+                                style: TextStyle(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w700,
+                                    letterSpacing: 0.5),
+                              ),
+                              SizedBox(width: 8),
+                              Icon(Icons.arrow_forward_rounded, size: 18),
+                            ],
+                          ),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 20),
+              Row(
                 children: [
-                  Icon(Icons.shield_outlined, color: _blueAccent, size: 14),
-                  SizedBox(width: 8),
-                  Text('Secured with JWT authentication',
-                      style: TextStyle(color: Colors.white, fontSize: 11,
-                          letterSpacing: 0.3)),
+                  Expanded(
+                      child: Divider(color: Colors.white.withOpacity(0.12))),
+                  const Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 12),
+                    child: Text('or',
+                        style:
+                            TextStyle(color: Colors.white, fontSize: 12)),
+                  ),
+                  Expanded(
+                      child: Divider(color: Colors.white.withOpacity(0.12))),
                 ],
               ),
-            ),
-          ],
+              const SizedBox(height: 20),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const Text(
+                    "Don't have an account?",
+                    style: TextStyle(color: Colors.white, fontSize: 13),
+                  ),
+                  TextButton(
+                    onPressed: _isLoading
+                        ? null
+                        : () => Navigator.of(context).push(MaterialPageRoute(
+                            builder: (_) => const RegistrationScreen())),
+                    style: TextButton.styleFrom(
+                      padding: const EdgeInsets.only(left: 6),
+                      minimumSize: Size.zero,
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    ),
+                    child: const Text(
+                      'Register Now',
+                      style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w700,
+                          color: _goldAccent),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.04),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: Colors.white.withOpacity(0.08)),
+                ),
+                child: const Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.shield_outlined, color: _blueAccent, size: 14),
+                    SizedBox(width: 8),
+                    Text(
+                      'Secured with JWT authentication',
+                      style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 11,
+                          letterSpacing: 0.3),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
   }
 
-  // ── Field — pure white text, font +2 ──────────────────────────────────────
+  // ── Field builder ──────────────────────────────────────────────────────────
   Widget _buildField({
     required TextEditingController controller,
     required String label,
@@ -514,12 +580,18 @@ class _LoginScreenState extends State<LoginScreen> with TickerProviderStateMixin
     TextInputType keyboardType = TextInputType.text,
     bool obscureText = false,
     Widget? suffixIcon,
+    List<String>? autofillHints,
+    TextInputAction? textInputAction,
+    void Function(String)? onFieldSubmitted,
     String? Function(String?)? validator,
   }) {
     return TextFormField(
       controller: controller,
       keyboardType: keyboardType,
       obscureText: obscureText,
+      autofillHints: autofillHints,
+      textInputAction: textInputAction,
+      onFieldSubmitted: onFieldSubmitted,
       style: const TextStyle(color: Colors.white, fontSize: 14),
       validator: validator,
       decoration: InputDecoration(
@@ -531,7 +603,8 @@ class _LoginScreenState extends State<LoginScreen> with TickerProviderStateMixin
         suffixIcon: suffixIcon,
         filled: true,
         fillColor: Colors.white.withOpacity(0.07),
-        contentPadding: const EdgeInsets.symmetric(vertical: 16, horizontal: 16),
+        contentPadding:
+            const EdgeInsets.symmetric(vertical: 16, horizontal: 16),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
           borderSide: BorderSide(color: Colors.white.withOpacity(0.12)),
@@ -548,7 +621,8 @@ class _LoginScreenState extends State<LoginScreen> with TickerProviderStateMixin
           borderRadius: BorderRadius.circular(12),
           borderSide: BorderSide(color: Colors.red.shade300, width: 1.5),
         ),
-        errorStyle: const TextStyle(color: Color(0xFFFFB3B3), fontSize: 12),
+        errorStyle:
+            const TextStyle(color: Color(0xFFFFB3B3), fontSize: 12),
       ),
     );
   }
@@ -564,11 +638,14 @@ class _LoginBgPainter extends CustomPainter {
     final bg = Paint()
       ..shader = const LinearGradient(
         colors: [Color(0xFF0B1F4B), Color(0xFF0D2660), Color(0xFF1A3A8A)],
-        begin: Alignment.topLeft, end: Alignment.bottomRight,
+        begin: Alignment.topLeft,
+        end: Alignment.bottomRight,
       ).createShader(Rect.fromLTWH(0, 0, size.width, size.height));
     canvas.drawRect(Offset.zero & size, bg);
 
-    final grid = Paint()..color = Colors.white.withOpacity(0.025)..strokeWidth = 1;
+    final grid = Paint()
+      ..color = Colors.white.withOpacity(0.025)
+      ..strokeWidth = 1;
     for (double x = 0; x < size.width; x += 55) {
       canvas.drawLine(Offset(x, 0), Offset(x, size.height), grid);
     }
@@ -589,12 +666,18 @@ class _LoginBgPainter extends CustomPainter {
           const Color(0xFF1E3A8A).withOpacity(0.18),
         ][i];
       canvas.drawCircle(
-          Offset(cx + r * math.cos(angle), cy + r * math.sin(angle)), 70, glow);
+          Offset(cx + r * math.cos(angle), cy + r * math.sin(angle)),
+          70,
+          glow);
     }
 
     final line = Paint()
       ..shader = LinearGradient(
-        colors: [Colors.transparent, const Color(0xFF60A5FA).withOpacity(0.6), Colors.transparent],
+        colors: [
+          Colors.transparent,
+          const Color(0xFF60A5FA).withOpacity(0.6),
+          Colors.transparent
+        ],
       ).createShader(Rect.fromLTWH(0, 0, size.width, 2))
       ..strokeWidth = 2;
     canvas.drawLine(const Offset(0, 0), Offset(size.width, 0), line);

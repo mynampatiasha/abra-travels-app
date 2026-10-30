@@ -671,6 +671,9 @@ router.post('/register', async (req, res) => {
     const hashedPassword = await hashPassword(password);
     
     // Create user document
+    const isPublicRegistration = (role === 'customer' || role === 'driver');
+    const initialStatus = isPublicRegistration ? 'pending' : 'active';
+    
     const newUser = {
       email: email.toLowerCase(),
       password: hashedPassword,
@@ -679,8 +682,9 @@ router.post('/register', async (req, res) => {
       organizationId: organizationId || null,
       modules: [],
       permissions: {},
-      status: 'active',
-      isActive: true,
+      status: initialStatus,
+      isPendingApproval: isPublicRegistration,
+      isActive: !isPublicRegistration,
       createdAt: new Date(),
       updatedAt: new Date(),
       lastLogin: null,

@@ -19,6 +19,10 @@ class ClientNotificationService {
   final OneSignalService _oneSignalService = OneSignalService();
   final _audioPlayer = AudioPlayer();
   final Set<String> _shownNotifications = {};
+
+  /// Stream of new notifications — delegates to OneSignalService
+  Stream<Map<String, dynamic>> get onNewNotification =>
+      _oneSignalService.onNewNotification;
   
   /// Setup notification listener (delegates to OneSignal)
   Future<void> setupListener(BuildContext context) async {

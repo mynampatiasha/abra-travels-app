@@ -672,10 +672,12 @@ static Map<String, dynamic>? findBestVehicle(
       // Get vehicle location
       final lat = vehicle['currentLocation']?['coordinates']?[1] ?? 
                   vehicle['currentLocation']?['latitude'] ?? 
+                  vehicle['depotLocation']?['coordinates']?[1] ?? 
                   vehicle['location']?['latitude'] ?? 
                   12.9716; // Default Bangalore
       final lng = vehicle['currentLocation']?['coordinates']?[0] ?? 
                   vehicle['currentLocation']?['longitude'] ?? 
+                  vehicle['depotLocation']?['coordinates']?[0] ?? 
                   vehicle['location']?['longitude'] ?? 
                   77.5946;
 

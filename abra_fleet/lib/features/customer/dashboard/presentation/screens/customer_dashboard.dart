@@ -118,6 +118,9 @@ class _CustomerDashboardState extends State<CustomerDashboard> {
     
     _setupNotificationListener();
     _loadUnreadCount();
+
+    // ✅ Load active OTP from recent notifications (persists across app restarts)
+    _loadActiveOTPFromNotifications();
     
     // ✅ UPDATED: Load active trip from My Trips data
     _loadActiveTripFromMyTrips();
@@ -149,6 +152,21 @@ class _CustomerDashboardState extends State<CustomerDashboard> {
           if (notification['type'] == 'roster_assigned') {
             _showRosterAssignedDialog(notification);
           }
+
+          // ✅ OTP notifications — show OTP card on dashboard
+          final notifType = notification['type']?.toString() ?? '';
+          if (notifType == 'otp_step_in' || notifType == 'otp_step_out' ||
+              notifType == 'otp_step_in_resend' || notifType == 'otp_step_out_resend') {
+            final data = notification['data'] as Map<String, dynamic>? ?? {};
+            setState(() {
+              _activeOTP = {
+                'otp': data['otp']?.toString() ?? '',
+                'otpType': data['otpType']?.toString() ?? 'step_in',
+                'driverName': data['driverName']?.toString() ?? 'Your driver',
+                'expiresAt': data['expiresAt']?.toString() ?? '',
+              };
+            });
+          }
         }
       },
       onError: (error) {
@@ -168,6 +186,57 @@ class _CustomerDashboardState extends State<CustomerDashboard> {
       }
     } catch (e) {
       debugPrint('❌ Error loading unread count: $e');
+    }
+  }
+
+  // ✅ Load the most recent unverified OTP from notifications API
+  // This ensures the OTP card shows even after app restart
+  Future<void> _loadActiveOTPFromNotifications() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final token = prefs.getString('jwt_token');
+      if (token == null) return;
+
+      final response = await http.get(
+        Uri.parse('${ApiConfig.baseUrl}/api/notifications'),
+        headers: {'Authorization': 'Bearer $token', 'Content-Type': 'application/json'},
+      );
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        final notifications = (data['notifications'] as List<dynamic>? ?? [])
+            .cast<Map<String, dynamic>>();
+
+        // Find the most recent unread OTP notification
+        final otpTypes = ['otp_step_in', 'otp_step_out', 'otp_step_in_resend', 'otp_step_out_resend'];
+        final otpNotif = notifications.firstWhere(
+          (n) => otpTypes.contains(n['type']?.toString()) && n['isRead'] != true,
+          orElse: () => <String, dynamic>{},
+        );
+
+        if (otpNotif.isNotEmpty) {
+          final notifData = otpNotif['data'] as Map<String, dynamic>? ?? {};
+          final otp = notifData['otp']?.toString() ?? '';
+          final expiresAt = DateTime.tryParse(notifData['expiresAt']?.toString() ?? '');
+
+          // Only show if not expired
+          if (otp.isNotEmpty && (expiresAt == null || expiresAt.isAfter(DateTime.now()))) {
+            if (mounted) {
+              setState(() {
+                _activeOTP = {
+                  'otp': otp,
+                  'otpType': notifData['otpType']?.toString() ?? 'step_in',
+                  'driverName': notifData['driverName']?.toString() ?? 'Your driver',
+                  'expiresAt': notifData['expiresAt']?.toString() ?? '',
+                };
+              });
+              debugPrint('✅ Active OTP loaded from notifications: $otp');
+            }
+          }
+        }
+      }
+    } catch (e) {
+      debugPrint('⚠️ Could not load active OTP: $e');
     }
   }
 
@@ -2794,6 +2863,8 @@ String _formatResolvedAt(DateTime dt) {
             const SizedBox(height: 16),
             _buildTrackingCard(context, isMobile),
             const SizedBox(height: 16),
+            _buildOTPCard(context, isMobile),
+            const SizedBox(height: 16),
             _buildResponsiveSOSHistorySection(isMobile, isSmallMobile),
           ],
         ),
@@ -3551,6 +3622,155 @@ letterSpacing: -0.5,
 ),
 );
 }
+
+  // ============================================================================
+  // OTP CARD — shows active OTP to customer (step-in or step-out)
+  // ============================================================================
+  Map<String, dynamic>? _activeOTP;
+
+  Widget _buildOTPCard(BuildContext context, bool isMobile) {
+    // Listen for OTP notifications from notification service
+    // OTP data is stored in _activeOTP when a notification of type otp_step_in/otp_step_out arrives
+    if (_activeOTP == null) return const SizedBox.shrink();
+
+    final otp = _activeOTP!['otp']?.toString() ?? '';
+    final otpType = _activeOTP!['otpType']?.toString() ?? 'step_in';
+    final driverName = _activeOTP!['driverName']?.toString() ?? 'Your driver';
+    final expiresAt = DateTime.tryParse(_activeOTP!['expiresAt']?.toString() ?? '');
+    final isStepIn = otpType == 'step_in';
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: isStepIn
+              ? [const Color(0xFF0D1B3E), const Color(0xFF1A3A6B)]
+              : [const Color(0xFF1A3A6B), const Color(0xFF2463AE)],
+        ),
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFF0D1B3E).withOpacity(0.3),
+            blurRadius: 16,
+            offset: const Offset(0, 6),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.15),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Icon(
+                  isStepIn ? Icons.login : Icons.logout,
+                  color: Colors.white,
+                  size: 20,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      isStepIn ? '🔐 Boarding OTP' : '🔐 Drop-Off OTP',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 16,
+                      ),
+                    ),
+                    Text(
+                      'Show this to $driverName',
+                      style: TextStyle(color: Colors.white.withOpacity(0.8), fontSize: 12),
+                    ),
+                  ],
+                ),
+              ),
+              IconButton(
+                icon: const Icon(Icons.close, color: Colors.white70, size: 20),
+                onPressed: () => setState(() => _activeOTP = null),
+                tooltip: 'Dismiss',
+              ),
+            ],
+          ),
+          const SizedBox(height: 20),
+          // Large OTP display
+          Center(
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(16),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.15),
+                    blurRadius: 12,
+                    offset: const Offset(0, 4),
+                  ),
+                ],
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    otp,
+                    style: const TextStyle(
+                      fontSize: 40,
+                      fontWeight: FontWeight.bold,
+                      color: Color(0xFF0D1B3E),
+                      letterSpacing: 8,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  GestureDetector(
+                    onTap: () {
+                      Clipboard.setData(ClipboardData(text: otp));
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('OTP copied to clipboard'),
+                          duration: Duration(seconds: 2),
+                          behavior: SnackBarBehavior.floating,
+                        ),
+                      );
+                    },
+                    child: const Icon(Icons.copy, color: Color(0xFF2463AE), size: 22),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
+          if (expiresAt != null)
+            Center(
+              child: Text(
+                'Valid until ${expiresAt.hour.toString().padLeft(2, '0')}:${expiresAt.minute.toString().padLeft(2, '0')}',
+                style: TextStyle(color: Colors.white.withOpacity(0.7), fontSize: 12),
+              ),
+            ),
+          const SizedBox(height: 12),
+          Center(
+            child: Text(
+              isStepIn
+                  ? 'Tell this OTP to your driver when boarding'
+                  : 'Tell this OTP to your driver at your drop-off point',
+              style: TextStyle(color: Colors.white.withOpacity(0.85), fontSize: 13),
+              textAlign: TextAlign.center,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }
 // ============================================================================
 // ✅ LIVE TRIP CARD WIDGET

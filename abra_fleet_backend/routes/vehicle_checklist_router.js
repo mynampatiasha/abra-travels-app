@@ -12,6 +12,7 @@
 
 const express = require('express');
 const router = express.Router();
+const User = require('../models/User');
 const mongoose = require('mongoose');
 
 // ============================================================================
@@ -262,13 +263,29 @@ router.get('/history', async (req, res) => {
     if (vehicleNumber) filter.vehicleNumber = String(vehicleNumber);
     if (driverId) filter.driverId = String(driverId);
 
-    const history = await VehicleChecklist
-      .find(filter)
-      .sort({ submittedAt: -1 })
-      .limit(Math.min(Number(limit), 100))
-      .select('-items'); // Exclude full items array for list view
+          const history = await VehicleChecklist
+        .find(filter)
+        .sort({ submittedAt: -1 })
+        .limit(Math.min(Number(limit), 100))
+        .select('-items')
+        .lean(); // Use lean to modify the array
+        
+      // Populate driver names manually
+      const driverIds = [...new Set(history.map(h => h.driverId).filter(id => id && id.length === 24))];
+      if (driverIds.length > 0) {
+        const users = await User.find({ _id: { $in: driverIds } }, 'name employeeId').lean();
+        const userMap = {};
+        users.forEach(u => userMap[u._id.toString()] = u);
+        
+        history.forEach(h => {
+          if (h.driverId && userMap[h.driverId]) {
+            h.driverName = userMap[h.driverId].name;
+            h.driverEmployeeId = userMap[h.driverId].employeeId;
+          }
+        });
+      }
 
-    return res.status(200).json({
+      return res.status(200).json({
       success: true,
       data: {
         total: history.length,

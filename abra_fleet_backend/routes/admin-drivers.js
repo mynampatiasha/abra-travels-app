@@ -97,7 +97,7 @@ router.get('/profile', async (req, res) => {
     
     let driver = await req.db.collection('drivers').findOne({
       $or: [
-        { _id: new ObjectId(user.userId) },
+        (/^[0-9a-fA-F]{24}$/.test(user.userId) ? { _id: new ObjectId(user.userId) } : { _id: null }),
         { driverId: user.driverId },
         { firebaseUid: user.userId },
         { uid: user.userId },
@@ -206,7 +206,7 @@ router.put('/profile', async (req, res) => {
 
     const driver = await req.db.collection('drivers').findOne({
       $or: [
-        { _id: new ObjectId(user.userId) },
+        (/^[0-9a-fA-F]{24}$/.test(user.userId) ? { _id: new ObjectId(user.userId) } : { _id: null }),
         { driverId: user.driverId },
         { 'personalInfo.email': user.email }
       ]
@@ -426,7 +426,7 @@ router.put('/profile/:id', async (req, res) => {
     // Find driver by ID
     let driverQuery = {};
     if (ObjectId.isValid(req.params.id)) {
-      driverQuery = { _id: new ObjectId(req.params.id) };
+      driverQuery = (/^[0-9a-fA-F]{24}$/.test(req.params.id) ? { _id: new ObjectId(req.params.id) } : { _id: null });
     } else {
       driverQuery = { driverId: req.params.id };
     }
@@ -1022,14 +1022,15 @@ router.get('/statistics', async (req, res) => {
 // ============================================================================
 router.get('/:id', async (req, res) => {
   try {
-    const query = {};
-    query.driverId = req.params.id;
+    let query = { driverId: req.params.id };
     
     if (/^[0-9a-fA-F]{24}$/.test(req.params.id)) {
-      query.$or = [
-        { driverId: req.params.id },
-        { _id: new ObjectId(req.params.id) }
-      ];
+      query = {
+        $or: [
+          { driverId: req.params.id },
+          { _id: new ObjectId(req.params.id) }
+        ]
+      };
     }
     
     const driver = await req.db.collection('drivers').findOne(query);
@@ -1405,13 +1406,15 @@ router.post('/', async (req, res) => {
 // ============================================================================
 router.put('/:id', async (req, res) => {
   try {
-    const query = { driverId: req.params.id };
+    let query = { driverId: req.params.id };
     
     if (/^[0-9a-fA-F]{24}$/.test(req.params.id)) {
-      query.$or = [
-        { driverId: req.params.id },
-        { _id: new ObjectId(req.params.id) }
-      ];
+      query = {
+        $or: [
+          { driverId: req.params.id },
+          { _id: new ObjectId(req.params.id) }
+        ]
+      };
     }
     
     const updateOperations = {
@@ -1528,7 +1531,7 @@ router.delete('/:id', async (req, res) => {
     if (/^[0-9a-fA-F]{24}$/.test(req.params.id)) {
       // Valid ObjectId format - try _id first
       console.log(`   Trying _id lookup first...`);
-      driver = await req.db.collection('drivers').findOne({ _id: new ObjectId(req.params.id) });
+      driver = await req.db.collection('drivers').findOne((/^[0-9a-fA-F]{24}$/.test(req.params.id) ? { _id: new ObjectId(req.params.id) } : { _id: null }));
       
       // Fallback to driverId if not found by _id
       if (!driver) {
@@ -1759,7 +1762,7 @@ router.post('/:id/assign-vehicle', async (req, res) => {
         await req.db.collection('vehicles').updateOne(
           { 
             $or: [
-              { _id: new ObjectId(driver.assignedVehicle) },
+              (/^[0-9a-fA-F]{24}$/.test(driver.assignedVehicle) ? { _id: new ObjectId(driver.assignedVehicle) } : { _id: null }),
               { vehicleId: driver.assignedVehicle }
             ]
           },
@@ -1858,7 +1861,7 @@ router.post('/:id/unassign-vehicle', async (req, res) => {
         { 
           $or: [
             { driverId: req.params.id },
-            { _id: new ObjectId(req.params.id) }
+            (/^[0-9a-fA-F]{24}$/.test(req.params.id) ? { _id: new ObjectId(req.params.id) } : { _id: null })
           ]
         },
         { session }
@@ -1930,7 +1933,7 @@ router.get('/:id/trips', async (req, res) => {
       driverQuery = {
         $or: [
           { driverId: req.params.id },
-          { _id: new ObjectId(req.params.id) }
+          (/^[0-9a-fA-F]{24}$/.test(req.params.id) ? { _id: new ObjectId(req.params.id) } : { _id: null })
         ]
       };
     }
@@ -2021,7 +2024,7 @@ router.post('/:id/documents', upload.single('document'), async (req, res) => {
     if (/^[0-9a-fA-F]{24}$/.test(req.params.id)) {
       driverQuery.$or = [
         { driverId: req.params.id },
-        { _id: new ObjectId(req.params.id) }
+        (/^[0-9a-fA-F]{24}$/.test(req.params.id) ? { _id: new ObjectId(req.params.id) } : { _id: null })
       ];
     }
     
@@ -2079,7 +2082,7 @@ router.delete('/:id/documents/:documentId', async (req, res) => {
     if (/^[0-9a-fA-F]{24}$/.test(req.params.id)) {
       driverQuery.$or = [
         { driverId: req.params.id },
-        { _id: new ObjectId(req.params.id) }
+        (/^[0-9a-fA-F]{24}$/.test(req.params.id) ? { _id: new ObjectId(req.params.id) } : { _id: null })
       ];
     }
     
@@ -2137,7 +2140,7 @@ router.post('/:id/send-password-reset', async (req, res) => {
     if (/^[0-9a-fA-F]{24}$/.test(req.params.id)) {
       driverQuery.$or = [
         { driverId: req.params.id },
-        { _id: new ObjectId(req.params.id) }
+        (/^[0-9a-fA-F]{24}$/.test(req.params.id) ? { _id: new ObjectId(req.params.id) } : { _id: null })
       ];
     }
     console.log('   Query:', JSON.stringify(driverQuery, null, 2));
@@ -2279,8 +2282,7 @@ router.post('/:id/send-password-reset', async (req, res) => {
 // @access  Private (Admin)
 // ============================================================================
 router.post('/bulk-import', async (req, res) => {
-  console.log('\n🚗 ========== BULK DRIVER IMPORT STARTED ==========');
-  console.log('📥 Request body:', JSON.stringify(req.body, null, 2));
+  console.log('\n?? ========== BULK DRIVER IMPORT STARTED ==========');
   
   try {
     const { drivers } = req.body;
@@ -2292,7 +2294,7 @@ router.post('/bulk-import', async (req, res) => {
       });
     }
     
-    console.log(`📊 Processing ${drivers.length} drivers for bulk import`);
+    console.log(`?? Processing ${drivers.length} drivers for bulk import`);
     
     const results = {
       successful: [],
@@ -2302,22 +2304,25 @@ router.post('/bulk-import', async (req, res) => {
     
     for (let i = 0; i < drivers.length; i++) {
       const driverData = drivers[i];
-      console.log(`\n📋 Processing driver ${i + 1}/${drivers.length}: ${driverData.firstName} ${driverData.lastName}`);
+      const pInfo = driverData.personalInfo || {};
+      const license = driverData.license || {};
+      
+      console.log(`\n?? Processing driver ${i + 1}/${drivers.length}: ${pInfo.firstName} ${pInfo.lastName}`);
       
       try {
         const driverCount = await req.db.collection('drivers').countDocuments();
-        const driverId = `DRV-${String(driverCount + 100001).padStart(6, '0')}`;
+        const driverId = driverData.driverId || `DRV-${String(driverCount + 100001).padStart(6, '0')}`;
         
         const existingDriver = await req.db.collection('drivers').findOne({
           $or: [
-            { 'personalInfo.phone': driverData.phone },
-            { 'personalInfo.email': driverData.email },
-            { 'license.licenseNumber': driverData.licenseNumber }
+            { 'personalInfo.phone': pInfo.phone },
+            { 'personalInfo.email': pInfo.email },
+            { 'license.licenseNumber': license.licenseNumber }
           ]
         });
         
         if (existingDriver) {
-          console.log(`⚠️  Driver already exists: ${driverData.email}`);
+          console.log(`??  Driver already exists: ${pInfo.email}`);
           results.skipped.push({
             data: driverData,
             reason: 'Driver with same phone, email, or license already exists'
@@ -2325,39 +2330,37 @@ router.post('/bulk-import', async (req, res) => {
           continue;
         }
         
+        const parseDate = (d) => {
+            if (!d) return null;
+            const pd = new Date(d);
+            return isNaN(pd.getTime()) ? null : pd;
+        };
+        
         const newDriver = {
           driverId,
-          name: `${driverData.firstName} ${driverData.lastName}`,
-          email: driverData.email,
-          phone: driverData.phone,
+          name: `${pInfo.firstName || ''} ${pInfo.lastName || ''}`.trim(),
+          email: pInfo.email,
+          phone: pInfo.phone,
           personalInfo: {
-            firstName: driverData.firstName,
-            lastName: driverData.lastName,
-            phone: driverData.phone,
-            email: driverData.email,
-            dateOfBirth: driverData.dob ? new Date(driverData.dob) : null,
-            bloodGroup: driverData.bloodGroup,
-            gender: driverData.gender
+            firstName: pInfo.firstName,
+            lastName: pInfo.lastName,
+            phone: pInfo.phone,
+            email: pInfo.email,
+            dateOfBirth: parseDate(pInfo.dateOfBirth),
+            bloodGroup: pInfo.bloodGroup,
+            gender: pInfo.gender
           },
           license: {
-            licenseNumber: driverData.licenseNumber,
-            type: driverData.licenseType,
-            issueDate: new Date(driverData.issueDate),
-            expiryDate: new Date(driverData.expiryDate),
-            issuingAuthority: driverData.issuingAuthority
+            licenseNumber: license.licenseNumber,
+            type: license.licenseType,
+            issueDate: parseDate(license.issueDate),
+            expiryDate: parseDate(license.expiryDate),
+            issuingAuthority: license.issuingAuthority
           },
-          emergencyContact: driverData.emergencyContactName ? {
-            name: driverData.emergencyContactName,
-            relationship: driverData.emergencyContactRelationship,
-            phone: driverData.emergencyContactPhone
-          } : null,
-          address: driverData.street ? {
-            street: driverData.street,
-            city: driverData.city,
-            state: driverData.state,
-            postalCode: driverData.postalCode,
-            country: driverData.country
-          } : null,
+          emergencyContact: driverData.emergencyContact || null,
+          address: driverData.address || null,
+          employment: driverData.employment || null,
+          bankDetails: driverData.bankDetails || null,
           status: driverData.status || 'active',
           assignedVehicle: null,
           vehicleNumber: null,
@@ -2377,46 +2380,16 @@ router.post('/bulk-import', async (req, res) => {
         };
         
         const result = await req.db.collection('drivers').insertOne(newDriver);
-        console.log(`✅ Driver inserted: ${result.insertedId}`);
-        
-        try {
-          const resetToken = require('crypto').randomBytes(32).toString('hex');
-          const resetLink = `${process.env.FRONTEND_URL}/reset-password?token=${resetToken}&email=${encodeURIComponent(driverData.email)}`;
-          
-          const emailHtml = getDriverWelcomeTemplate(
-            driverData.firstName,
-            driverData.lastName,
-            driverData.email,
-            driverId,
-            resetLink
-          );
-          const emailText = getDriverWelcomeText(
-            driverData.firstName,
-            driverData.lastName,
-            driverData.email,
-            driverId,
-            resetLink
-          );
-          
-          await emailService.sendEmail(
-            driverData.email,
-            'Welcome to Abra Travels - Set Your Password',
-            emailText,
-            emailHtml
-          );
-          console.log(`✅ Welcome email sent to: ${driverData.email}`);
-        } catch (emailError) {
-          console.error(`❌ Failed to send email to ${driverData.email}:`, emailError.message);
-        }
+        console.log(`? Driver inserted: ${result.insertedId}`);
         
         results.successful.push({
-          driverId,
-          name: `${driverData.firstName} ${driverData.lastName}`,
-          email: driverData.email
+          data: driverData,
+          driverId: driverId,
+          _id: result.insertedId
         });
         
       } catch (error) {
-        console.error(`❌ Failed to process driver ${driverData.firstName} ${driverData.lastName}:`, error.message);
+        console.log(`? Error processing driver ${i + 1}:`, error.message);
         results.failed.push({
           data: driverData,
           error: error.message
@@ -2424,23 +2397,22 @@ router.post('/bulk-import', async (req, res) => {
       }
     }
     
-    console.log('\n✅ ========== BULK DRIVER IMPORT COMPLETED ==========');
-    console.log(`📊 Results: ${results.successful.length} successful, ${results.failed.length} failed, ${results.skipped.length} skipped`);
+    console.log(`?? Bulk import complete. Success: ${results.successful.length}, Failed: ${results.failed.length}, Skipped: ${results.skipped.length}`);
     
-    res.status(201).json({
+    res.json({
       success: true,
-      message: `Bulk import completed. ${results.successful.length} drivers imported successfully.`,
+      message: `Successfully imported ${results.successful.length} drivers`,
+      successCount: results.successful.length,
+      failedCount: results.failed.length,
+      skippedCount: results.skipped.length,
       results
     });
     
   } catch (error) {
-    console.error('\n❌ ========== BULK DRIVER IMPORT FAILED ==========');
-    console.error('Error:', error.message);
-    console.error('Stack:', error.stack);
-    
+    console.error('? Error in bulk driver import:', error);
     res.status(500).json({
       success: false,
-      message: 'Failed to process bulk driver import',
+      message: 'Failed to process bulk import',
       error: error.message
     });
   }
@@ -2518,7 +2490,7 @@ router.get('/:id/feedback', async (req, res) => {
     if (/^[0-9a-fA-F]{24}$/.test(req.params.id)) {
       driverQuery.$or = [
         { driverId: req.params.id },
-        { _id: new ObjectId(req.params.id) }
+        (/^[0-9a-fA-F]{24}$/.test(req.params.id) ? { _id: new ObjectId(req.params.id) } : { _id: null })
       ];
     }
     

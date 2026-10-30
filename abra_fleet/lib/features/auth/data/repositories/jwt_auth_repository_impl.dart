@@ -148,6 +148,14 @@ class JwtAuthRepositoryImpl implements AuthRepository {
     String? name,
     required String role,
     String? phoneNumber,
+    String? companyName,
+    String? department,
+    String? employeeId,
+    String? branch,
+    String? designation,
+    String? altPhoneNumber,
+    String? emergencyContactName,
+    String? emergencyContactPhone,
   }) async {
     try {
       print('[JwtAuth] Registering user: $email with role: $role');
@@ -159,6 +167,16 @@ class JwtAuthRepositoryImpl implements AuthRepository {
         'name': name ?? email.split('@')[0],
         'role': role,
         'phoneNumber': phoneNumber,
+        'phone': phoneNumber,
+        'companyName': companyName,
+        'organizationName': companyName,
+        'department': department,
+        'employeeId': employeeId,
+        'branch': branch,
+        'designation': designation,
+        'altPhoneNumber': altPhoneNumber,
+        'emergencyContactName': emergencyContactName,
+        'emergencyContactPhone': emergencyContactPhone,
       });
       
       if (response['success'] == true && response['data'] != null) {
@@ -373,31 +391,41 @@ print('[JwtAuth] Response[data]: ${response['data']}');
   @override
   Future<String?> getAuthToken() async {
     try {
+      // ✅ FIX: Use local-only check (no network call) so web reloads don't
+      // get kicked to the login screen just because the backend is slow.
+      // _getStoredToken() already decodes the JWT and checks expiry locally.
       final token = await _getStoredToken();
       if (token != null && token.isNotEmpty) {
-        // Verify token is still valid using API service
-        try {
-          final response = await _apiService.get('/api/auth/me');
-          
-          if (response['success'] == true) {
-            print('[JwtAuth] ✅ Token is valid');
-            return token;
-          } else {
-            print('[JwtAuth] ⚠️ Token is invalid, clearing');
-            await _clearStoredToken();
-            return null;
-          }
-        } catch (e) {
-          print('[JwtAuth] Error verifying token: $e');
-          return token; // Return token anyway, let the API handle it
-        }
-      } else {
-        print('[JwtAuth] No token found');
-        return null;
+        print('[JwtAuth] ✅ Token found locally (no network call)');
+        return token;
       }
+      print('[JwtAuth] No token found');
+      return null;
     } catch (e) {
       print('[JwtAuth] Error getting auth token: $e');
       return null;
+    }
+  }
+
+  /// Verify the stored token against the backend (/api/auth/me).
+  /// Call this in the background AFTER the UI is already shown — never block
+  /// the initial render on this.
+  Future<bool> verifyTokenWithBackend() async {
+    try {
+      final token = await _getStoredToken();
+      if (token == null || token.isEmpty) return false;
+      final response = await _apiService.get('/api/auth/me');
+      if (response['success'] == true) {
+        print('[JwtAuth] ✅ Backend token verification passed');
+        return true;
+      }
+      print('[JwtAuth] ⚠️ Backend token verification failed — clearing token');
+      await _clearStoredToken();
+      _clearCache();
+      return false;
+    } catch (e) {
+      print('[JwtAuth] Error verifying token with backend (non-fatal): $e');
+      return false; // Don't clear token on network error — could be offline
     }
   }
 
@@ -506,7 +534,46 @@ print('[JwtAuth] Response[data]: ${response['data']}');
   Future<String?> _getStoredToken() async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      return prefs.getString(_tokenKey);
+      final token = prefs.getString(_tokenKey);
+      if (token == null || token.isEmpty) return null;
+
+      // ── Decode JWT payload and check expiry ──────────────────────────────
+      try {
+        final parts = token.split('.');
+        if (parts.length == 3) {
+          String payload = parts[1]
+              .replaceAll('-', '+')
+              .replaceAll('_', '/');
+          switch (payload.length % 4) {
+            case 2: payload += '=='; break;
+            case 3: payload += '=';  break;
+            default: break;
+          }
+          final decoded = jsonDecode(
+            utf8.decode(base64Decode(payload)),
+          ) as Map<String, dynamic>;
+          final exp = decoded['exp'];
+          if (exp != null) {
+            final expiry = DateTime.fromMillisecondsSinceEpoch((exp as int) * 1000);
+            if (DateTime.now().isAfter(expiry)) {
+              print('[JwtAuth] ⚠️ Token expired at $expiry — clearing session');
+              await prefs.remove(_tokenKey);
+              await prefs.remove(_userDataKey);
+              await prefs.remove('user_id');
+              await prefs.remove('user_role');
+              await prefs.remove('user_email');
+              await prefs.remove('user_name');
+              _clearCache();
+              return null;
+            }
+          }
+        }
+      } catch (decodeErr) {
+        print('[JwtAuth] Token decode error (non-fatal): $decodeErr');
+        // If we can't decode, let the server decide — return token as-is
+      }
+
+      return token;
     } catch (e) {
       print('[JwtAuth] Error getting stored token: $e');
       return null;
@@ -583,6 +650,11 @@ print('[JwtAuth] Response[data]: ${response['data']}');
     }
     return null;
   }
+
+  /// Public fast read — returns the locally-cached user without any network
+  /// call.  Used by AuthWrapperWithFCM on startup so the dashboard shows
+  /// immediately on web reload.
+  Future<UserEntity?> getStoredUserFast() => _getStoredUserData();
 
   Future<void> _clearStoredUserData() async {
     try {

@@ -23,6 +23,14 @@ abstract class AuthRepository {
     String? name,
     required String role,
     String? phoneNumber,
+    String? companyName,
+    String? department,
+    String? employeeId,
+    String? branch,
+    String? designation,
+    String? altPhoneNumber,
+    String? emergencyContactName,
+    String? emergencyContactPhone,
   });
 
   /// Signs in with the provided [email] and [password].

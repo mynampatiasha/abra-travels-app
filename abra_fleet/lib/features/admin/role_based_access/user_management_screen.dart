@@ -6,6 +6,7 @@ import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:abra_fleet/app/config/api_config.dart';
 import 'package:abra_fleet/features/admin/role_based_access/user_permission_dialog.dart';
+import 'package:abra_fleet/core/widgets/permission_restricted_dialog.dart';
 
 class UserManagementScreen extends StatefulWidget {
   const UserManagementScreen({super.key});
@@ -81,6 +82,13 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
   }
 
   Future<void> _showEditPermissionsDialog(Map<String, dynamic> user) async {
+    final canEdit = await PermissionRestrictedDialog.checkAndWarn(
+      context,
+      permissionKey: 'role_access_control',
+      moduleName: 'user permissions',
+    );
+    if (!canEdit) return;
+
     // Handle both 'id' and '_id' fields from different API endpoints
     final userId = user['id']?.toString() ?? user['_id']?.toString();
     
@@ -106,6 +114,13 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
   }
 
   Future<void> _deleteUser(Map<String, dynamic> user) async {
+    final canDelete = await PermissionRestrictedDialog.checkAndWarn(
+      context,
+      permissionKey: 'role_access_control',
+      moduleName: 'user roles',
+    );
+    if (!canDelete) return;
+
     // Handle both 'id' and '_id' fields from different API endpoints
     final userId = user['id']?.toString() ?? user['_id']?.toString();
     final userName = user['name_parson']?.toString() ?? user['name']?.toString() ?? 'Unknown User';

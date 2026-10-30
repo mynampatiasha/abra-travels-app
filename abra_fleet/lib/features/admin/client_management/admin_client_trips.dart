@@ -11,6 +11,7 @@ import 'package:abra_fleet/core/utils/export_helper.dart';
 import 'package:intl/intl.dart';
 import 'package:country_state_city/country_state_city.dart' as csc;
 import 'package:abra_fleet/features/admin/admin_live_location_whole_vehicles.dart';
+import 'package:abra_fleet/features/admin/widgets/country_state_city_filter.dart';
 
 class AdminClientTripsPage extends StatefulWidget {
   const AdminClientTripsPage({Key? key}) : super(key: key);
@@ -952,32 +953,7 @@ class _AdminClientTripsPageState extends State<AdminClientTripsPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.grey.shade50,
-      appBar: AppBar(
-        elevation: 0,
-        backgroundColor: const Color(0xFF1A237E),
-        title: const Text(
-          'Client Trip Requests',
-          style: TextStyle(
-              fontSize: 20, fontWeight: FontWeight.w600, letterSpacing: 0.5),
-        ),
-        centerTitle: true,
-        actions: [
-          // Auto refresh indicator
-          Padding(
-            padding: const EdgeInsets.only(right: 4),
-            child: Tooltip(
-              message: 'Auto-refreshing every 20s',
-              child: Icon(Icons.sync,
-                  color: Colors.white.withOpacity(0.7), size: 18),
-            ),
-          ),
-          IconButton(
-            icon: const Icon(Icons.refresh),
-            onPressed: () => _loadTrips(),
-            tooltip: 'Refresh Now',
-          ),
-        ],
-      ),
+
       body: _isLoading
           ? _buildLoadingState()
           : _errorMessage != null
@@ -1014,7 +990,7 @@ class _AdminClientTripsPageState extends State<AdminClientTripsPage> {
             child: Icon(Icons.error_outline,
                 size: 64, color: Colors.red.shade700),
           ),
-          const SizedBox(height: 24),
+            const SizedBox(height: 24),
           Text('Failed to Load Trips',
               style: TextStyle(
                   fontSize: 20,
@@ -1044,147 +1020,198 @@ class _AdminClientTripsPageState extends State<AdminClientTripsPage> {
   }
 
   Widget _buildBody() {
-    return Column(children: [
-      // ── NEW: Row 1 — Location & Date filters ──────────────────────────────
-      _AdminCscFilterRow(
-        fromDate: _fromDate,
-        toDate: _toDate,
-        country: _filterCountry,
-        state: _filterState,
-        city: _filterCity,
-        localArea: _filterLocalArea,
-        onChanged: (filters) {
-          setState(() {
-            _fromDate      = filters['fromDate'];
-            _toDate        = filters['toDate'];
-            _filterCountry = filters['country'];
-            _filterState   = filters['state'];
-            _filterCity    = filters['city'];
-            _filterLocalArea = filters['localArea'];
-          });
-          _applyFilter();
-        },
-      ),
-      // ── NEW: Row 2 — Search + Status chips + Export ───────────────────────
-      _buildRow2(),
-      // ── Existing stats cards ──────────────────────────────────────────────
-      _buildStatsCards(),
-      Expanded(
-        child: _filteredTrips.isEmpty
+    return SingleChildScrollView(
+      physics: const BouncingScrollPhysics(),
+      child: Column(children: [
+        _buildTopBar(),
+        _buildFiltersSection(),
+        _buildStatsCards(),
+        _filteredTrips.isEmpty
             ? _buildEmptyState()
             : _buildTripsTable(),
-      ),
-    ]);
-  }
-
-  // ── NEW: Row 2 widget ─────────────────────────────────────────────────────
-  Widget _buildRow2() {
-    return Container(
-      color: Colors.white,
-      padding: const EdgeInsets.fromLTRB(16, 8, 16, 10),
-      child: Row(children: [
-        // Search bar
-        SizedBox(
-          width: 240,
-          height: 40,
-          child: TextField(
-            controller: _searchController,
-            style: const TextStyle(fontSize: 15),
-            decoration: InputDecoration(
-              hintText: 'Search trip, client, driver…',
-              hintStyle:
-                  TextStyle(fontSize: 15, color: Colors.grey.shade500),
-              prefixIcon: const Icon(Icons.search, size: 18),
-              suffixIcon: _searchQuery.isNotEmpty
-                  ? IconButton(
-                      icon: const Icon(Icons.clear, size: 16),
-                      onPressed: () {
-                        _searchController.clear();
-                        setState(() => _searchQuery = '');
-                        _applyFilter();
-                      })
-                  : null,
-              contentPadding:
-                  const EdgeInsets.symmetric(vertical: 0, horizontal: 12),
-              border:
-                  OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-              filled: true,
-              fillColor: Colors.grey.shade50,
-            ),
-            onChanged: (v) {
-              setState(() => _searchQuery = v.toLowerCase());
-              _applyFilter();
-            },
-          ),
-        ),
-        const SizedBox(width: 12),
-        // Status filter chips
-        Expanded(
-          child: SizedBox(
-            height: 40,
-            child: ListView.builder(
-              scrollDirection: Axis.horizontal,
-              itemCount: _filterOptions.length,
-              itemBuilder: (context, index) {
-                final filter = _filterOptions[index];
-                final isSelected = _selectedFilter == filter;
-                return Padding(
-                  padding: const EdgeInsets.only(right: 8),
-                  child: FilterChip(
-                    label: Text(filter,
-                        style: TextStyle(
-                            fontWeight: FontWeight.w600,
-                            fontSize: 15,
-                            color: isSelected
-                                ? Colors.white
-                                : const Color(0xFF424242))),
-                    selected: isSelected,
-                    onSelected: (selected) {
-                      setState(() {
-                        _selectedFilter = filter;
-                        _applyFilter();
-                      });
-                    },
-                    selectedColor: const Color(0xFF1A237E),
-                    backgroundColor: Colors.grey.shade100,
-                    checkmarkColor: Colors.white,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(20),
-                      side: BorderSide(
-                        color: isSelected
-                            ? const Color(0xFF1A237E)
-                            : Colors.grey.shade300,
-                        width: isSelected ? 2 : 1,
-                      ),
-                    ),
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 8, vertical: 2),
-                  ),
-                );
-              },
-            ),
-          ),
-        ),
-        const SizedBox(width: 12),
-        // Export Excel button
-        ElevatedButton.icon(
-          onPressed: _isLoading ? null : _exportToExcel,
-          icon: const Icon(Icons.file_download, size: 18),
-          label: const Text('Export Excel',
-              style:
-                  TextStyle(fontSize: 13, fontWeight: FontWeight.w700)),
-          style: ElevatedButton.styleFrom(
-            backgroundColor: const Color(0xFF27AE60),
-            foregroundColor: Colors.white,
-            padding:
-                const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-            shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(8)),
-          ),
-        ),
       ]),
     );
   }
+
+
+  Widget _buildTopBar() {
+    return Container(
+      padding: const EdgeInsets.all(20),
+      color: Colors.white,
+      decoration: BoxDecoration(
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 4,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          IconButton(
+            icon: const Icon(Icons.arrow_back, color: Color(0xFF1A237E), size: 28),
+            onPressed: () => Navigator.of(context).pop(),
+            tooltip: 'Back',
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(),
+          ),
+          const SizedBox(width: 16),
+          const Icon(Icons.description, color: Color(0xFF1A237E), size: 32),
+          const SizedBox(width: 12),
+          const Text(
+            'Client Trip Requests',
+            style: TextStyle(
+              fontSize: 24,
+              fontWeight: FontWeight.bold,
+              color: Color(0xFF1A237E),
+            ),
+          ),
+          const Spacer(),
+          // Status Dropdown
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            height: 44,
+            decoration: BoxDecoration(
+              border: Border.all(color: Colors.grey.shade300),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: DropdownButtonHideUnderline(
+              child: DropdownButton<String>(
+                value: _selectedFilter,
+                icon: const Icon(Icons.arrow_drop_down),
+                items: _filterOptions.map((String option) {
+                  return DropdownMenuItem<String>(
+                    value: option,
+                    child: Text(option == 'All' ? 'All Requests' : option,
+                        style: const TextStyle(fontWeight: FontWeight.w500)),
+                  );
+                }).toList(),
+                onChanged: (String? newValue) {
+                  if (newValue != null) {
+                    setState(() {
+                      _selectedFilter = newValue;
+                      _applyFilter();
+                    });
+                  }
+                },
+              ),
+            ),
+          ),
+          const SizedBox(width: 16),
+          // Search Bar
+          Container(
+            width: 300,
+            height: 44,
+            decoration: BoxDecoration(
+              color: Colors.grey.shade50,
+              border: Border.all(color: Colors.grey.shade300),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: TextField(
+              controller: _searchController,
+              decoration: InputDecoration(
+                hintText: 'Search requests...',
+                hintStyle: TextStyle(color: Colors.grey.shade400, fontSize: 14),
+                prefixIcon: const Icon(Icons.search, color: Colors.grey),
+                border: InputBorder.none,
+                contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              ),
+              onChanged: (v) {
+                setState(() => _searchQuery = v.toLowerCase());
+                _applyFilter();
+              },
+            ),
+          ),
+          const SizedBox(width: 16),
+          // Refresh Button
+          Container(
+            height: 44,
+            width: 44,
+            decoration: BoxDecoration(
+              color: Colors.grey.shade100,
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: IconButton(
+              icon: const Icon(Icons.refresh, color: Color(0xFF1A237E)),
+              onPressed: _loadTrips,
+              tooltip: 'Refresh',
+            ),
+          ),
+          const SizedBox(width: 16),
+          // Export Button
+          SizedBox(
+            height: 44,
+            child: ElevatedButton.icon(
+              onPressed: _exportToExcel,
+              icon: const Icon(Icons.download, size: 18),
+              label: const Text('Export Excel',
+                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF2E7D32),
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                elevation: 0,
+                padding: const EdgeInsets.symmetric(horizontal: 20),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildFiltersSection() {
+    return Container(
+      margin: const EdgeInsets.fromLTRB(24, 24, 24, 0),
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.grey.shade200),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.filter_list, size: 20, color: Colors.grey.shade700),
+              const SizedBox(width: 8),
+              Text(
+                'Filters',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.grey.shade800,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          CountryStateCityFilter(
+            initialFromDate: _fromDate,
+            initialToDate: _toDate,
+            initialCountry: _filterCountry,
+            initialState: _filterState,
+            initialCity: _filterCity,
+            initialLocalArea: _filterLocalArea,
+            onFilterApplied: (filters) {
+              setState(() {
+                _fromDate = filters['fromDate'];
+                _toDate = filters['toDate'];
+                _filterCountry = filters['country'];
+                _filterState = filters['state'];
+                _filterCity = filters['city'];
+                _filterLocalArea = filters['localArea'];
+              });
+              _applyFilter();
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
 
   Widget _buildStatsCards() {
     final total = _allTrips.length;
@@ -1310,154 +1337,144 @@ class _AdminClientTripsPageState extends State<AdminClientTripsPage> {
       margin: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(10),
         boxShadow: [
           BoxShadow(
-              color: Colors.black.withOpacity(0.06),
-              blurRadius: 12,
-              offset: const Offset(0, 3)),
+            color: Colors.black.withOpacity(0.06),
+            blurRadius: 12,
+            offset: const Offset(0, 3),
+          ),
         ],
       ),
-      child: Column(children: [
-        // ── HEADER ──
-        Container(
-          decoration: const BoxDecoration(
-            color: Color(0xFF1A237E),
-            borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-          ),
-          child: SingleChildScrollView(
-            controller: _headerScrollController,
-            scrollDirection: Axis.horizontal,
-            physics: const ClampingScrollPhysics(),
-            child: Row(children: [
-              _headerCell('Trip #', _colTripNum),
-              _headerCell('Client', _colClient),
-              _headerCell('Phone', _colPhone),
-              _headerCell('Pickup', _colPickup),
-              _headerCell('Drop', _colDrop),
-              _headerCell('Dist.', _colDist),
-              _headerCell('Scheduled Time', _colTime),
-              _headerCell('Status', _colStatus),
-              _headerCell('Driver Response', _colDriverResp),
-              _headerCell('Driver', _colDriver),
-              _headerCell('Vehicle', _colVehicle),
-              _headerCell('Actions', _colActions),
-            ]),
-          ),
+      child: ScrollConfiguration(
+        behavior: ScrollConfiguration.of(context).copyWith(
+          dragDevices: {
+            PointerDeviceKind.touch,
+            PointerDeviceKind.mouse,
+            PointerDeviceKind.trackpad,
+            PointerDeviceKind.stylus,
+          },
         ),
-        // ── BODY ── (NEW: Wrapped in SingleChildScrollView for unified horizontal scroll)
-        Expanded(
-          child: Listener(
-            onPointerSignal: (event) {
-              if (event is PointerScrollEvent) {
-                // Handle horizontal scroll with mouse/trackpad
-                if (event.scrollDelta.dx != 0 && _bodyScrollController.hasClients) {
-                  final newOffset = (_bodyScrollController.offset + event.scrollDelta.dx)
-                      .clamp(0.0, _bodyScrollController.position.maxScrollExtent);
-                  _bodyScrollController.jumpTo(newOffset);
-                }
-              }
-            },
-            child: Scrollbar(
-              controller: _bodyScrollController,
-              child: SingleChildScrollView(
-                controller: _bodyScrollController,
-                scrollDirection: Axis.horizontal,
-                physics: const ClampingScrollPhysics(),
-                child: SizedBox(
-                  width: _colTripNum + _colClient + _colPhone + _colPickup + 
-                         _colDrop + _colDist + _colTime + _colStatus + 
-                         _colDriverResp + _colDriver + _colVehicle + _colActions,
-                  child: ListView.builder(
-                    padding: EdgeInsets.zero,
-                    itemCount: _filteredTrips.length,
-                    itemBuilder: (context, index) {
-                      return _buildTableRow(_filteredTrips[index], index);
-                    },
+        child: RawScrollbar(
+          controller: _bodyScrollController,
+          thumbVisibility: true,
+          trackVisibility: true,
+          thickness: 10,
+          radius: const Radius.circular(5),
+          thumbColor: const Color(0xFF1A3FC4),
+          trackColor: const Color(0xFFE2E8F0),
+          trackRadius: const Radius.circular(5),
+          scrollbarOrientation: ScrollbarOrientation.bottom,
+          child: SingleChildScrollView(
+            controller: _bodyScrollController,
+            scrollDirection: Axis.horizontal,
+            physics: const BouncingScrollPhysics(),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(minWidth: 1200),
+              child: MouseRegion(
+                cursor: SystemMouseCursors.grab,
+                child: DataTable(
+                  border: const TableBorder(
+                    horizontalInside: BorderSide(color: Color(0xFFE2E8F0), width: 1),
+                    verticalInside: BorderSide(color: Color(0xFFE2E8F0), width: 1),
+                    top: BorderSide(color: Color(0xFF0F2557), width: 1),
+                    bottom: BorderSide(color: Color(0xFFE2E8F0), width: 1.5),
+                    left: BorderSide(color: Color(0xFFE2E8F0), width: 1),
+                    right: BorderSide(color: Color(0xFFE2E8F0), width: 1),
                   ),
+                  columnSpacing: 24,
+                  horizontalMargin: 20,
+                  headingRowHeight: 56,
+                  dataRowMinHeight: 60,
+                  dataRowMaxHeight: 64,
+                  headingRowColor: WidgetStateProperty.all(
+                    const Color(0xFF1A237E),
+                  ),
+                  headingTextStyle: const TextStyle(
+                    fontWeight: FontWeight.w700,
+                    fontSize: 13,
+                    color: Colors.white,
+                    letterSpacing: 0.5,
+                  ),
+                  dataRowColor: WidgetStateProperty.resolveWith<Color>((states) {
+                    if (states.contains(WidgetState.hovered)) {
+                      return const Color(0xFF1A237E).withOpacity(0.04);
+                    }
+                    return Colors.white;
+                  }),
+                  columns: const [
+                    DataColumn(label: SizedBox(width: 120, child: Text('TRIP #'))),
+                    DataColumn(label: SizedBox(width: 150, child: Text('CLIENT'))),
+                    DataColumn(label: SizedBox(width: 130, child: Text('PHONE'))),
+                    DataColumn(label: SizedBox(width: 200, child: Text('PICKUP'))),
+                    DataColumn(label: SizedBox(width: 200, child: Text('DROP'))),
+                    DataColumn(label: SizedBox(width: 90, child: Text('DIST.'))),
+                    DataColumn(label: SizedBox(width: 160, child: Text('SCHEDULED TIME'))),
+                    DataColumn(label: SizedBox(width: 140, child: Text('STATUS'))),
+                    DataColumn(label: SizedBox(width: 140, child: Text('DRIVER RESP.'))),
+                    DataColumn(label: SizedBox(width: 150, child: Text('DRIVER'))),
+                    DataColumn(label: SizedBox(width: 120, child: Text('VEHICLE'))),
+                    DataColumn(label: SizedBox(width: 180, child: Text('ACTIONS'))),
+                  ],
+                  rows: _filteredTrips.map((trip) {
+                    final status = trip['status']?.toString().toLowerCase() ?? '';
+                    final adminConfirmed = trip['adminConfirmed'] == true;
+                    final driverResponse = trip['driverResponse']?.toString();
+
+                    return DataRow(
+                      cells: [
+                        DataCell(
+                          InkWell(
+                            onTap: () => _showTripHistory(trip),
+                            child: Text(
+                              trip['tripNumber'] ?? 'N/A',
+                              style: const TextStyle(fontWeight: FontWeight.w700, color: Color(0xFF1A237E), fontSize: 14),
+                            ),
+                          ),
+                        ),
+                        DataCell(
+                          Text(trip['clientName'] ?? 'N/A', style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
+                        ),
+                        DataCell(
+                          Text(trip['clientPhone'] ?? 'N/A', style: const TextStyle(fontSize: 14)),
+                        ),
+                        DataCell(
+                          Text(trip['pickupLocation']?['address'] ?? 'N/A', maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 14)),
+                        ),
+                        DataCell(
+                          Text(trip['dropLocation']?['address'] ?? 'N/A', maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 14)),
+                        ),
+                        DataCell(
+                          Text(
+                            trip['distance'] != null ? '${(trip['distance'] as num).toStringAsFixed(1)} km' : 'N/A',
+                            style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
+                          ),
+                        ),
+                        DataCell(
+                          Text(_formatDateTime(trip['scheduledPickupTime']), style: const TextStyle(fontSize: 14)),
+                        ),
+                        DataCell(
+                          Align(alignment: Alignment.centerLeft, child: _statusCell(status, _colStatus, adminConfirmed: adminConfirmed)),
+                        ),
+                        DataCell(
+                          Align(alignment: Alignment.centerLeft, child: _driverResponseCell(driverResponse, _colDriverResp)),
+                        ),
+                        DataCell(
+                          Text(trip['driverName'] ?? '—', style: TextStyle(color: trip['driverName'] != null ? const Color(0xFF212121) : Colors.grey.shade400, fontSize: 14)),
+                        ),
+                        DataCell(
+                          Text(trip['vehicleNumber'] ?? '—', style: TextStyle(color: trip['vehicleNumber'] != null ? const Color(0xFF212121) : Colors.grey.shade400, fontSize: 14)),
+                        ),
+                        DataCell(
+                          Align(alignment: Alignment.centerLeft, child: _actionsCell(trip, status, adminConfirmed, _colActions)),
+                        ),
+                      ],
+                    );
+                  }).toList(),
                 ),
               ),
             ),
           ),
-        ),
-      ]),
-    );
-  }
-
-  Widget _headerCell(String title, double width) {
-    return Container(
-      width: width,
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
-      child: Text(title,
-          style: const TextStyle(
-              fontSize: 15,
-              fontWeight: FontWeight.bold,
-              color: Colors.white,
-              letterSpacing: 0.3)),
-    );
-  }
-
-  Widget _buildTableRow(Map<String, dynamic> trip, int index) {
-    final isEven = index % 2 == 0;
-    final status = trip['status']?.toString().toLowerCase() ?? '';
-    final adminConfirmed = trip['adminConfirmed'] == true;
-    final driverResponse = trip['driverResponse']?.toString();
-
-    return MouseRegion(
-      cursor: SystemMouseCursors.click,
-      child: InkWell(
-        onTap: () => _showTripHistory(trip),
-        hoverColor: const Color(0xFF1A237E).withOpacity(0.04),
-        child: Container(
-          decoration: BoxDecoration(
-            color: isEven ? Colors.grey.shade50 : Colors.white,
-            border: Border(
-                bottom: BorderSide(color: Colors.grey.shade200, width: 1)),
-          ),
-          child: Row(children: [
-            // Trip Number
-            _cell(trip['tripNumber'] ?? 'N/A', _colTripNum,
-                fontWeight: FontWeight.w700,
-                color: const Color(0xFF1A237E),
-                fontSize: 15),
-            // Client
-            _cell(trip['clientName'] ?? 'N/A', _colClient,
-                fontWeight: FontWeight.w600),
-            // Phone
-            _cell(trip['clientPhone'] ?? 'N/A', _colPhone),
-            // Pickup
-            _cell(trip['pickupLocation']?['address'] ?? 'N/A', _colPickup,
-                maxLines: 2, fontSize: 15),
-            // Drop
-            _cell(trip['dropLocation']?['address'] ?? 'N/A', _colDrop,
-                maxLines: 2, fontSize: 15),
-            // Distance
-            _cell(
-                trip['distance'] != null
-                    ? '${(trip['distance'] as num).toStringAsFixed(1)} km'
-                    : 'N/A',
-                _colDist,
-                fontWeight: FontWeight.w600),
-            // Scheduled Time
-            _cell(_formatDateTime(trip['scheduledPickupTime']), _colTime,
-                fontSize: 15),
-            // Status Badge
-            _statusCell(status, _colStatus, adminConfirmed: adminConfirmed),
-            // Driver Response
-            _driverResponseCell(driverResponse, _colDriverResp),
-            // Driver
-            _cell(trip['driverName'] ?? '—', _colDriver,
-                color: trip['driverName'] != null
-                    ? const Color(0xFF212121)
-                    : Colors.grey.shade400),
-            // Vehicle
-            _cell(trip['vehicleNumber'] ?? '—', _colVehicle,
-                color: trip['vehicleNumber'] != null
-                    ? const Color(0xFF212121)
-                    : Colors.grey.shade400),
-            // Actions — NEW: WhatsApp icon added
-            _actionsCell(trip, status, adminConfirmed, _colActions),
-          ]),
         ),
       ),
     );

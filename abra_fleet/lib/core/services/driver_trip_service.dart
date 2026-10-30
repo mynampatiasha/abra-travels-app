@@ -132,9 +132,9 @@ class DriverTripService {
     }
   }
 
-  Future<void> markArrived({
-  required String tripGroupId,  // ✅ NEW: Need tripGroupId
-  required String stopId,        // ✅ This is the stopId
+  Future<Map<String, dynamic>> markArrived({
+  required String tripGroupId,
+  required String stopId,
   double? latitude,
   double? longitude,
 }) async {
@@ -142,8 +142,7 @@ class DriverTripService {
     print('📍 Marking arrival at stop: $stopId');
     print('   Trip Group: $tripGroupId');
     
-    // ✅ NEW: Use tripGroupId/stop/stopId/arrive endpoint
-    await _apiService.post(
+    final response = await _apiService.post(
       '/api/driver/trips/$tripGroupId/stop/$stopId/arrive',
       body: {
         if (latitude != null) 'latitude': latitude,
@@ -151,6 +150,7 @@ class DriverTripService {
       },
     );
     print('✅ Marked as arrived');
+    return response;
   } catch (e) {
     print('❌ Error marking arrival: $e');
     rethrow;

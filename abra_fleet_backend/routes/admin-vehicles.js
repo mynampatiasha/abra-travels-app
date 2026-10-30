@@ -593,7 +593,17 @@ router.post('/', validateVehicle, handleValidationErrors, async (req, res) => {
       
       currentLocation: {
         type: 'Point',
-        coordinates: [77.5946, 12.9716] // Default to Bangalore
+        coordinates: [
+          req.body.depotLng ? parseFloat(req.body.depotLng) : 77.5946, 
+          req.body.depotLat ? parseFloat(req.body.depotLat) : 12.9716
+        ]
+      },
+      depotLocation: {
+        type: 'Point',
+        coordinates: [
+          req.body.depotLng ? parseFloat(req.body.depotLng) : 77.5946, 
+          req.body.depotLat ? parseFloat(req.body.depotLat) : 12.9716
+        ]
       },
       assignedDriver: null,
       assignedCustomers: [],
@@ -844,8 +854,26 @@ router.put('/:id', [
     if (req.body.state !== undefined) {
       updateData.state = req.body.state;
     }
-    if (req.body.city !== undefined) {
+    if (req.body.city) {
       updateData.city = req.body.city;
+    }
+
+    if (req.body.depotLat !== undefined || req.body.depotLng !== undefined) {
+      // Create new coordinate array, preserving existing values if one is omitted
+      const currentLat = existingVehicle.depotLocation?.coordinates?.[1] || 12.9716;
+      const currentLng = existingVehicle.depotLocation?.coordinates?.[0] || 77.5946;
+      const newLat = req.body.depotLat ? parseFloat(req.body.depotLat) : currentLat;
+      const newLng = req.body.depotLng ? parseFloat(req.body.depotLng) : currentLng;
+      
+      updateData.depotLocation = {
+        type: 'Point',
+        coordinates: [newLng, newLat]
+      };
+      // Also sync it to currentLocation so other services see it immediately
+      updateData.currentLocation = {
+        type: 'Point',
+        coordinates: [newLng, newLat]
+      };
     }
 
     // ✅ SEATING CAPACITY - Store in ALL formats for compatibility

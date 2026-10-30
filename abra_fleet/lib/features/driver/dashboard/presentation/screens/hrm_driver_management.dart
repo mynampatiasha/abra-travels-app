@@ -203,10 +203,77 @@ class _HrmDriverManagementScreenState
     final url = _buildUrl(raw);
 
     if (kIsWeb) {
+      // ✅ Attendance needs camera — open as top-level page (new tab)
+      // Cross-origin iframes block getUserMedia() in Chrome 88+ regardless of allow attribute
+      if (_currentFeature == 'attendance') {
+        _openAttendanceInNewTab(url);
+        return _buildNewTabPlaceholder(url);
+      }
       return _buildInlineIframe(url);
     } else {
       return _buildInlineWebView(url);
     }
+  }
+
+  void _openAttendanceInNewTab(String url) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (kIsWeb) {
+        try {
+          openUrlInNewTab(url);
+        } catch (_) {}
+      }
+    });
+  }
+
+  Widget _buildNewTabPlaceholder(String url) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(32),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Container(
+              width: 80, height: 80,
+              decoration: BoxDecoration(
+                color: const Color(0xFFFFF3E0),
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: const Icon(Icons.open_in_new, size: 40, color: Color(0xFFE65100)),
+            ),
+            const SizedBox(height: 24),
+            const Text(
+              'Attendance Opened',
+              style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800, color: Color(0xFF1A237E)),
+            ),
+            const SizedBox(height: 12),
+            const Text(
+              'The Attendance page has opened in a new tab.\nCamera access works correctly there.',
+              textAlign: TextAlign.center,
+              style: TextStyle(fontSize: 14, color: Colors.grey, height: 1.5),
+            ),
+            const SizedBox(height: 28),
+            ElevatedButton.icon(
+              onPressed: () {
+                try { openUrlInNewTab(url); } catch (_) {}
+              },
+              icon: const Icon(Icons.open_in_new),
+              label: const Text('Open Again'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF0D47A1),
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              ),
+            ),
+            const SizedBox(height: 16),
+            TextButton(
+              onPressed: _goBackToMenu,
+              child: const Text('← Back to HRM Menu', style: TextStyle(color: Color(0xFF0D47A1), fontWeight: FontWeight.w700)),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   // ── Inline iframe — WEB ──────────────────────────────────────────────────

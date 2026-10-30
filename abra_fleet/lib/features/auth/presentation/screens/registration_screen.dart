@@ -134,21 +134,32 @@ class _RegistrationScreenState extends State<RegistrationScreen>
     try {
       final authRepository = Provider.of<AuthRepository>(context, listen: false);
       String? phone = _phoneCtrl.text.trim();
-      if (phone.isNotEmpty && !phone.startsWith('+')) phone = '+91$phone';
-
       await authRepository.signUp(
-        email:       _emailCtrl.text.trim(),
-        password:    _passwordCtrl.text.trim(),
-        name:        _nameCtrl.text.trim(),
-        role:        _selectedRole!.toLowerCase().trim(),
-        phoneNumber: phone,
+        email:                 _emailCtrl.text.trim(),
+        password:              _passwordCtrl.text.trim(),
+        name:                  _nameCtrl.text.trim(),
+        role:                  _selectedRole!.toLowerCase().trim(),
+        phoneNumber:           phone,
+        companyName:           _companyNameCtrl.text.trim(),
+        department:            _deptSearchCtrl.text.trim(),
+        employeeId:            _employeeIdCtrl.text.trim(),
+        branch:                _branchSearchCtrl.text.trim(),
+        designation:           _designationCtrl.text.trim(),
+        altPhoneNumber:        _altPhoneCtrl.text.trim(),
+        emergencyContactName:  _emergencyNameCtrl.text.trim(),
+        emergencyContactPhone: _emergencyPhoneCtrl.text.trim(),
       );
 
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-          content: Text('Account created! You can now sign in.'),
+        final isCustomer = _selectedRole!.toLowerCase().trim() == 'customer';
+        final successMsg = isCustomer
+            ? 'Registration submitted! Your account is pending admin approval.'
+            : 'Account created! You can now sign in.';
+            
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(successMsg),
           backgroundColor: Colors.green,
-          duration: Duration(seconds: 4),
+          duration: const Duration(seconds: 4),
         ));
         Navigator.of(context).pop();
       }

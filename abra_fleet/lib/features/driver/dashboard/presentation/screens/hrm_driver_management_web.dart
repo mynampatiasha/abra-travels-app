@@ -15,15 +15,22 @@ void registerWebViewFactory(String viewId, String url) {
         ..style.border = 'none'
         ..style.width = '100%'
         ..style.height = '100%'
-        ..allow = 'fullscreen';
+        ..allow = 'camera *; microphone *; geolocation *; fullscreen *'
+        ..setAttribute('allowfullscreen', 'true')
+        ..setAttribute('allowusermedia', 'true');
       return iframe;
     },
   );
 }
 
 /// Builds an HtmlElementView for the given viewType
+/// Wrapped in FocusScope to prevent Flutter's ReadingOrderTraversalPolicy
+/// from entering the iframe and crashing on null DOM nodes.
 Widget buildHtmlElementView(String viewType) {
-  return HtmlElementView(viewType: viewType);
+  return FocusScope(
+    canRequestFocus: false,
+    child: HtmlElementView(viewType: viewType),
+  );
 }
 
 /// Opens a URL in a new browser tab

@@ -1,10 +1,16 @@
 import 'package:flutter/material.dart';
 import 'dart:async';
+import 'dart:convert';
+import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:onesignal_flutter/onesignal_flutter.dart';
+import 'package:firebase_messaging/firebase_messaging.dart'; // 🔥 NEW: FCM for instant notifications
 
 // ✅ IMPORT NOTIFICATION SERVICE & SCREEN
 import 'package:abra_fleet/core/services/notification_service.dart';
+import 'package:abra_fleet/core/services/floating_notification_service.dart';
+import 'package:abra_fleet/core/services/fcm_service.dart'; // 🔥 NEW: FCM Service
+import 'package:abra_fleet/app/config/api_config.dart';
 import 'package:abra_fleet/features/notifications/presentation/screens/driver_notifications_screen.dart';
 
 // ✅ IMPORT ONESIGNAL SERVICE
@@ -37,8 +43,16 @@ class _DriverMainShellState extends State<DriverMainShell> {
 
   // ✅ Notification Variables
   final NotificationService _notificationService = NotificationService();
+  final FloatingNotificationService _floatingNotificationService = FloatingNotificationService();
   StreamSubscription<Map<String, dynamic>>? _notificationSubscription;
+  StreamSubscription<RemoteMessage>? _fcmSubscription; // 🔥 NEW: FCM stream subscription
+  Timer? _notificationPollTimer;
+  String? _lastSeenNotificationId; // tracks newest notification we've shown
   bool _notificationsInitialized = false;
+  
+  // 🔥 NEW: Track processed notification IDs to prevent duplicates
+  final Set<String> _processedNotificationIds = {};
+  static const int _maxProcessedIds = 100;
 
   // ─────────────────────────────────────────────────────────────────────────
   //  Bottom nav tap-index  ↔  IndexedStack slot  (exact 1-to-1 mapping)
@@ -163,16 +177,93 @@ class _DriverMainShellState extends State<DriverMainShell> {
     try {
       await _notificationService.initialize();
 
+      // 🔥 NEW: FCM LISTENER — Instant push notification delivery (PRIMARY)
+      // This catches notifications sent via Firebase Cloud Messaging
+      // Shows floating banner IMMEDIATELY when notification arrives
+      debugPrint('\n' + '🔥' * 50);
+      debugPrint('🔥 INITIALIZING FCM LISTENER FOR DRIVER');
+      debugPrint('🔥' * 50);
+      
+      _fcmSubscription = FirebaseMessaging.onMessage.listen((RemoteMessage message) {
+        if (!mounted) return;
+        
+        debugPrint('📩 FCM MESSAGE RECEIVED IN DRIVER APP');
+        debugPrint('   Title: ${message.notification?.title}');
+        debugPrint('   Body: ${message.notification?.body}');
+        debugPrint('   Data: ${message.data}');
+        
+        // Create notification object
+        final notification = {
+          'id': message.messageId ?? DateTime.now().millisecondsSinceEpoch.toString(),
+          'title': message.notification?.title ?? 'New Notification',
+          'message': message.notification?.body ?? '',
+          'body': message.notification?.body ?? '',
+          'type': message.data['type'] ?? 'general',
+          'priority': message.data['priority'] ?? 'normal',
+          'data': message.data,
+          'createdAt': DateTime.now().toIso8601String(),
+        };
+        
+        // Check for duplicates
+        final notificationId = notification['id'] as String;
+        if (_processedNotificationIds.contains(notificationId)) {
+          debugPrint('⚠️  Duplicate notification detected, skipping: $notificationId');
+          return;
+        }
+        
+        // Mark as processed
+        _processedNotificationIds.add(notificationId);
+        _cleanupProcessedIds();
+        
+        // 🔥 SHOW FLOATING BANNER IMMEDIATELY
+        debugPrint('🎨 Showing floating banner via FCM...');
+        _showFloatingBanner(notification);
+        
+        // Show specific dialogs for certain types
+        if (notification['type'] == 'vehicle_assigned') {
+          _showVehicleAssignedDialog(notification);
+        } else if (notification['type'] == 'trip_assigned') {
+          _showTripAssignedDialog(notification);
+        }
+        
+        debugPrint('✅ FCM notification processed successfully');
+      });
+      
+      debugPrint('✅ FCM listener initialized');
+      debugPrint('🔥' * 50 + '\n');
+
+      // OneSignal stream — handles push-delivered notifications (SECONDARY)
+      // Kept for backward compatibility and other notification types
       _notificationSubscription =
           _notificationService.onNewNotification.listen((notification) {
-        if (mounted) {
-          if (notification['type'] == 'vehicle_assigned') {
-            _showVehicleAssignedDialog(notification);
-          } else if (notification['type'] == 'trip_assigned') {
-            _showTripAssignedDialog(notification);
-          }
+        if (!mounted) return;
+        
+        // Check for duplicates
+        final notificationId = (notification['id'] ?? 
+                               notification['_id'] ?? 
+                               DateTime.now().millisecondsSinceEpoch.toString()).toString();
+        
+        if (_processedNotificationIds.contains(notificationId)) {
+          debugPrint('⚠️  Duplicate notification from OneSignal, skipping: $notificationId');
+          return;
+        }
+        
+        _processedNotificationIds.add(notificationId);
+        _cleanupProcessedIds();
+        
+        _showFloatingBanner(notification);
+        // Keep existing specific dialogs
+        if (notification['type'] == 'vehicle_assigned') {
+          _showVehicleAssignedDialog(notification);
+        } else if (notification['type'] == 'trip_assigned') {
+          _showTripAssignedDialog(notification);
         }
       });
+
+      // 🔔 Polling fallback — catches notifications sent via FCM/backend directly (TERTIARY)
+      // Polls every 8 seconds, shows banner for any notification newer than last seen
+      // This is now a backup mechanism in case FCM fails
+      _startNotificationPoller();
 
       if (mounted) {
         setState(() {
@@ -182,6 +273,126 @@ class _DriverMainShellState extends State<DriverMainShell> {
     } catch (e) {
       debugPrint('Error initializing notifications: $e');
     }
+  }
+  
+  // 🔥 NEW: Cleanup processed notification IDs to prevent memory leak
+  void _cleanupProcessedIds() {
+    if (_processedNotificationIds.length > _maxProcessedIds) {
+      final excess = _processedNotificationIds.length - _maxProcessedIds;
+      final idsToRemove = _processedNotificationIds.take(excess).toList();
+      _processedNotificationIds.removeAll(idsToRemove);
+      debugPrint('🧹 Cleaned up $excess old notification IDs');
+    }
+  }
+
+  // ── Notification poller ───────────────────────────────────────────────────
+
+  void _startNotificationPoller() {
+    _notificationPollTimer?.cancel();
+    _notificationPollTimer = Timer.periodic(
+      const Duration(seconds: 8),
+      (_) => _pollForNewNotifications(),
+    );
+    // Run once immediately after a short delay
+    Future.delayed(const Duration(seconds: 2), _pollForNewNotifications);
+  }
+
+  Future<void> _pollForNewNotifications() async {
+    if (!mounted) return;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final token = prefs.getString('jwt_token');
+      if (token == null) return;
+
+      final response = await http.get(
+        Uri.parse('${ApiConfig.baseUrl}/api/notifications?limit=5&page=1'),
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Content-Type': 'application/json',
+        },
+      ).timeout(const Duration(seconds: 6));
+
+      if (response.statusCode != 200 || !mounted) return;
+
+      final body = jsonDecode(response.body);
+      final List<dynamic> items =
+          body['data']?['notifications'] ?? body['notifications'] ?? body['data'] ?? [];
+
+      if (items.isEmpty) return;
+
+      // The newest notification is first
+      final newest = items.first as Map<String, dynamic>;
+      final newestId = (newest['_id'] ?? newest['id'] ?? '').toString();
+
+      // First run — just record the baseline, don't show banner
+      if (_lastSeenNotificationId == null) {
+        _lastSeenNotificationId = newestId;
+        return;
+      }
+
+      // Nothing new
+      if (newestId == _lastSeenNotificationId) return;
+
+      // Show banners for all notifications newer than last seen
+      for (final item in items) {
+        final id = (item['_id'] ?? item['id'] ?? '').toString();
+        if (id == _lastSeenNotificationId) break;
+        if (mounted) _showFloatingBanner(item as Map<String, dynamic>);
+      }
+
+      _lastSeenNotificationId = newestId;
+    } catch (_) {
+      // Silent — polling is best-effort
+    }
+  }
+
+  // ── Show floating banner ──────────────────────────────────────────────────
+
+  void _showFloatingBanner(Map<String, dynamic> notification) {
+    if (!mounted) return;
+    final type     = notification['type']?.toString() ?? 'general';
+    final title    = notification['title']?.toString() ?? 'New Notification';
+    final body     = notification['message']?.toString() ??
+                     notification['body']?.toString() ?? '';
+    final priority = notification['priority']?.toString() ?? 'normal';
+
+    const iconMap = {
+      'trip_assigned'       : '🚗',
+      'roster_assigned'     : '📋',
+      'vehicle_assigned'    : '🚌',
+      'trip_started'        : '🚀',
+      'trip_completed'      : '✅',
+      'trip_cancelled'      : '❌',
+      'roster_updated'      : '📋',
+      'roster_cancelled'    : '❌',
+      'payment_received'    : '💰',
+      'shift_reminder'      : '⏰',
+      'document_expiring_soon': '⚠️',
+      'document_expired'    : '🚨',
+      'leave_approved'      : '✅',
+      'leave_rejected'      : '❌',
+      'test'                : '🔔',
+    };
+    final icon = iconMap[type] ?? '🔔';
+
+    const colorMap = {
+      'urgent' : Color(0xFFDC2626),
+      'high'   : Color(0xFFD97706),
+      'normal' : Color(0xFF1D4ED8),
+      'low'    : Color(0xFF059669),
+    };
+    final bgColor = colorMap[priority] ?? const Color(0xFF1D4ED8);
+
+    _floatingNotificationService.showFloatingNotification(
+      context: context,
+      title: title,
+      body: body,
+      icon: icon,
+      type: type,
+      priority: priority,
+      backgroundColor: bgColor,
+      duration: const Duration(seconds: 5),
+    );
   }
 
   // ── Trip Assignment Dialog ────────────────────────────────────────────────
@@ -349,8 +560,12 @@ class _DriverMainShellState extends State<DriverMainShell> {
 
   @override
   void dispose() {
+    _notificationPollTimer?.cancel();
     _notificationSubscription?.cancel();
+    _fcmSubscription?.cancel(); // 🔥 NEW: Cancel FCM subscription
     _notificationService.dispose();
+    _floatingNotificationService.dispose();
+    _processedNotificationIds.clear(); // 🔥 NEW: Clear processed IDs
     super.dispose();
   }
 

@@ -20,6 +20,25 @@
   <title>Abra Fleet Management</title>
   <link rel="manifest" href="manifest.json">
   
+  <style>
+    /* 🚫 Disable two-finger swipe back/forward browser history navigation */
+    html, body {
+      overscroll-behavior-x: none;
+      overscroll-behavior-y: none;
+      overscroll-behavior: none;
+      height: 100%;
+      width: 100%;
+      margin: 0;
+      padding: 0;
+    }
+
+    flutter-view {
+      overscroll-behavior-x: none;
+      overscroll-behavior-y: none;
+      overscroll-behavior: none;
+    }
+  </style>
+  
   <!-- Environment Configuration for Flutter Web -->
   <script src="env-config.js"></script>
 
@@ -325,18 +344,24 @@ function getJWTToken() {
     // ============================================================
     
     // Handle foreground messages
+    // NOTE: Browsers block new Notification() in page context when a service worker
+    // is registered. We must delegate to the service worker via showNotification().
     messaging.onMessage((payload) => {
       console.log('📩 Foreground message:', payload);
       
-      // Show notification
       if (Notification.permission === 'granted') {
-        new Notification(payload.notification.title, {
-          body: payload.notification.body,
-          icon: '/favicon.png',
-          badge: '/favicon.png',
-          data: payload.data,
-          tag: payload.data?.notificationId || 'default',
-          requireInteraction: true
+        navigator.serviceWorker.ready.then((registration) => {
+          registration.showNotification(
+            payload.notification?.title || 'Abra Fleet',
+            {
+              body: payload.notification?.body || '',
+              icon: '/favicon.png',
+              badge: '/favicon.png',
+              data: payload.data,
+              tag: payload.data?.notificationId || 'default',
+              requireInteraction: true
+            }
+          );
         });
       }
     });

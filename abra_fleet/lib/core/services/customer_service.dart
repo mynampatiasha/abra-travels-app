@@ -29,6 +29,12 @@ class CustomerService {
     String? search,
     String? organization,
     String? department,
+    String? city,
+    String? state,
+    String? country,
+    String? area,
+    String? startDate,
+    String? endDate,
     int page = 1,
     int limit = 100,
   }) async {
@@ -49,6 +55,12 @@ class CustomerService {
       if (search != null && search.isNotEmpty) {
         queryParams['search'] = search;
       }
+      if (city != null && city.isNotEmpty) queryParams['city'] = city;
+      if (state != null && state.isNotEmpty) queryParams['state'] = state;
+      if (country != null && country.isNotEmpty) queryParams['country'] = country;
+      if (area != null && area.isNotEmpty) queryParams['area'] = area;
+      if (startDate != null && startDate.isNotEmpty) queryParams['startDate'] = startDate;
+      if (endDate != null && endDate.isNotEmpty) queryParams['endDate'] = endDate;
 
       if (organization != null && organization.isNotEmpty && organization != 'All Organizations') {
         queryParams['organization'] = organization;

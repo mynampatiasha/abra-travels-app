@@ -28,6 +28,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:universal_html/html.dart' as html show AnchorElement, Blob, Url;
 import 'package:country_state_city_picker/country_state_city_picker.dart';
 import 'package:abra_fleet/app/config/api_config.dart';
+import 'package:abra_fleet/core/widgets/permission_restricted_dialog.dart';
 
 // ============================================================================
 // COLOR SCHEME - Matches Driver List page style but with vehicle #0a1759 brand
@@ -959,7 +960,15 @@ class _VehicleMasterScreenState extends State<VehicleMasterScreen>
   // ============================================================================
   // EDIT VEHICLE
   // ============================================================================
-  void _showEditVehicle(String mongoId) {
+  void _showEditVehicle(String mongoId) async {
+    final canEdit = await PermissionRestrictedDialog.checkAndWarn(
+      context,
+      permissionKey: 'vehicle_master',
+      moduleName: 'vehicles',
+    );
+    if (!canEdit) return;
+    if (!mounted) return;
+
     final vehicle = _vehicleData.firstWhere((v) => v.id == mongoId);
     String normalizeVehicleType(String type) {
       const typeMap = {'BUS': 'Bus', 'VAN': 'Van', 'CAR': 'Car', 'TRUCK': 'Truck', 'MINI BUS': 'Mini Bus'};
@@ -992,6 +1001,13 @@ class _VehicleMasterScreenState extends State<VehicleMasterScreen>
   // DELETE VEHICLE
   // ============================================================================
   Future<void> _deleteVehicle(String mongoId, String registrationNumber) async {
+    final canDelete = await PermissionRestrictedDialog.checkAndWarn(
+      context,
+      permissionKey: 'vehicle_master',
+      moduleName: 'vehicles',
+    );
+    if (!canDelete) return;
+
     final confirmed = await showDialog<bool>(context: context, builder: (context) => AlertDialog(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       title: const Text('Delete Vehicle'),

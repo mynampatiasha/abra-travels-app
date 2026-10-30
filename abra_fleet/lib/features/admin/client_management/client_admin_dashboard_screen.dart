@@ -15,6 +15,8 @@ import 'package:abra_fleet/core/services/customer_service.dart';
 import 'package:abra_fleet/features/admin/client_management/add_client_admin.dart';
 import 'package:abra_fleet/features/admin/client_management/edit_client_admin.dart';
 import 'package:universal_html/html.dart' as html;
+import 'package:abra_fleet/core/widgets/permission_restricted_dialog.dart';
+import 'package:abra_fleet/features/admin/widgets/country_state_city_filter.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // DASHBOARD SCREEN
@@ -44,7 +46,6 @@ class _ClientAdminDashboardState extends State<ClientAdminDashboard> {
   String?   _filterArea;
   DateTime? _filterStartDate;
   DateTime? _filterEndDate;
-  bool _showFilters = false;
 
   // Scroll controllers
   final _verticalScroll   = ScrollController();
@@ -176,6 +177,13 @@ class _ClientAdminDashboardState extends State<ClientAdminDashboard> {
   // ─────────────────────────────────────────────────────────
 
   Future<void> _deleteClient(ClientModel client) async {
+    final canDelete = await PermissionRestrictedDialog.checkAndWarn(
+      context,
+      permissionKey: 'client_details',
+      moduleName: 'clients',
+    );
+    if (!canDelete) return;
+
     final ok = await showDialog<bool>(
       context: context,
       builder: (_) => AlertDialog(
@@ -272,6 +280,35 @@ class _ClientAdminDashboardState extends State<ClientAdminDashboard> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFFF8FAFC),
+      appBar: AppBar(
+        flexibleSpace: Container(
+          decoration: const BoxDecoration(
+            gradient: LinearGradient(
+              colors: [Color(0xFF0F2557), Color(0xFF1A3FC4)],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+          ),
+        ),
+        elevation: 2,
+        shadowColor: const Color(0x590F2557),
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back, color: Colors.white),
+          onPressed: () {
+            Navigator.of(context).pop();
+          },
+          tooltip: 'Back to Admin Dashboard',
+        ),
+        title: const Text(
+          'Client Management',
+          style: TextStyle(
+            color: Colors.white,
+            fontSize: 20,
+            fontWeight: FontWeight.w700,
+            letterSpacing: 0.3,
+          ),
+        ),
+      ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
           : SingleChildScrollView(
@@ -282,11 +319,39 @@ class _ClientAdminDashboardState extends State<ClientAdminDashboard> {
                 children: [
                   _buildStats(),
                   const SizedBox(height: 20),
-                  _buildToolbar(),
-                  if (_showFilters) ...[
-                    const SizedBox(height: 12),
-                    _buildFilterPanel(),
-                  ],
+                  CountryStateCityFilter(
+                    initialFromDate: _filterStartDate,
+                    initialToDate: _filterEndDate,
+                    initialCountry: _filterCountry,
+                    initialState: _filterState,
+                    initialCity: _filterCity,
+                    initialLocalArea: _filterArea,
+                    onFilterApplied: (filterData) {
+                      setState(() {
+                        _filterStartDate = filterData['fromDate'];
+                        _filterEndDate = filterData['toDate'];
+                        
+                        _filterCountry = (filterData['country'] != null && filterData['country'].toString().isNotEmpty) 
+                            ? filterData['country'] 
+                            : null;
+                            
+                        _filterState = (filterData['state'] != null && filterData['state'].toString().isNotEmpty)
+                            ? filterData['state']
+                            : null;
+                            
+                        _filterCity = (filterData['city'] != null && filterData['city'].toString().isNotEmpty)
+                            ? filterData['city']
+                            : null;
+                            
+                        _filterArea = (filterData['localArea'] != null && filterData['localArea'].toString().isNotEmpty)
+                            ? filterData['localArea']
+                            : null;
+                      });
+                      _loadClients();
+                    },
+                  ),
+                  const SizedBox(height: 24),
+                  _buildQuickSearchAndFilter(),
                   const SizedBox(height: 16),
                   _buildTable(),
                 ],
@@ -415,68 +480,6 @@ class _ClientAdminDashboardState extends State<ClientAdminDashboard> {
     });
   }
 
-  // ─────────────────────────────────────────────────────────
-  // TOOLBAR
-  // ─────────────────────────────────────────────────────────
-
-  Widget _buildToolbar() {
-    return Row(
-      children: [
-        Expanded(
-          child: TextField(
-            controller: _searchCtrl,
-            onSubmitted: (_) => _loadClients(),
-            decoration: InputDecoration(
-              hintText: 'Search clients...',
-              prefixIcon: const Icon(Icons.search),
-              suffixIcon: _searchCtrl.text.isNotEmpty
-                  ? IconButton(
-                      icon: const Icon(Icons.clear),
-                      onPressed: () {
-                        _searchCtrl.clear();
-                        _loadClients();
-                      },
-                    )
-                  : null,
-              filled: true,
-              fillColor: Colors.white,
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
-                borderSide: BorderSide.none,
-              ),
-              enabledBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
-                borderSide: BorderSide(color: Colors.grey[300]!),
-              ),
-            ),
-          ),
-        ),
-        const SizedBox(width: 10),
-        _toolBtn(
-          Icons.filter_list,
-          'Filters',
-          () => setState(() => _showFilters = !_showFilters),
-          active: _showFilters || _hasFilters,
-        ),
-        const SizedBox(width: 8),
-        _toolBtn(Icons.refresh, 'Refresh', _loadClients),
-        if (_isLoadingCounts) ...[
-          const SizedBox(width: 8),
-          const SizedBox(
-            width: 20,
-            height: 20,
-            child: CircularProgressIndicator(strokeWidth: 2),
-          ),
-          const SizedBox(width: 6),
-          Text(
-            'Loading counts...',
-            style: TextStyle(fontSize: 11, color: Colors.grey[500]),
-          ),
-        ],
-      ],
-    );
-  }
-
   bool get _hasFilters =>
       _filterStatus    != null ||
       _filterCountry   != null ||
@@ -485,238 +488,133 @@ class _ClientAdminDashboardState extends State<ClientAdminDashboard> {
       _filterStartDate != null ||
       _filterEndDate   != null;
 
-  Widget _toolBtn(
-    IconData icon,
-    String tip,
-    VoidCallback onTap, {
-    bool active = false,
-  }) {
-    return Tooltip(
-      message: tip,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(10),
-        child: Container(
-          padding: const EdgeInsets.all(13),
-          decoration: BoxDecoration(
-            color: active ? const Color(0xFF0D47A1) : Colors.white,
-            borderRadius: BorderRadius.circular(10),
-            border: Border.all(
-              color: active
-                  ? const Color(0xFF0D47A1)
-                  : Colors.grey[300]!,
-            ),
-          ),
-          child: Icon(
-            icon,
-            size: 20,
-            color: active ? Colors.white : const Color(0xFF0D47A1),
-          ),
-        ),
-      ),
-    );
-  }
-
   // ─────────────────────────────────────────────────────────
-  // FILTER PANEL
+  // QUICK SEARCH & FILTER
   // ─────────────────────────────────────────────────────────
 
-  Widget _buildFilterPanel() {
+  Widget _buildQuickSearchAndFilter() {
     return Container(
-      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: Colors.blue[100]!),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFFE2E8F0), width: 2),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withOpacity(0.04),
             blurRadius: 8,
-            offset: const Offset(0, 3),
+            offset: const Offset(0, 2),
           ),
         ],
       ),
+      padding: const EdgeInsets.all(22),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          const Row(
+            children: [
+              Icon(Icons.search, size: 18, color: Color(0xFF0F2557)),
+              SizedBox(width: 8),
+              Text(
+                'Quick Search & Filter',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w700,
+                  color: Color(0xFF0F2557),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 18),
           Row(
             children: [
-              const Icon(Icons.filter_list, color: Color(0xFF0D47A1)),
-              const SizedBox(width: 8),
-              const Text(
-                'Filters',
-                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('Status', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Color(0xFF1E293B))),
+                    const SizedBox(height: 8),
+                    Container(
+                      decoration: BoxDecoration(border: Border.all(color: const Color(0xFFE2E8F0)), borderRadius: BorderRadius.circular(8)),
+                      child: DropdownButtonFormField<String>(
+                        value: _filterStatus,
+                        isExpanded: true,
+                        decoration: const InputDecoration(contentPadding: EdgeInsets.symmetric(horizontal: 14, vertical: 10), border: InputBorder.none),
+                        items: const [
+                          DropdownMenuItem(value: null, child: Text('All')),
+                          DropdownMenuItem(value: 'active', child: Text('Active')),
+                          DropdownMenuItem(value: 'inactive', child: Text('Inactive')),
+                          DropdownMenuItem(value: 'suspended', child: Text('Suspended')),
+                        ],
+                        onChanged: (value) => setState(() => _filterStatus = value),
+                      ),
+                    ),
+                  ],
+                ),
               ),
-              const Spacer(),
-              TextButton.icon(
+              const SizedBox(width: 16),
+              Expanded(
+                flex: 2,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('Search', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Color(0xFF1E293B))),
+                    const SizedBox(height: 8),
+                    Container(
+                      decoration: BoxDecoration(border: Border.all(color: const Color(0xFFE2E8F0)), borderRadius: BorderRadius.circular(8)),
+                      child: TextField(
+                        controller: _searchCtrl,
+                        decoration: const InputDecoration(
+                          hintText: 'Name, Email, ID...',
+                          prefixIcon: Icon(Icons.search, color: Color(0xFF94A3B8)),
+                          border: InputBorder.none,
+                          contentPadding: EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+                        ),
+                        onSubmitted: (_) => _loadClients(),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 18),
+          Row(
+            children: [
+              Container(
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(colors: [Color(0xFF0F2557), Color(0xFF1A3FC4)]),
+                  borderRadius: BorderRadius.circular(10),
+                  boxShadow: [BoxShadow(color: const Color(0xFF0F2557).withOpacity(0.3), blurRadius: 8, offset: const Offset(0, 2))],
+                ),
+                child: ElevatedButton.icon(
+                  onPressed: () => _loadClients(),
+                  icon: const Icon(Icons.search, size: 18),
+                  label: const Text('Apply Filter', style: TextStyle(fontWeight: FontWeight.w700)),
+                  style: ElevatedButton.styleFrom(backgroundColor: Colors.transparent, shadowColor: Colors.transparent, foregroundColor: Colors.white, padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 12), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))),
+                ),
+              ),
+              const SizedBox(width: 12),
+              OutlinedButton.icon(
                 onPressed: () {
                   setState(() {
-                    _filterStatus  = null;
+                    _filterStatus = null;
                     _filterCountry = null;
-                    _filterState   = null;
-                    _filterCity    = null;
-                    _filterArea    = null;
+                    _filterState = null;
+                    _filterCity = null;
+                    _filterArea = null;
                     _filterStartDate = null;
-                    _filterEndDate   = null;
+                    _filterEndDate = null;
+                    _searchCtrl.clear();
                   });
                   _loadClients();
                 },
-                icon: const Icon(Icons.clear, size: 16),
-                label: const Text('Clear All'),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          Wrap(
-            spacing: 12,
-            runSpacing: 12,
-            children: [
-              _filterDropdown(
-                'Status',
-                _filterStatus,
-                ['active', 'inactive', 'suspended'],
-                (v) { setState(() => _filterStatus = v); _loadClients(); },
-              ),
-              _filterDropdown(
-                'Country',
-                _filterCountry,
-                _uniqueValues((c) => c.location.country),
-                (v) {
-                  setState(() {
-                    _filterCountry = v;
-                    _filterState   = null;
-                    _filterCity    = null;
-                  });
-                  _loadClients();
-                },
-              ),
-              _filterDropdown(
-                'State',
-                _filterState,
-                _filterCountry == null
-                    ? []
-                    : _uniqueValues(
-                        (c) => c.location.country == _filterCountry
-                            ? c.location.state
-                            : ''),
-                (v) {
-                  setState(() {
-                    _filterState = v;
-                    _filterCity  = null;
-                  });
-                  _loadClients();
-                },
-              ),
-              _filterDropdown(
-                'City',
-                _filterCity,
-                _filterState == null
-                    ? []
-                    : _uniqueValues(
-                        (c) => c.location.state == _filterState
-                            ? c.location.city
-                            : ''),
-                (v) { setState(() => _filterCity = v); _loadClients(); },
-              ),
-              _dateFilterBtn(
-                'From',
-                _filterStartDate,
-                (d) { setState(() => _filterStartDate = d); _loadClients(); },
-              ),
-              _dateFilterBtn(
-                'To',
-                _filterEndDate,
-                (d) { setState(() => _filterEndDate = d); _loadClients(); },
+                icon: const Icon(Icons.refresh, size: 18),
+                label: const Text('Reset', style: TextStyle(fontWeight: FontWeight.w600)),
+                style: OutlinedButton.styleFrom(foregroundColor: const Color(0xFF64748B), side: const BorderSide(color: Color(0xFFE2E8F0), width: 2), padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))),
               ),
             ],
           ),
         ],
-      ),
-    );
-  }
-
-  List<String> _uniqueValues(String Function(ClientModel) selector) =>
-      _clients
-          .map(selector)
-          .where((v) => v.isNotEmpty)
-          .toSet()
-          .toList()
-        ..sort();
-
-  Widget _filterDropdown(
-    String label,
-    String? value,
-    List<String> items,
-    ValueChanged<String?> onChanged,
-  ) {
-    return SizedBox(
-      width: 160,
-      child: DropdownButtonFormField<String>(
-        value: items.contains(value) ? value : null,
-        isExpanded: true,
-        decoration: InputDecoration(
-          labelText: label,
-          isDense: true,
-          border: const OutlineInputBorder(),
-          contentPadding:
-              const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
-        ),
-        items: [
-          const DropdownMenuItem(value: null, child: Text('All')),
-          ...items.map((v) => DropdownMenuItem(
-                value: v,
-                child: Text(v, overflow: TextOverflow.ellipsis),
-              )),
-        ],
-        onChanged: onChanged,
-      ),
-    );
-  }
-
-  Widget _dateFilterBtn(
-    String label,
-    DateTime? value,
-    ValueChanged<DateTime?> onChanged,
-  ) {
-    return InkWell(
-      onTap: () async {
-        final picked = await showDatePicker(
-          context: context,
-          initialDate: value ?? DateTime.now(),
-          firstDate: DateTime(2020),
-          lastDate: DateTime.now().add(const Duration(days: 365)),
-        );
-        onChanged(picked);
-      },
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-        decoration: BoxDecoration(
-          border: Border.all(color: Colors.grey[400]!),
-          borderRadius: BorderRadius.circular(4),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(Icons.calendar_today, size: 14, color: Colors.grey[600]),
-            const SizedBox(width: 6),
-            Text(
-              value != null
-                  ? '$label: ${DateFormat('dd/MM/yy').format(value)}'
-                  : 'Date $label',
-              style: TextStyle(
-                fontSize: 13,
-                color: value != null ? Colors.black87 : Colors.grey[600],
-              ),
-            ),
-            if (value != null) ...[
-              const SizedBox(width: 4),
-              GestureDetector(
-                onTap: () => onChanged(null),
-                child: const Icon(Icons.close, size: 14, color: Colors.red),
-              ),
-            ],
-          ],
-        ),
       ),
     );
   }
@@ -755,387 +653,387 @@ class _ClientAdminDashboardState extends State<ClientAdminDashboard> {
     130, // Actions
   ];
 
+  Future<void> _addClient() async {
+    final result = await Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const AddClientAdminScreen()),
+    );
+    if (result == true) _loadClients();
+  }
+
   Widget _buildTable() {
-    if (_clients.isEmpty) {
-      return Container(
-        padding: const EdgeInsets.all(60),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(16),
-        ),
-        child: Center(
-          child: Column(
-            children: [
-              Icon(Icons.business_outlined, size: 64, color: Colors.grey[300]),
-              const SizedBox(height: 16),
-              const Text(
-                'No clients found',
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                'Add your first client using the + button',
-                style: TextStyle(color: Colors.grey[600]),
-              ),
-            ],
-          ),
-        ),
-      );
-    }
-
-    final totalWidth = _colWidths.reduce((a, b) => a + b);
-
     return Container(
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFFE2E8F0), width: 2),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.05),
+            color: Colors.black.withOpacity(0.04),
             blurRadius: 10,
-            offset: const Offset(0, 4),
+            offset: const Offset(0, 3),
           ),
         ],
       ),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(16),
-        child: Column(
-          children: [
-            // ── Sticky header (synced scroll) ──
-            ScrollConfiguration(
-              behavior: _DesktopScrollBehavior(),
-              child: SingleChildScrollView(
-                controller: _headerScroll,
-                scrollDirection: Axis.horizontal,
-                physics: const NeverScrollableScrollPhysics(),
-                child: _buildTableHeader(totalWidth),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          // Table Top Bar with Quick Scroll Controls
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 16),
+            decoration: const BoxDecoration(
+              border: Border(
+                bottom: BorderSide(color: Color(0xFFE2E8F0), width: 1.5),
               ),
             ),
-            // ── Rows ──
-            SizedBox(
-              height: (_clients.length * 66.0).clamp(100.0, 560.0),
-              child: ScrollConfiguration(
-                behavior: _DesktopScrollBehavior(),
-                child: SingleChildScrollView(
-                  controller: _horizontalScroll,
-                  scrollDirection: Axis.horizontal,
-                  child: SizedBox(
-                    width: totalWidth,
-                    child: ListView.builder(
-                      itemCount: _clients.length,
-                      itemBuilder: (_, i) =>
-                          _buildTableRow(_clients[i], i),
-                    ),
-                  ),
-                ),
-              ),
-            ),
-            // ── Footer ──
-            Container(
-              padding: const EdgeInsets.symmetric(
-                horizontal: 20, vertical: 10),
-              decoration: BoxDecoration(
-                border: Border(
-                  top: BorderSide(color: Colors.grey[200]!),
-                ),
-              ),
-              child: Row(
-                children: [
-                  Text(
-                    'Showing ${_clients.length} '
-                    'client${_clients.length != 1 ? 's' : ''}',
-                    style:
-                        TextStyle(fontSize: 12, color: Colors.grey[600]),
-                  ),
-                  const Spacer(),
-                  if (_hasFilters)
-                    TextButton.icon(
-                      onPressed: () {
-                        setState(() {
-                          _filterStatus  = null;
-                          _filterCountry = null;
-                          _filterState   = null;
-                          _filterCity    = null;
-                          _filterArea    = null;
-                          _filterStartDate = null;
-                          _filterEndDate   = null;
-                          _showFilters     = false;
-                        });
-                        _loadClients();
-                      },
-                      icon: const Icon(Icons.clear, size: 14),
-                      label: const Text(
-                        'Clear Filters',
-                        style: TextStyle(fontSize: 12),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Row(
+                  children: [
+                    const Icon(Icons.business_center, color: Color(0xFF0F2557), size: 22),
+                    const SizedBox(width: 10),
+                    Text(
+                      'Client Directory (${_clients.length})',
+                      style: const TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w800,
+                        color: Color(0xFF0F2557),
+                        letterSpacing: 0.2,
                       ),
                     ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildTableHeader(double totalWidth) {
-    return Container(
-      width: totalWidth,
-      decoration: const BoxDecoration(
-        gradient: LinearGradient(
-          colors: [
-            Color(0xFF0D47A1),
-            Color(0xFF1565C0),
-            Color(0xFF1976D2),
-          ],
-          begin: Alignment.centerLeft,
-          end: Alignment.centerRight,
-        ),
-      ),
-      child: Row(
-        children: List.generate(_colHeaders.length, (i) {
-          return SizedBox(
-            width: _colWidths[i],
-            child: Padding(
-              padding: const EdgeInsets.symmetric(
-                horizontal: 12, vertical: 14),
-              child: Text(
-                _colHeaders[i],
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.bold,
-                  fontSize: 13,
-                  letterSpacing: 0.3,
+                  ],
                 ),
-              ),
-            ),
-          );
-        }),
-      ),
-    );
-  }
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  children: [
+                    // Scroll Left Button
+                    IconButton.filledTonal(
+                      onPressed: () {
+                        _horizontalScroll.animateTo(
+                          0,
+                          duration: const Duration(milliseconds: 300),
+                          curve: Curves.easeOut,
+                        );
+                      },
+                      icon: const Icon(Icons.arrow_back_ios_new, size: 14),
+                      tooltip: 'Scroll to First Column',
+                      style: IconButton.styleFrom(
+                        backgroundColor: const Color(0xFFEFF6FF),
+                        foregroundColor: const Color(0xFF1A3FC4),
+                        padding: const EdgeInsets.all(8),
+                      ),
+                    ),
+                    // Scroll Right Button
+                    IconButton.filledTonal(
+                      onPressed: () {
+                        _horizontalScroll.animateTo(
+                          _horizontalScroll.position.maxScrollExtent,
+                          duration: const Duration(milliseconds: 300),
+                          curve: Curves.easeOut,
+                        );
+                      },
+                      icon: const Icon(Icons.arrow_forward_ios, size: 14),
+                      tooltip: 'Scroll to Actions / Status',
+                      style: IconButton.styleFrom(
+                        backgroundColor: const Color(0xFFEFF6FF),
+                        foregroundColor: const Color(0xFF1A3FC4),
+                        padding: const EdgeInsets.all(8),
+                      ),
+                    ),
+                    const SizedBox(width: 4),
 
-  Widget _buildTableRow(ClientModel client, int idx) {
-    final isEven     = idx % 2 == 0;
-    final custCount  = _customerCountFor(client);
-    final domain     = client.email.contains('@')
-        ? client.email.split('@')[1].toLowerCase()
-        : '';
-
-    return InkWell(
-      onTap: () => _showClientDetail(client),
-      hoverColor: const Color(0xFF0D47A1).withOpacity(0.05),
-      child: Container(
-        color: isEven ? Colors.white : const Color(0xFFF8FAFF),
-        child: Row(
-          children: [
-
-            // 0 – Company Name
-            _cell(
-              _colWidths[0],
-              Row(children: [
-                Container(
-                  padding: const EdgeInsets.all(6),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF0D47A1).withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(6),
-                  ),
-                  child: const Icon(
-                    Icons.business,
-                    color: Color(0xFF0D47A1),
-                    size: 16,
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    client.name,
-                    style: const TextStyle(
-                      fontWeight: FontWeight.w600, fontSize: 13),
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-              ]),
-            ),
-
-            // 1 – Contact Person
-            _cell(
-              _colWidths[1],
-              Text(
-                client.contactPerson ?? '-',
-                style: const TextStyle(fontSize: 13),
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
-
-            // 2 – Email
-            _cell(
-              _colWidths[2],
-              Text(
-                client.email,
-                style: const TextStyle(
-                  fontSize: 12, color: Color(0xFF1565C0)),
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
-
-            // 3 – Phone
-            _cell(
-              _colWidths[3],
-              Text(
-                client.phone.isNotEmpty ? client.phone : '-',
-                style: const TextStyle(fontSize: 13),
-              ),
-            ),
-
-            // 4 – Department
-            _cell(
-              _colWidths[4],
-              Text(
-                client.department?.isNotEmpty == true
-                    ? client.department!
-                    : '-',
-                style: const TextStyle(fontSize: 12),
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
-
-            // 5 – Branch
-            _cell(
-              _colWidths[5],
-              Text(
-                client.branch?.isNotEmpty == true
-                    ? client.branch!
-                    : '-',
-                style: const TextStyle(fontSize: 12),
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
-
-            // 6 – Location
-            _cell(
-              _colWidths[6],
-              Text(
-                client.location.displayAddress.isNotEmpty
-                    ? client.location.displayAddress
-                    : '-',
-                style: const TextStyle(fontSize: 12),
-                overflow: TextOverflow.ellipsis,
-                maxLines: 2,
-              ),
-            ),
-
-            // 7 – Customers (domain count)
-            _cell(
-              _colWidths[7],
-              _isLoadingCounts && !_domainCustomerCounts.containsKey(domain)
-                  ? const SizedBox(
-                      width: 18,
-                      height: 18,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : Tooltip(
-                      message: domain.isNotEmpty
-                          ? 'Employees with @$domain'
-                          : 'No domain',
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Container(
-                            padding: const EdgeInsets.all(5),
-                            decoration: BoxDecoration(
-                              color: const Color(0xFF0891B2)
-                                  .withOpacity(0.12),
-                              borderRadius: BorderRadius.circular(6),
-                            ),
-                            child: const Icon(
-                              Icons.people,
-                              size: 13,
-                              color: Color(0xFF0891B2),
-                            ),
-                          ),
-                          const SizedBox(width: 6),
-                          Text(
-                            '$custCount',
-                            style: const TextStyle(
-                              fontWeight: FontWeight.bold,
-                              fontSize: 14,
-                              color: Color(0xFF0891B2),
-                            ),
+                    // Add Client Button
+                    Container(
+                      decoration: BoxDecoration(
+                        gradient: const LinearGradient(
+                          colors: [Color(0xFF0F2557), Color(0xFF1A3FC4)],
+                        ),
+                        borderRadius: BorderRadius.circular(10),
+                        boxShadow: [
+                          BoxShadow(
+                            color: const Color(0xFF0F2557).withOpacity(0.3),
+                            blurRadius: 6,
+                            offset: const Offset(0, 2),
                           ),
                         ],
                       ),
-                    ),
-            ),
-
-            // 8 – Status (inline dropdown)
-            _cell(_colWidths[8], _statusDropdown(client)),
-
-            // 9 – Documents
-            _cell(
-              _colWidths[9],
-              client.documents.isEmpty
-                  ? Text(
-                      '-',
-                      style: TextStyle(
-                        color: Colors.grey[400], fontSize: 13),
-                    )
-                  : Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        const Icon(
-                          Icons.attach_file,
-                          size: 14,
-                          color: Colors.blue,
+                      child: ElevatedButton.icon(
+                        onPressed: () => _addClient(),
+                        icon: const Icon(Icons.add_business, size: 17),
+                        label: const Text(
+                          'Add Client',
+                          style: TextStyle(fontWeight: FontWeight.w700),
                         ),
-                        const SizedBox(width: 4),
-                        Text(
-                          '${client.documents.length}',
-                          style: const TextStyle(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 13,
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.transparent,
+                          shadowColor: Colors.transparent,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 14,
+                            vertical: 9,
+                          ),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(10),
                           ),
                         ),
-                      ],
+                      ),
                     ),
+                  ],
+                ),
+              ],
             ),
+          ),
 
-            // 10 – Onboarded
-            _cell(
-              _colWidths[10],
-              Text(
-                DateFormat('dd MMM yy').format(client.createdAt),
-                style: const TextStyle(
-                  fontSize: 12, color: Colors.grey),
+          // Horizontal Drag Hint Banner
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+            decoration: const BoxDecoration(
+              color: Color(0xFFEFF6FF),
+              border: Border(
+                bottom: BorderSide(color: Color(0xFFBFDBFE), width: 1),
               ),
             ),
-
-            // 11 – Actions
-            _cell(
-              _colWidths[11],
-              Row(children: [
-                _iconBtn(
-                  Icons.visibility,
-                  const Color(0xFF0D47A1),
-                  'View',
-                  () => _showClientDetail(client),
+            child: Row(
+              children: [
+                const Icon(Icons.pan_tool_alt_outlined, size: 15, color: Color(0xFF1A3FC4)),
+                const SizedBox(width: 8),
+                const Text(
+                  'Horizontal & Vertical Scrolling: Click and drag with mouse, use trackpad, or use the scrollbar below to scroll columns.',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: Color(0xFF1E3A8A),
+                  ),
                 ),
-                _iconBtn(
-                  Icons.edit,
-                  const Color(0xFF10B981),
-                  'Edit',
-                  () => _editClient(client),
+                const Spacer(),
+                InkWell(
+                  onTap: () {
+                    _horizontalScroll.animateTo(
+                      _horizontalScroll.position.maxScrollExtent,
+                      duration: const Duration(milliseconds: 300),
+                      curve: Curves.easeOut,
+                    );
+                  },
+                  child: const Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        'Jump to Status & Actions',
+                        style: TextStyle(
+                          fontSize: 11.5,
+                          fontWeight: FontWeight.w700,
+                          color: Color(0xFF1A3FC4),
+                        ),
+                      ),
+                      SizedBox(width: 4),
+                      Icon(Icons.arrow_forward, size: 13, color: Color(0xFF1A3FC4)),
+                    ],
+                  ),
                 ),
-                _iconBtn(
-                  Icons.delete,
-                  Colors.red,
-                  'Delete',
-                  () => _deleteClient(client),
-                ),
-              ]),
+              ],
             ),
-          ],
-        ),
+          ),
+
+          // Table Section with Visible Sticky Dual Scrollbars
+          _clients.isEmpty
+            ? Padding(
+                padding: const EdgeInsets.all(56.0),
+                child: Column(
+                  children: [
+                    Container(
+                      width: 72,
+                      height: 72,
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFF1F5F9),
+                        shape: BoxShape.circle,
+                        border: Border.all(color: const Color(0xFFE2E8F0)),
+                      ),
+                      child: const Icon(Icons.business_outlined, size: 36, color: Color(0xFF94A3B8)),
+                    ),
+                    const SizedBox(height: 16),
+                    Text(
+                      _searchCtrl.text.isNotEmpty || _hasFilters
+                        ? 'No clients match your search criteria'
+                        : 'No clients found\nClick "Add Client" to create one',
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(
+                        color: Color(0xFF64748B),
+                        fontSize: 15,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ],
+                ),
+              )
+            : Container(
+                decoration: const BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.only(
+                    bottomLeft: Radius.circular(10),
+                    bottomRight: Radius.circular(10),
+                  ),
+                ),
+                child: ScrollConfiguration(
+                  behavior: ScrollConfiguration.of(context).copyWith(
+                    dragDevices: {
+                      PointerDeviceKind.touch,
+                      PointerDeviceKind.mouse,
+                      PointerDeviceKind.trackpad,
+                      PointerDeviceKind.stylus,
+                    },
+                  ),
+                  child: RawScrollbar(
+                    controller: _horizontalScroll,
+                    thumbVisibility: true,
+                    trackVisibility: true,
+                    thickness: 10,
+                    radius: const Radius.circular(5),
+                    thumbColor: const Color(0xFF1A3FC4),
+                    trackColor: const Color(0xFFE2E8F0),
+                    trackRadius: const Radius.circular(5),
+                    scrollbarOrientation: ScrollbarOrientation.bottom,
+                    child: SingleChildScrollView(
+                      controller: _horizontalScroll,
+                      scrollDirection: Axis.horizontal,
+                      physics: const BouncingScrollPhysics(),
+                      child: ConstrainedBox(
+                        constraints: const BoxConstraints(minWidth: 1200),
+                        child: MouseRegion(
+                          cursor: SystemMouseCursors.grab,
+                          child: DataTable(
+                            border: const TableBorder(
+                              horizontalInside: BorderSide(color: Color(0xFFE2E8F0), width: 1),
+                              verticalInside: BorderSide(color: Color(0xFFE2E8F0), width: 1),
+                              top: BorderSide(color: Color(0xFF0F2557), width: 1),
+                              bottom: BorderSide(color: Color(0xFFE2E8F0), width: 1.5),
+                              left: BorderSide(color: Color(0xFFE2E8F0), width: 1),
+                              right: BorderSide(color: Color(0xFFE2E8F0), width: 1),
+                            ),
+                            columnSpacing: 24,
+                            horizontalMargin: 20,
+                            headingRowHeight: 56,
+                            dataRowMinHeight: 60,
+                            dataRowMaxHeight: 64,
+                            headingRowColor: WidgetStateProperty.all(
+                              const Color(0xFF0F2557),
+                            ),
+                            headingTextStyle: const TextStyle(
+                              fontWeight: FontWeight.w700,
+                              fontSize: 13,
+                              color: Colors.white,
+                              letterSpacing: 0.5,
+                            ),
+                            dataRowColor: WidgetStateProperty.resolveWith<Color>((states) {
+                              if (states.contains(WidgetState.hovered)) {
+                                return const Color(0xFFEFF6FF);
+                              }
+                              return Colors.white;
+                            }),
+                            columns: [
+                              DataColumn(label: SizedBox(width: _colWidths[0] - 32, child: const Text('COMPANY NAME'))),
+                              DataColumn(label: SizedBox(width: _colWidths[1] - 32, child: const Text('CONTACT PERSON'))),
+                              DataColumn(label: SizedBox(width: _colWidths[2] - 32, child: const Text('EMAIL'))),
+                              DataColumn(label: SizedBox(width: _colWidths[3] - 32, child: const Text('PHONE'))),
+                              DataColumn(label: SizedBox(width: _colWidths[4] - 32, child: const Text('DEPARTMENT'))),
+                              DataColumn(label: SizedBox(width: _colWidths[5] - 32, child: const Text('BRANCH'))),
+                              DataColumn(label: SizedBox(width: _colWidths[6] - 32, child: const Text('LOCATION'))),
+                              DataColumn(label: SizedBox(width: _colWidths[7] - 32, child: const Text('CUSTOMERS'))),
+                              DataColumn(label: SizedBox(width: _colWidths[8] - 32, child: const Text('STATUS'))),
+                              DataColumn(label: SizedBox(width: _colWidths[9] - 32, child: const Text('DOCS'))),
+                              DataColumn(label: SizedBox(width: _colWidths[10] - 32, child: const Text('ONBOARDED'))),
+                              DataColumn(label: SizedBox(width: _colWidths[11] - 32, child: const Text('ACTIONS'))),
+                            ],
+                            rows: _clients.map((client) {
+                              final custCount = _customerCountFor(client);
+                              final domain = client.email.contains('@') ? client.email.split('@')[1].toLowerCase() : '';
+                              return DataRow(
+                                cells: [
+                                  DataCell(
+                                    Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        CircleAvatar(
+                                          radius: 16,
+                                          backgroundColor: const Color(0xFF0F2557),
+                                          child: Text(
+                                            client.name.isNotEmpty ? client.name[0].toUpperCase() : 'C',
+                                            style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold),
+                                          ),
+                                        ),
+                                        const SizedBox(width: 10),
+                                        Expanded(
+                                          child: Text(
+                                            client.name,
+                                            overflow: TextOverflow.ellipsis,
+                                            style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14, color: Color(0xFF1E293B)),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                    onTap: () => _showClientDetail(client),
+                                  ),
+                                  DataCell(Text(client.contactPerson ?? '-', style: const TextStyle(fontSize: 14))),
+                                  DataCell(Text(client.email, style: const TextStyle(fontSize: 13.5, color: Color(0xFF475569)), overflow: TextOverflow.ellipsis)),
+                                  DataCell(Text(client.phone.isNotEmpty ? client.phone : '-', style: const TextStyle(fontSize: 14))),
+                                  DataCell(Text(client.department?.isNotEmpty == true ? client.department! : '-', style: const TextStyle(fontSize: 13), overflow: TextOverflow.ellipsis)),
+                                  DataCell(Text(client.branch?.isNotEmpty == true ? client.branch! : '-', style: const TextStyle(fontSize: 13), overflow: TextOverflow.ellipsis)),
+                                  DataCell(Text(client.location.displayAddress.isNotEmpty ? client.location.displayAddress : '-', style: const TextStyle(fontSize: 13), overflow: TextOverflow.ellipsis, maxLines: 2)),
+                                  DataCell(
+                                    _isLoadingCounts && !_domainCustomerCounts.containsKey(domain)
+                                        ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
+                                        : Tooltip(
+                                            message: domain.isNotEmpty ? 'Employees with @$domain' : 'No domain',
+                                            child: Row(
+                                              mainAxisSize: MainAxisSize.min,
+                                              children: [
+                                                Container(
+                                                  padding: const EdgeInsets.all(5),
+                                                  decoration: BoxDecoration(color: const Color(0xFF0891B2).withOpacity(0.12), borderRadius: BorderRadius.circular(6)),
+                                                  child: const Icon(Icons.people, size: 14, color: Color(0xFF0891B2)),
+                                                ),
+                                                const SizedBox(width: 6),
+                                                Text('$custCount', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: Color(0xFF0891B2))),
+                                              ],
+                                            ),
+                                          ),
+                                  ),
+                                  DataCell(_statusDropdown(client)),
+                                  DataCell(
+                                    client.documents.isEmpty
+                                        ? Text('-', style: TextStyle(color: Colors.grey[400], fontSize: 14))
+                                        : Row(
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              const Icon(Icons.attach_file, size: 16, color: Colors.blue),
+                                              const SizedBox(width: 4),
+                                              Text('${client.documents.length}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                                            ],
+                                          ),
+                                  ),
+                                  DataCell(Text(DateFormat('dd MMM yy').format(client.createdAt), style: const TextStyle(fontSize: 13, color: Colors.grey))),
+                                  DataCell(
+                                    Row(
+                                      children: [
+                                        _iconBtn(Icons.visibility, const Color(0xFF0D47A1), 'View', () => _showClientDetail(client)),
+                                        _iconBtn(Icons.edit, const Color(0xFF10B981), 'Edit', () => _editClient(client)),
+                                        _iconBtn(Icons.delete, Colors.red, 'Delete', () => _deleteClient(client)),
+                                      ],
+                                    ),
+                                  ),
+                                ],
+                              );
+                            }).toList(),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+        ],
       ),
     );
   }
@@ -1143,16 +1041,6 @@ class _ClientAdminDashboardState extends State<ClientAdminDashboard> {
   // ─────────────────────────────────────────────────────────
   // HELPERS
   // ─────────────────────────────────────────────────────────
-
-  Widget _cell(double width, Widget child) {
-    return SizedBox(
-      width: width,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-        child: child,
-      ),
-    );
-  }
 
   Widget _iconBtn(
     IconData icon,
@@ -1226,6 +1114,14 @@ class _ClientAdminDashboardState extends State<ClientAdminDashboard> {
   // ─────────────────────────────────────────────────────────
 
   Future<void> _editClient(ClientModel client) async {
+    final canEdit = await PermissionRestrictedDialog.checkAndWarn(
+      context,
+      permissionKey: 'client_details',
+      moduleName: 'clients',
+    );
+    if (!canEdit) return;
+    if (!mounted) return;
+
     final result = await Navigator.push(
       context,
       MaterialPageRoute(

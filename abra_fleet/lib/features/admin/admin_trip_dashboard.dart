@@ -27,6 +27,9 @@ import 'package:universal_html/html.dart' as html;
 // ✅ Import the country/state/city filter widget
 import 'package:abra_fleet/features/admin/widgets/country_state_city_filter.dart';
 
+// ✅ OTP Verification screens
+import 'package:abra_fleet/features/admin/otp_monitoring/otp_failed_log_screen.dart';
+
 // ignore: avoid_classes_with_only_static_members
 class MathHelpers {
   static int max(int a, int b) => a > b ? a : b;
@@ -751,6 +754,28 @@ class AdminTripDashboardState extends State<AdminTripDashboard> {
       ),
       title: const Text('Trip Management', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 20)),
       actions: [
+        // ✅ OTP Verification button — shows failed log + pending overrides
+        TextButton.icon(
+          onPressed: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => const OtpFailedLogScreen(),
+              ),
+            );
+          },
+          icon: const Icon(Icons.verified_user, color: Colors.white, size: 18),
+          label: const Text(
+            'OTP Verification',
+            style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 13),
+          ),
+          style: TextButton.styleFrom(
+            backgroundColor: Colors.white.withOpacity(0.15),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+          ),
+        ),
+        const SizedBox(width: 4),
         IconButton(icon: const Icon(Icons.refresh), onPressed: refreshDashboard, tooltip: 'Refresh'),
       ],
     );

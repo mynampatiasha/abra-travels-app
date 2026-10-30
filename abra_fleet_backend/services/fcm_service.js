@@ -138,9 +138,19 @@ class NotificationService {
           break;
           
         case 'web':
-          result = await this.sendToWeb({
-            deviceToken, title, body, data, clickAction
-          });
+          // Web tokens stored in user_devices are FCM registration tokens
+          // (strings starting with c/d/e/f), NOT VAPID subscription objects.
+          // Route them through Firebase Admin SDK just like Android/iOS.
+          if (typeof deviceToken === 'string' && !deviceToken.startsWith('{')) {
+            result = await this.sendToAndroid({
+              deviceToken, title, body, data, priority, sound, clickAction
+            });
+          } else {
+            // Only use VAPID web-push for actual subscription objects
+            result = await this.sendToWeb({
+              deviceToken, title, body, data, clickAction
+            });
+          }
           break;
           
         default:
@@ -174,33 +184,32 @@ class NotificationService {
       token: deviceToken,
       notification: {
         title: title,
-        body: body,
-        sound: sound
+        body: body
+        // ✅ sound removed from here — FCM v1 API does not allow it at this level
       },
       data: {
         ...data,
         click_action: clickAction || 'FLUTTER_NOTIFICATION_CLICK',
-        // Add any custom data for navigation
         notificationId: data.notificationId || Date.now().toString(),
         type: data.type || 'general',
         timestamp: new Date().toISOString()
       },
       android: {
-        priority: 'high', // 🔥 CRITICAL: High priority for immediate delivery
+        priority: 'high',
         notification: {
-          sound: sound,
+          sound: sound,   // ✅ sound belongs here (android-specific)
           clickAction: clickAction || 'FLUTTER_NOTIFICATION_CLICK',
-          channelId: 'high_priority_channel', // 🔥 CRITICAL: Must match Flutter channel
+          channelId: 'high_priority_channel',
           color: '#0D47A1',
-          icon: 'ic_launcher', // Your app's notification icon
-          tag: data.type || 'general', // Groups similar notifications
-          priority: 'max', // 🔥 CRITICAL: Max priority for heads-up
+          icon: 'ic_launcher',
+          tag: data.type || 'general',
+          priority: 'max',
           defaultSound: true,
           defaultVibrateTimings: true,
           defaultLightSettings: true,
-          visibility: 'public', // Show on lock screen
+          visibility: 'public',
         },
-        ttl: 3600 * 1000, // 1 hour in milliseconds
+        ttl: 3600 * 1000,
         collapseKey: data.type || 'default'
       }
     };

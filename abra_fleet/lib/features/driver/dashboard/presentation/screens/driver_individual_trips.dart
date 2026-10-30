@@ -28,6 +28,7 @@ import 'dart:async';
 import 'package:abra_fleet/features/auth/domain/repositories/auth_repository.dart';
 import 'package:abra_fleet/features/auth/presentation/screens/welcome_screen.dart';
 import 'package:abra_fleet/core/services/individual_trip_service.dart';
+import 'package:abra_fleet/app/config/api_config.dart';
 import 'trip_map_navigation_screen.dart';
 import 'package:abra_fleet/features/notifications/presentation/screens/screens/driver_trip_response_screen.dart';
 
@@ -1016,7 +1017,10 @@ class _DriverIndividualTripsScreenState extends State<DriverIndividualTripsScree
       print('🔍 mongoId: $mongoId');
       print('🔍 trackingId: $trackingId');
       
-      final liveUrl = 'https://abra-fleet-management.com/live-track/$trackingId';
+      // Backend serves the branded HTML tracking page at GET /live-track/:tripId
+      // (public route). Use the configured base URL — the same as every other
+      // "share live location" screen — instead of a hardcoded domain.
+      final liveUrl = '${ApiConfig.baseUrl}/live-track/$trackingId';
       
       // ✅ Get trip details
       final tripNumber = apiData['tripNumber']?.toString() ?? 
