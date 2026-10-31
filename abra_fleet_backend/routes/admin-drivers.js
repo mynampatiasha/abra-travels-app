@@ -14,6 +14,12 @@ const bcrypt = require('bcrypt');
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs').promises;
+const crypto = require('crypto');
+const { checkEditDeletePermission } = require('../middleware/check_permission');
+const {
+  generateDriverTemporaryPassword,
+  recordDriverLoginAudit,
+} = require('../services/driver_login_credentials');
 
 // Configure multer for document uploads
 const storage = multer.diskStorage({
@@ -609,7 +615,9 @@ router.get('/', async (req, res) => {
           createdAt: 1,
           updatedAt: 1,
           rating: 1,
-          feedbackStats: 1
+          feedbackStats: 1,
+          loginStatus: 1,
+          mustChangePassword: 1
         }
       }
     ]).toArray();
@@ -1233,9 +1241,13 @@ router.get('/:id', async (req, res) => {
       // Dates
       joinedDate: driver.joinedDate || driver.createdAt,
       createdAt: driver.createdAt,
-      updatedAt: driver.updatedAt
+      updatedAt: driver.updatedAt,
+
+      // Driver app login state
+      loginStatus: driver.loginStatus || null,
+      mustChangePassword: !!driver.mustChangePassword
     };
-    
+
     res.json({
       success: true,
       data: response
@@ -1258,7 +1270,7 @@ router.get('/:id', async (req, res) => {
 router.post('/', async (req, res) => {
   try {
     console.log('\n🆕 Creating new driver...');
-    console.log('Request body:', JSON.stringify(req.body, null, 2));
+    console.log('Request body:', JSON.stringify({ ...req.body, password: req.body?.password ? '[REDACTED]' : undefined }, null, 2));
     
     const {
       personalInfo,
@@ -1350,30 +1362,21 @@ router.post('/', async (req, res) => {
     
     console.log('✅ Driver created:', driverId);
     
-    // Send welcome email
+    // Send welcome email (no credentials — a driver app login is set up
+    // separately by an admin via the "Create login" action)
     if (personalInfo.email) {
       try {
-        const emailHtml = getDriverWelcomeTemplate({
-          name: `${personalInfo.firstName} ${personalInfo.lastName}`,
-          email: personalInfo.email,
-          driverId: driverId,
-          tempPassword: password || 'Please contact admin for password'
-        });
-        
-        const emailText = getDriverWelcomeText({
-          name: `${personalInfo.firstName} ${personalInfo.lastName}`,
-          email: personalInfo.email,
-          driverId: driverId,
-          tempPassword: password || 'Please contact admin for password'
-        });
-        
+        const fullName = `${personalInfo.firstName} ${personalInfo.lastName}`;
+        const emailText = `Welcome to Abra Fleet!\n\nDear ${fullName},\n\nYour driver account has been created.\nDriver ID: ${driverId}\n\nYour administrator will set up your driver app login separately and share your sign-in details with you.`;
+        const emailHtml = `<p>Dear ${fullName},</p><p>Your Abra Fleet driver account has been created.</p><p><strong>Driver ID:</strong> ${driverId}</p><p>Your administrator will set up your driver app login separately and share your sign-in details with you.</p>`;
+
         await emailService.sendEmail({
           to: personalInfo.email,
           subject: 'Welcome to Abra Fleet - Driver Account Created',
           html: emailHtml,
           text: emailText
         });
-        
+
         console.log('✅ Welcome email sent to:', personalInfo.email);
       } catch (emailError) {
         console.error('⚠️ Failed to send welcome email:', emailError.message);
@@ -1396,6 +1399,262 @@ router.post('/', async (req, res) => {
       message: 'Failed to create driver',
       error: error.message
     });
+  }
+});
+
+// ============================================================================
+// DRIVER LOGIN CREDENTIALS (B4 feature)
+// ============================================================================
+
+/**
+ * Finds a driver by Mongo _id or by driverId code.
+ */
+async function findDriverByAnyId(db, id) {
+  if (/^[0-9a-fA-F]{24}$/.test(id)) {
+    const byObjectId = await db.collection('drivers').findOne({ _id: new ObjectId(id) });
+    if (byObjectId) return byObjectId;
+  }
+  return db.collection('drivers').findOne({ driverId: id });
+}
+
+/**
+ * Checks that `email` (case-insensitive) is not already used by any
+ * account outside the given driver — another driver, an admin, a
+ * customer, a client, or an employee_admin.
+ */
+async function findConflictingAccountForEmail(db, email, excludeDriverObjectId) {
+  const lowerEmail = email.toLowerCase();
+
+  const conflictingDriver = await db.collection('drivers').findOne({
+    _id: { $ne: excludeDriverObjectId },
+    $or: [{ email: lowerEmail }, { 'personalInfo.email': lowerEmail }]
+  });
+  if (conflictingDriver) return { collection: 'drivers' };
+
+  for (const collectionName of ['admin_users', 'customers', 'clients', 'employee_admins']) {
+    const conflict = await db.collection(collectionName).findOne({ email: lowerEmail });
+    if (conflict) return { collection: collectionName };
+  }
+
+  return null;
+}
+
+function driverActorFromRequest(req) {
+  return {
+    userId: req.user?.userId,
+    email: req.user?.email,
+    role: req.user?.role
+  };
+}
+
+// ============================================================================
+// @route   POST /api/admin/drivers/:id/login
+// @desc    Create a driver app login (generates a one-time temporary password)
+// @access  Private (Admin / drivers edit_delete permission)
+// ============================================================================
+router.post('/:id/login', checkEditDeletePermission('drivers'), async (req, res) => {
+  try {
+    const driver = await findDriverByAnyId(req.db, req.params.id);
+    if (!driver) {
+      return res.status(404).json({ success: false, message: 'Driver not found' });
+    }
+
+    if (driver.password) {
+      return res.status(400).json({
+        success: false,
+        message: 'This driver already has a login. Use "Reset password" instead.'
+      });
+    }
+
+    const email = driver.personalInfo?.email || driver.email;
+    if (!email || !email.includes('@')) {
+      return res.status(400).json({
+        success: false,
+        message: 'Add a valid email for this driver first.'
+      });
+    }
+    const lowerEmail = email.toLowerCase();
+
+    const conflict = await findConflictingAccountForEmail(req.db, lowerEmail, driver._id);
+    if (conflict) {
+      return res.status(400).json({
+        success: false,
+        message: 'This email is already used by another account. Use a different email for this driver.'
+      });
+    }
+
+    const temporaryPassword = generateDriverTemporaryPassword({
+      email: lowerEmail,
+      phone: driver.personalInfo?.phone || driver.phone,
+      firstName: driver.personalInfo?.firstName,
+      lastName: driver.personalInfo?.lastName
+    });
+    const hashedPassword = await bcrypt.hash(temporaryPassword, 10);
+
+    await req.db.collection('drivers').updateOne(
+      { _id: driver._id },
+      {
+        $set: {
+          email: lowerEmail,
+          'personalInfo.email': driver.personalInfo?.email || email,
+          password: hashedPassword,
+          mustChangePassword: true,
+          passwordChangedAt: new Date(),
+          loginStatus: 'ACTIVE',
+          updatedAt: new Date()
+        },
+        $inc: { tokenVersion: 1 }
+      }
+    );
+
+    await recordDriverLoginAudit(req.db, {
+      action: 'CREATE_LOGIN',
+      driverId: driver.driverId,
+      driverObjectId: driver._id,
+      performedBy: driverActorFromRequest(req),
+      details: { email: lowerEmail }
+    });
+
+    res.json({
+      success: true,
+      message: 'Driver login created',
+      data: { username: lowerEmail, temporaryPassword }
+    });
+  } catch (error) {
+    console.error('❌ Error creating driver login:', error.message);
+    res.status(500).json({ success: false, message: 'Failed to create driver login' });
+  }
+});
+
+// ============================================================================
+// @route   POST /api/admin/drivers/:id/login/reset
+// @desc    Force-reset a driver's password to a new one-time temporary password
+// @access  Private (Admin / drivers edit_delete permission)
+// ============================================================================
+router.post('/:id/login/reset', checkEditDeletePermission('drivers'), async (req, res) => {
+  try {
+    const driver = await findDriverByAnyId(req.db, req.params.id);
+    if (!driver) {
+      return res.status(404).json({ success: false, message: 'Driver not found' });
+    }
+
+    if (!driver.loginStatus) {
+      return res.status(400).json({
+        success: false,
+        message: 'This driver has no login yet. Use "Create login" first.'
+      });
+    }
+
+    const email = driver.email || driver.personalInfo?.email;
+    const temporaryPassword = generateDriverTemporaryPassword({
+      email,
+      phone: driver.personalInfo?.phone || driver.phone,
+      firstName: driver.personalInfo?.firstName,
+      lastName: driver.personalInfo?.lastName
+    });
+    const hashedPassword = await bcrypt.hash(temporaryPassword, 10);
+
+    await req.db.collection('drivers').updateOne(
+      { _id: driver._id },
+      {
+        $set: {
+          password: hashedPassword,
+          mustChangePassword: true,
+          passwordChangedAt: new Date(),
+          updatedAt: new Date()
+        },
+        $inc: { tokenVersion: 1 }
+      }
+    );
+
+    await recordDriverLoginAudit(req.db, {
+      action: 'RESET_LOGIN',
+      driverId: driver.driverId,
+      driverObjectId: driver._id,
+      performedBy: driverActorFromRequest(req),
+      details: { email }
+    });
+
+    res.json({
+      success: true,
+      message: 'Driver password reset',
+      data: { username: email, temporaryPassword }
+    });
+  } catch (error) {
+    console.error('❌ Error resetting driver login:', error.message);
+    res.status(500).json({ success: false, message: 'Failed to reset driver login' });
+  }
+});
+
+// ============================================================================
+// @route   POST /api/admin/drivers/:id/login/disable
+// @desc    Disable a driver's login and invalidate any existing sessions
+// @access  Private (Admin / drivers edit_delete permission)
+// ============================================================================
+router.post('/:id/login/disable', checkEditDeletePermission('drivers'), async (req, res) => {
+  try {
+    const driver = await findDriverByAnyId(req.db, req.params.id);
+    if (!driver) {
+      return res.status(404).json({ success: false, message: 'Driver not found' });
+    }
+
+    if (!driver.loginStatus) {
+      return res.status(400).json({ success: false, message: 'This driver has no login to disable.' });
+    }
+
+    await req.db.collection('drivers').updateOne(
+      { _id: driver._id },
+      { $set: { loginStatus: 'DISABLED', updatedAt: new Date() }, $inc: { tokenVersion: 1 } }
+    );
+
+    await recordDriverLoginAudit(req.db, {
+      action: 'DISABLE_LOGIN',
+      driverId: driver.driverId,
+      driverObjectId: driver._id,
+      performedBy: driverActorFromRequest(req),
+      details: {}
+    });
+
+    res.json({ success: true, message: 'Driver login disabled' });
+  } catch (error) {
+    console.error('❌ Error disabling driver login:', error.message);
+    res.status(500).json({ success: false, message: 'Failed to disable driver login' });
+  }
+});
+
+// ============================================================================
+// @route   POST /api/admin/drivers/:id/login/enable
+// @desc    Re-enable a previously disabled driver login
+// @access  Private (Admin / drivers edit_delete permission)
+// ============================================================================
+router.post('/:id/login/enable', checkEditDeletePermission('drivers'), async (req, res) => {
+  try {
+    const driver = await findDriverByAnyId(req.db, req.params.id);
+    if (!driver) {
+      return res.status(404).json({ success: false, message: 'Driver not found' });
+    }
+
+    if (!driver.loginStatus) {
+      return res.status(400).json({ success: false, message: 'This driver has no login to enable.' });
+    }
+
+    await req.db.collection('drivers').updateOne(
+      { _id: driver._id },
+      { $set: { loginStatus: 'ACTIVE', updatedAt: new Date() } }
+    );
+
+    await recordDriverLoginAudit(req.db, {
+      action: 'ENABLE_LOGIN',
+      driverId: driver.driverId,
+      driverObjectId: driver._id,
+      performedBy: driverActorFromRequest(req),
+      details: {}
+    });
+
+    res.json({ success: true, message: 'Driver login enabled' });
+  } catch (error) {
+    console.error('❌ Error enabling driver login:', error.message);
+    res.status(500).json({ success: false, message: 'Failed to enable driver login' });
   }
 });
 
@@ -1638,15 +1897,21 @@ router.delete('/:id', async (req, res) => {
     
     // ✅ PERFORM SOFT DELETE
     console.log(`🗑️ [Driver Delete] Soft deleting driver: ${driver.driverId}`);
+    const deleteUpdate = {
+      $set: {
+        status: 'inactive',
+        deletedAt: new Date(),
+        updatedAt: new Date()
+      }
+    };
+    // Removing a driver also disables any app login they have
+    if (driver.loginStatus) {
+      deleteUpdate.$set.loginStatus = 'DISABLED';
+      deleteUpdate.$inc = { tokenVersion: 1 };
+    }
     const updateResult = await req.db.collection('drivers').updateOne(
       { _id: driver._id },
-      { 
-        $set: { 
-          status: 'inactive',
-          deletedAt: new Date(),
-          updatedAt: new Date()
-        } 
-      }
+      deleteUpdate
     );
     
     console.log(`   Update result: matchedCount=${updateResult.matchedCount}, modifiedCount=${updateResult.modifiedCount}`);

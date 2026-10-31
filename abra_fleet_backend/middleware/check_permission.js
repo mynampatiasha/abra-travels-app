@@ -125,7 +125,36 @@ const checkAnyPermission = (...requiredPermissions) => {
   };
 };
 
+/**
+ * Check if user has edit/delete access for a specific permission key.
+ * Used for sensitive actions (e.g. driver login credential management)
+ * that require more than plain view/can_access rights.
+ * Permission shape in Mongo: { can_access: bool, edit_delete: bool }
+ */
+const checkEditDeletePermission = (requiredPermission) => {
+  return (req, res, next) => {
+    if (req.user.role === 'admin' || req.user.role === 'super_admin') {
+      return next();
+    }
+
+    const permissions = req.user.permissions || {};
+    const perm = permissions[requiredPermission];
+    const hasEditDelete = !!(perm && perm.edit_delete === true);
+
+    if (hasEditDelete) {
+      return next();
+    }
+
+    return res.status(403).json({
+      success: false,
+      error: 'Forbidden',
+      message: "You don't have edit/delete permission for this resource"
+    });
+  };
+};
+
 module.exports = {
   checkPermission,
-  checkAnyPermission
+  checkAnyPermission,
+  checkEditDeletePermission
 };
