@@ -20,6 +20,10 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
   bool _isLoading = true;
   String? _errorMessage;
 
+  // Pagination state
+  int _currentPage = 1;
+  final int _rowsPerPage = 10;
+
   @override
   void initState() {
     super.initState();
@@ -55,6 +59,7 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
           setState(() {
             _users = List<Map<String, dynamic>>.from(data['data']);
             _isLoading = false;
+            _currentPage = 1;
           });
         } else {
           throw Exception(data['message'] ?? 'Failed to load users');
@@ -327,21 +332,122 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
                               ],
                             ),
                           )
-                        : RefreshIndicator(
-                            onRefresh: _fetchUsers,
-                            child: ListView.builder(
-                              padding: const EdgeInsets.all(24),
-                              itemCount: _users.length,
-                              itemBuilder: (context, index) {
-                                final user = _users[index];
-                                return _UserCard(
-                                  user: user,
-                                  onEdit: () => _showEditPermissionsDialog(user),
-                                  onDelete: () => _deleteUser(user),
-                                );
-                              },
-                            ),
+                        : Builder(
+                            builder: (context) {
+                              final totalItems = _users.length;
+                              final totalPages = totalItems == 0
+                                  ? 1
+                                  : ((totalItems - 1) ~/ _rowsPerPage) + 1;
+                              if (_currentPage > totalPages) _currentPage = totalPages;
+                              if (_currentPage < 1) _currentPage = 1;
+                              final startIndex = (_currentPage - 1) * _rowsPerPage;
+                              final endIndex = (startIndex + _rowsPerPage) > totalItems
+                                  ? totalItems
+                                  : startIndex + _rowsPerPage;
+                              final pagedUsers = _users.sublist(startIndex, endIndex);
+
+                              return Column(
+                                children: [
+                                  Expanded(
+                                    child: RefreshIndicator(
+                                      onRefresh: _fetchUsers,
+                                      child: ListView.builder(
+                                        padding: const EdgeInsets.all(24),
+                                        itemCount: pagedUsers.length,
+                                        itemBuilder: (context, index) {
+                                          final user = pagedUsers[index];
+                                          return _UserCard(
+                                            user: user,
+                                            onEdit: () => _showEditPermissionsDialog(user),
+                                            onDelete: () => _deleteUser(user),
+                                          );
+                                        },
+                                      ),
+                                    ),
+                                  ),
+                                  if (totalItems > 0)
+                                    _buildPaginationBar(
+                                      startIndex: startIndex,
+                                      endIndex: endIndex,
+                                      totalItems: totalItems,
+                                      totalPages: totalPages,
+                                    ),
+                                ],
+                              );
+                            },
                           ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPaginationBar({
+    required int startIndex,
+    required int endIndex,
+    required int totalItems,
+    required int totalPages,
+  }) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
+      decoration: const BoxDecoration(
+        color: Colors.white,
+        border: Border(
+          top: BorderSide(color: Color(0xFFE2E8F0), width: 1.5),
+        ),
+      ),
+      child: Wrap(
+        alignment: WrapAlignment.spaceBetween,
+        crossAxisAlignment: WrapCrossAlignment.center,
+        spacing: 12,
+        runSpacing: 8,
+        children: [
+          Text(
+            'Showing ${startIndex + 1}-$endIndex of $totalItems',
+            style: const TextStyle(
+              fontSize: 13,
+              color: Color(0xFF64748B),
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              IconButton(
+                onPressed: _currentPage > 1
+                    ? () => setState(() => _currentPage--)
+                    : null,
+                icon: const Icon(Icons.chevron_left, size: 18),
+                tooltip: 'Previous Page',
+                style: IconButton.styleFrom(
+                  backgroundColor: const Color(0xFF3B82F6).withOpacity(0.1),
+                  foregroundColor: const Color(0xFF3B82F6),
+                  padding: const EdgeInsets.all(6),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Text(
+                'Page $_currentPage of $totalPages',
+                style: const TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
+                  color: Color(0xFF1E293B),
+                ),
+              ),
+              const SizedBox(width: 10),
+              IconButton(
+                onPressed: _currentPage < totalPages
+                    ? () => setState(() => _currentPage++)
+                    : null,
+                icon: const Icon(Icons.chevron_right, size: 18),
+                tooltip: 'Next Page',
+                style: IconButton.styleFrom(
+                  backgroundColor: const Color(0xFF3B82F6).withOpacity(0.1),
+                  foregroundColor: const Color(0xFF3B82F6),
+                  padding: const EdgeInsets.all(6),
+                ),
+              ),
+            ],
           ),
         ],
       ),

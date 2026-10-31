@@ -42,6 +42,11 @@ class _VendorsListPageState extends State<VendorsListPage> {
   // Selection state
   Set<int> selectedRows = {};
   bool selectAll = false;
+
+  // Pagination state
+  int _currentPage = 1;
+  int _totalPages = 1;
+  final int _itemsPerPage = 20;
   
   // Loading state
   bool isLoading = false;
@@ -99,7 +104,15 @@ class _VendorsListPageState extends State<VendorsListPage> {
   }
   
   void _onSearchChanged() {
+    _currentPage = 1;
     _applyFiltersAndSearch();
+  }
+
+  List<VendorData> get _currentPageVendors {
+    final start = (_currentPage - 1) * _itemsPerPage;
+    if (start >= filteredVendors.length) return [];
+    final end = (start + _itemsPerPage).clamp(0, filteredVendors.length);
+    return filteredVendors.sublist(start, end);
   }
   
   // ============================================================================
@@ -207,19 +220,24 @@ class _VendorsListPageState extends State<VendorsListPage> {
         
         return true;
       }).toList();
-      
+
+      _totalPages = (filteredVendors.length / _itemsPerPage).ceil().clamp(1, 999);
+      if (_currentPage > _totalPages) _currentPage = _totalPages;
+      if (_currentPage < 1) _currentPage = 1;
+
       // Clear selections when filters change
       selectedRows.clear();
       selectAll = false;
     });
   }
-  
+
   void _clearFilters() {
     setState(() {
       _searchController.clear();
       selectedFilter = 'All Vendors';
       selectedTypeFilter = 'All Types';
       selectedStatusFilter = 'All Statuses';
+      _currentPage = 1;
       _applyFiltersAndSearch();
     });
   }
@@ -232,13 +250,13 @@ class _VendorsListPageState extends State<VendorsListPage> {
     setState(() {
       selectAll = value ?? false;
       if (selectAll) {
-        selectedRows = Set.from(List.generate(filteredVendors.length, (i) => i));
+        selectedRows = Set.from(List.generate(_currentPageVendors.length, (i) => i));
       } else {
         selectedRows.clear();
       }
     });
   }
-  
+
   void _toggleRowSelection(int index) {
     setState(() {
       if (selectedRows.contains(index)) {
@@ -246,7 +264,7 @@ class _VendorsListPageState extends State<VendorsListPage> {
         selectAll = false;
       } else {
         selectedRows.add(index);
-        if (selectedRows.length == filteredVendors.length) {
+        if (selectedRows.length == _currentPageVendors.length) {
           selectAll = true;
         }
       }
@@ -616,6 +634,7 @@ class _VendorsListPageState extends State<VendorsListPage> {
                         onChanged: (String? newValue) {
                           setState(() {
                             selectedFilter = newValue!;
+                            _currentPage = 1;
                             _applyFiltersAndSearch();
                           });
                         },
@@ -713,6 +732,7 @@ class _VendorsListPageState extends State<VendorsListPage> {
                                 onChanged: (String? newValue) {
                                   setState(() {
                                     selectedTypeFilter = newValue!;
+                                    _currentPage = 1;
                                     _applyFiltersAndSearch();
                                   });
                                 },
@@ -747,6 +767,7 @@ class _VendorsListPageState extends State<VendorsListPage> {
                                 onChanged: (String? newValue) {
                                   setState(() {
                                     selectedStatusFilter = newValue!;
+                                    _currentPage = 1;
                                     _applyFiltersAndSearch();
                                   });
                                 },
@@ -855,9 +876,9 @@ class _VendorsListPageState extends State<VendorsListPage> {
                                 // Data rows
                                 Expanded(
                                   child: ListView.builder(
-                                    itemCount: filteredVendors.length,
+                                    itemCount: _currentPageVendors.length,
                                     itemBuilder: (context, index) {
-                                      final vendor = filteredVendors[index];
+                                      final vendor = _currentPageVendors[index];
                                       final isSelected = selectedRows.contains(index);
                                       
                                       return InkWell(
@@ -978,31 +999,84 @@ class _VendorsListPageState extends State<VendorsListPage> {
             ),
           ),
           
-          // Footer
+          // Footer with pagination
           Container(
             color: Colors.white,
             padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-            child: Row(
-              children: [
-                Text(
-                  'Showing ${filteredVendors.length} of ${vendors.length} vendor${vendors.length != 1 ? 's' : ''}',
-                  style: TextStyle(color: Colors.grey[600], fontSize: 14),
-                ),
-                if (selectedRows.isNotEmpty) ...[
-                  const SizedBox(width: 16),
-                  Text(
-                    '(${selectedRows.length} selected)',
-                    style: const TextStyle(color: Color(0xFF3498DB), fontSize: 14, fontWeight: FontWeight.w600),
-                  ),
-                ],
-              ],
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                return Wrap(
+                  alignment: WrapAlignment.spaceBetween,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  runSpacing: 8,
+                  children: [
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          filteredVendors.isEmpty
+                              ? 'Showing 0 of ${vendors.length} vendor${vendors.length != 1 ? 's' : ''}'
+                              : 'Showing ${(_currentPage - 1) * _itemsPerPage + 1}–${(_currentPage * _itemsPerPage).clamp(0, filteredVendors.length)} of ${filteredVendors.length}'
+                                '${filteredVendors.length != vendors.length ? ' (filtered from ${vendors.length})' : ''}',
+                          style: TextStyle(color: Colors.grey[600], fontSize: 14),
+                        ),
+                        if (selectedRows.isNotEmpty) ...[
+                          const SizedBox(width: 16),
+                          Text(
+                            '(${selectedRows.length} selected)',
+                            style: const TextStyle(color: Color(0xFF3498DB), fontSize: 14, fontWeight: FontWeight.w600),
+                          ),
+                        ],
+                      ],
+                    ),
+                    if (_totalPages > 1)
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          _pageNavBtn(
+                            icon: Icons.chevron_left,
+                            enabled: _currentPage > 1,
+                            onTap: () => setState(() => _currentPage--),
+                          ),
+                          const SizedBox(width: 10),
+                          Text(
+                            'Page $_currentPage of $_totalPages',
+                            style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Color(0xFF2C3E50)),
+                          ),
+                          const SizedBox(width: 10),
+                          _pageNavBtn(
+                            icon: Icons.chevron_right,
+                            enabled: _currentPage < _totalPages,
+                            onTap: () => setState(() => _currentPage++),
+                          ),
+                        ],
+                      ),
+                  ],
+                );
+              },
             ),
           ),
         ],
       ),
     );
   }
-  
+
+  Widget _pageNavBtn({required IconData icon, required bool enabled, required VoidCallback onTap}) {
+    return GestureDetector(
+      onTap: enabled ? onTap : null,
+      child: Container(
+        width: 32,
+        height: 32,
+        decoration: BoxDecoration(
+          color: enabled ? Colors.white : Colors.grey[50],
+          borderRadius: BorderRadius.circular(6),
+          border: Border.all(color: Colors.grey[300]!),
+        ),
+        child: Icon(icon, size: 18, color: enabled ? const Color(0xFF2C3E50) : Colors.grey[300]),
+      ),
+    );
+  }
+
   Widget _buildEmptyState() {
     return Center(
       child: Column(
