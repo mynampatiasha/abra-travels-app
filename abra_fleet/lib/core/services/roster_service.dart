@@ -1364,6 +1364,26 @@ extension RouteOptimizationExtension on RosterService {
     }
   }
 
+  /// Operations setting: minutes a driver needs between the last drop of one trip and the next pickup
+  Future<Map<String, dynamic>> getAssignmentSettings() async {
+    final response = await _apiService.get('/api/roster/settings/assignment');
+    if (response['success'] == true) {
+      return Map<String, dynamic>.from(response['data'] ?? {});
+    }
+    throw Exception(response['message'] ?? 'Failed to load assignment settings');
+  }
+
+  /// Saves the driver buffer (whole minutes, 0-120). Needs edit permission on pending rosters.
+  Future<void> updateDriverBufferMinutes(int minutes) async {
+    final response = await _apiService.put(
+      '/api/roster/settings/assignment',
+      body: {'driverBufferMinutes': minutes},
+    );
+    if (response['success'] != true) {
+      throw Exception(response['message'] ?? 'Failed to save assignment settings');
+    }
+  }
+
   /// ✅ NEW: Get compatible vehicles for given rosters (filtered by email domain, timing, capacity)
   Future<Map<String, dynamic>> getCompatibleVehicles(List<String> rosterIds) async {
     try {

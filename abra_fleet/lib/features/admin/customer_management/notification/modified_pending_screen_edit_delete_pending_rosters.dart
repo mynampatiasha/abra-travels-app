@@ -9,6 +9,7 @@ import 'package:abra_fleet/features/admin/customer_management/widgets/vehicle_co
 import 'package:abra_fleet/features/admin/customer_management/widgets/route_optimization_dialog.dart';
 import 'package:abra_fleet/features/admin/customer_management/widgets/route_optimization_input_dialog.dart';
 import 'package:abra_fleet/features/admin/customer_management/widgets/detailed_error_dialog.dart';
+import 'package:abra_fleet/features/admin/customer_management/widgets/driver_buffer_dialog.dart';
 import 'package:abra_fleet/core/utils/export_helper.dart';
 import 'package:country_state_city/country_state_city.dart' as csc;
 import 'package:intl/intl.dart';
@@ -4921,6 +4922,13 @@ Future<void> _confirmManualAssignment(
                     },
                     icon: Icon(Icons.refresh, color: _themeColor),
                     tooltip: 'Refresh',
+                  ),
+                  const SizedBox(width: 8),
+                  // Driver buffer between trips (operations setting)
+                  IconButton(
+                    onPressed: () => showDriverBufferDialog(context, widget.rosterService),
+                    icon: Icon(Icons.timer_outlined, color: _themeColor),
+                    tooltip: 'Driver buffer between trips',
                   ),
                   const SizedBox(width: 8),
                   // Export to Excel Button
