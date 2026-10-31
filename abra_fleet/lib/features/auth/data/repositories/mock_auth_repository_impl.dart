@@ -127,7 +127,16 @@ class MockAuthRepositoryImpl implements AuthRepository {
 
     print('[MockAuth] Password reset email sent to: $email (Mock)');
   }
-  
+
+  @override
+  Future<void> changePassword({
+    required String currentPassword,
+    required String newPassword,
+  }) async {
+    await Future.delayed(const Duration(milliseconds: 500));
+    print('[MockAuth] Password changed (Mock)');
+  }
+
   // --- FIX 2: Added missing getAuthToken method ---
   @override
   Future<String?> getAuthToken() async {

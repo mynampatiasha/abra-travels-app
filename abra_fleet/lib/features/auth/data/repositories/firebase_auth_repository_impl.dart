@@ -568,6 +568,25 @@ Future<String?> signInWithEmailAndPassword({
   }
 
   @override
+  Future<void> changePassword({
+    required String currentPassword,
+    required String newPassword,
+  }) async {
+    final user = _firebaseAuth.currentUser;
+    if (user == null || user.email == null) {
+      throw Exception('No signed-in user to change the password for');
+    }
+    try {
+      final credential = firebase_auth.EmailAuthProvider.credential(email: user.email!, password: currentPassword);
+      await user.reauthenticateWithCredential(credential);
+      await user.updatePassword(newPassword);
+    } catch (e) {
+      print('Error changing password: $e');
+      rethrow;
+    }
+  }
+
+  @override
   void dispose() {
     // Clear cache on dispose
     _cachedUser = null;

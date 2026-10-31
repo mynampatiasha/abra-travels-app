@@ -137,6 +137,12 @@ class _LoginScreenState extends State<LoginScreen> with TickerProviderStateMixin
 
       debugPrint('[LoginScreen] Login OK — role: ${user.role}, name: ${user.name}');
 
+      if (user.mustChangePassword) {
+        if (!mounted) return;
+        final changed = await _forcePasswordChange(currentPassword: _passCtrl.text.trim());
+        if (!changed) return;
+      }
+
       if (mounted) {
         final userName = (user.name?.isNotEmpty == true)
             ? user.name!
@@ -166,6 +172,97 @@ class _LoginScreenState extends State<LoginScreen> with TickerProviderStateMixin
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
+  }
+
+  /// Blocking dialog shown right after a sign-in with a temporary password.
+  /// Returns true once the driver has saved their own password.
+  Future<bool> _forcePasswordChange({required String currentPassword}) async {
+    final firstCtrl = TextEditingController();
+    final secondCtrl = TextEditingController();
+    String? problem;
+    bool busy = false;
+
+    final saved = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (dialogContext, setDialogState) => AlertDialog(
+          title: const Text('Choose your own password'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'You signed in with a temporary password. Choose a new one that only '
+                'you know (at least 10 characters).',
+                style: TextStyle(fontSize: 13),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: firstCtrl,
+                obscureText: true,
+                decoration: const InputDecoration(labelText: 'New password'),
+              ),
+              const SizedBox(height: 8),
+              TextField(
+                controller: secondCtrl,
+                obscureText: true,
+                decoration: const InputDecoration(labelText: 'Confirm new password'),
+              ),
+              if (problem != null) ...[
+                const SizedBox(height: 8),
+                Text(problem!, style: const TextStyle(color: Colors.red, fontSize: 12)),
+              ],
+            ],
+          ),
+          actions: [
+            FilledButton(
+              onPressed: busy
+                  ? null
+                  : () async {
+                      if (firstCtrl.text.length < 10) {
+                        setDialogState(() => problem = 'The password must have at least 10 characters.');
+                        return;
+                      }
+                      if (firstCtrl.text != secondCtrl.text) {
+                        setDialogState(() => problem = 'The two passwords do not match.');
+                        return;
+                      }
+                      if (firstCtrl.text == currentPassword) {
+                        setDialogState(() => problem = 'Choose a password different from the temporary one.');
+                        return;
+                      }
+                      setDialogState(() {
+                        busy = true;
+                        problem = null;
+                      });
+                      try {
+                        final authRepository = Provider.of<AuthRepository>(context, listen: false);
+                        await authRepository.changePassword(
+                          currentPassword: currentPassword,
+                          newPassword: firstCtrl.text,
+                        );
+                        if (dialogContext.mounted) Navigator.pop(dialogContext, true);
+                      } catch (e) {
+                        setDialogState(() {
+                          busy = false;
+                          problem = 'Could not save the password: $e';
+                        });
+                      }
+                    },
+              child: busy
+                  ? const SizedBox(
+                      width: 18, height: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                    )
+                  : const Text('Save password'),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    return saved == true;
   }
 
   // ── BUILD ──────────────────────────────────────────────────────────────────

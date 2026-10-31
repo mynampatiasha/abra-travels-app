@@ -19,6 +19,7 @@ import 'dart:typed_data';
 import 'package:flutter/foundation.dart' show kIsWeb;
 
 import 'package:intl/intl.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 // Conditional import for web-only functionality
 import 'stub_html.dart' if (dart.library.html) 'dart:html' as html;
@@ -3443,6 +3444,122 @@ class _BulkImportDriversDialogState extends State<BulkImportDriversDialog> {
           ],
         ),
       ),
+    );
+  }
+}
+
+// ==================== DRIVER LOGIN CREDENTIALS DIALOG ====================
+// Shown once, right after "Create login" or "Reset password", with the
+// driver's username (email) and one-time temporary password.
+
+Future<void> showDriverLoginCredentialsDialog(
+  BuildContext context, {
+  required String name,
+  required String username,
+  required String temporaryPassword,
+  String? phone,
+}) {
+  void copy(String label, String value) {
+    Clipboard.setData(ClipboardData(text: value));
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('$label copied to clipboard'), backgroundColor: Colors.green, duration: const Duration(seconds: 2)),
+    );
+  }
+
+  Future<void> shareOnWhatsApp() async {
+    final digits = (phone ?? '').replaceAll(RegExp(r'\D'), '');
+    if (digits.isEmpty) return;
+    final withCountryCode = digits.length == 10 ? '91$digits' : digits;
+    final message = 'Hello $name, your Abra Fleet Driver app login is ready.\n'
+        'Email (username): $username\n'
+        'Temporary password: $temporaryPassword\n'
+        'Sign in to the Abra Fleet Driver app with these, then choose your own password.';
+    final uri = Uri.parse('https://wa.me/$withCountryCode?text=${Uri.encodeComponent(message)}');
+    await launchUrl(uri, mode: LaunchMode.externalApplication);
+  }
+
+  return showDialog<void>(
+    context: context,
+    barrierDismissible: false,
+    builder: (dialogContext) => AlertDialog(
+      title: const Row(
+        children: [
+          Icon(Icons.vpn_key, color: Color(0xFF0D47A1), size: 24),
+          SizedBox(width: 12),
+          Text('Driver login created'),
+        ],
+      ),
+      content: SizedBox(
+        width: 420,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              decoration: BoxDecoration(color: Colors.amber.shade50, borderRadius: BorderRadius.circular(8), border: Border.all(color: Colors.amber.shade300)),
+              child: const Text(
+                'This password is shown only now. If it is lost, use "Reset password" to generate a new one.',
+                style: TextStyle(fontSize: 12.5),
+              ),
+            ),
+            const SizedBox(height: 16),
+            _CredentialRow(label: 'Email (username)', value: username, onCopy: () => copy('Email', username)),
+            const SizedBox(height: 10),
+            _CredentialRow(label: 'Temporary password', value: temporaryPassword, onCopy: () => copy('Temporary password', temporaryPassword), monospace: true),
+            if (phone != null && phone.trim().isNotEmpty) ...[
+              const SizedBox(height: 16),
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton.icon(
+                  onPressed: shareOnWhatsApp,
+                  icon: const Icon(Icons.chat, size: 18, color: Color(0xFF25D366)),
+                  label: const Text('Share on WhatsApp'),
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+      actions: [
+        ElevatedButton(
+          onPressed: () => Navigator.of(dialogContext).pop(),
+          style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF0D47A1), foregroundColor: Colors.white),
+          child: const Text('Done'),
+        ),
+      ],
+    ),
+  );
+}
+
+class _CredentialRow extends StatelessWidget {
+  final String label;
+  final String value;
+  final VoidCallback onCopy;
+  final bool monospace;
+
+  const _CredentialRow({required this.label, required this.value, required this.onCopy, this.monospace = false});
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(label, style: const TextStyle(fontSize: 12, color: Colors.grey)),
+        const SizedBox(height: 4),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          decoration: BoxDecoration(color: Colors.grey.shade100, borderRadius: BorderRadius.circular(8), border: Border.all(color: Colors.grey.shade300)),
+          child: Row(
+            children: [
+              Expanded(
+                child: SelectableText(value, style: TextStyle(fontFamily: monospace ? 'monospace' : null, fontSize: 14, fontWeight: FontWeight.w600)),
+              ),
+              IconButton(icon: const Icon(Icons.copy, size: 18), onPressed: onCopy, padding: EdgeInsets.zero, constraints: const BoxConstraints(minWidth: 32, minHeight: 32)),
+            ],
+          ),
+        ),
+      ],
     );
   }
 }
