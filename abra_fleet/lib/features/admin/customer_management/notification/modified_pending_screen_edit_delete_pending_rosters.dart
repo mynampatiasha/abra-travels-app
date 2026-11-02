@@ -2147,15 +2147,19 @@ String _getCustomerOrganization(Map<String, dynamic> customer) {
     int noDriverVehicles = 0;
     int companyMismatch = 0;
     int otherReasons = 0;
+    int timeConflicts = 0;
     
     for (final v in incompatibleVehicles) {
       final reason = _safeStringExtract(v['compatibilityReason']) != '' ? _safeStringExtract(v['compatibilityReason']) : 'Unknown reason';
-      if (reason.contains('full') || reason.contains('capacity') || reason.contains('seats')) {
+      final lowerReason = reason.toLowerCase();
+      if (lowerReason.contains('not available in time') || lowerReason.contains('driver/vehicle is')) {
+        timeConflicts++;
+      } else if (lowerReason.contains('full') || lowerReason.contains('capacity') || lowerReason.contains('seats')) {
         fullVehicles++;
-      } else if (reason.contains('driver') || reason.contains('Driver')) {
-        noDriverVehicles++;
-      } else if (reason.contains('Company') || reason.contains('company') || reason.contains('domain')) {
+      } else if (lowerReason.contains('compan') || lowerReason.contains('domain')) {
         companyMismatch++;
+      } else if (lowerReason.contains('driver')) {
+        noDriverVehicles++;
       } else {
         otherReasons++;
       }
@@ -2197,6 +2201,16 @@ String _getCustomerOrganization(Map<String, dynamic> customer) {
               ),
               const SizedBox(height: 12),
               
+              if (timeConflicts > 0) ...[
+                _buildProblemItem(
+                  Icons.schedule,
+                  Colors.deepPurple,
+                  'Driver Not Available in Time',
+                  '$timeConflicts vehicles have a driver who cannot reach the pickup in time (travel time + buffer) or is already on a trip',
+                ),
+                const SizedBox(height: 8),
+              ],
+
               if (fullVehicles > 0) ...[
                 _buildProblemItem(
                   Icons.event_seat,
@@ -2236,6 +2250,20 @@ String _getCustomerOrganization(Map<String, dynamic> customer) {
                 ),
               ],
               
+              const SizedBox(height: 12),
+              const Text('Vehicle details:', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+              ...incompatibleVehicles.take(6).map((v) => Padding(
+                    padding: const EdgeInsets.only(top: 6),
+                    child: Text(
+                      '• ${_safeStringExtract(v['registrationNumber'] ?? v['vehicleNumber'])}: ${_safeStringExtract(v['compatibilityReason'])}',
+                      style: TextStyle(fontSize: 12, color: Colors.grey[800], height: 1.3),
+                    ),
+                  )),
+              if (incompatibleVehicles.length > 6)
+                Padding(
+                  padding: const EdgeInsets.only(top: 6),
+                  child: Text('... and ${incompatibleVehicles.length - 6} more vehicles', style: TextStyle(fontSize: 12, color: Colors.grey[600])),
+                ),
               const SizedBox(height: 16),
               const Divider(),
               const SizedBox(height: 16),
@@ -2275,6 +2303,22 @@ String _getCustomerOrganization(Map<String, dynamic> customer) {
                       const SizedBox(height: 8),
                     ],
                     
+                    if (timeConflicts > 0) ...[
+                      const Text(
+                        '⏱️ Choose Another Time or Vehicle',
+                        style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+                      ),
+                      Text(
+                        '   • The driver needs travel time plus the buffer between two trips',
+                        style: TextStyle(fontSize: 12, color: Colors.grey[700]),
+                      ),
+                      Text(
+                        '   • Operations can change the buffer with the timer icon at the top of this screen',
+                        style: TextStyle(fontSize: 12, color: Colors.grey[700]),
+                      ),
+                      const SizedBox(height: 8),
+                    ],
+
                     if (noDriverVehicles > 0) ...[
                       const Text(
                         '2️⃣ Assign Drivers to Vehicles',
