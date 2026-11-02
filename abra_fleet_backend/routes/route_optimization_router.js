@@ -4,6 +4,13 @@ const express = require('express');
 const router = express.Router();
 const { ObjectId } = require('mongodb');
 
+// The old mock endpoints (made-up distances, drivers from the wrong collection) are switched off - use compatible-vehicles + assign-optimized-route
+const retiredEndpoint = (req, res) => res.status(410).json({
+  success: false,
+  error: 'ENDPOINT_RETIRED',
+  message: 'This endpoint is retired. Use /api/roster/compatible-vehicles and /api/roster/assign-optimized-route.'
+});
+
 // Total seats of a vehicle INCLUDING the driver seat. `capacity` is a plain number on most vehicles ({ passengers } on some).
 const vehicleTotalSeats = (v) => {
   const cap = v.capacity && typeof v.capacity === 'object' ? v.capacity.passengers : v.capacity;
@@ -221,7 +228,7 @@ router.put('/settings/assignment', verifyToken, checkEditDeletePermission('pendi
 // @route   POST api/roster/optimize
 // @desc    Optimize route assignments for multiple rosters
 // @access  Private (Admin/Manager)
-router.post('/optimize', verifyToken, async (req, res) => {
+router.post('/optimize', verifyToken, retiredEndpoint, async (req, res) => {
   try {
     console.log('🚀 Route optimization request received');
     console.log('Request body:', JSON.stringify(req.body, null, 2));
@@ -368,7 +375,7 @@ router.post('/optimize', verifyToken, async (req, res) => {
 // @route   POST api/roster/assign-bulk
 // @desc    Bulk assign drivers to rosters with notifications
 // @access  Private (Admin/Manager)
-router.post('/assign-bulk', verifyToken, async (req, res) => {
+router.post('/assign-bulk', verifyToken, retiredEndpoint, async (req, res) => {
   try {
     console.log('📦 Bulk assignment request received');
     console.log('Request body:', JSON.stringify(req.body, null, 2));
@@ -1334,22 +1341,22 @@ router.post('/assign-optimized-route', verifyToken, async (req, res) => {
     const existingTrips = await req.db.collection('roster-assigned-trips').find({
       vehicleId: new ObjectId(vehicleId),
       status: { $in: ['assigned', 'started', 'in_progress'] },
-      scheduledDate: today
+      scheduledDate: { $in: dateList }
     }).toArray();
     
     const totalSeats = vehicleTotalSeats(vehicle);
     
     // ✅ FIX: Extract unique customer emails from trips
-    const uniqueCustomers = new Set();
+    // seats in use = the busiest date/trip type of this vehicle; customers being re-assigned do not count twice
+    const reassignedRosterIds = new Set(route.map(r => String(r.rosterId)));
+    const seatsByDateAndType = {};
     existingTrips.forEach(trip => {
-      trip.stops?.forEach(stop => {
-        if (stop.type === 'pickup' && stop.customer?.email) {
-          uniqueCustomers.add(stop.customer.email);
-        }
-      });
+      if ((trip.rosterIds || []).some(id => reassignedRosterIds.has(String(id)))) return;
+      const key = trip.scheduledDate + '|' + trip.tripType;
+      seatsByDateAndType[key] = seatsByDateAndType[key] || new Set();
+      tripCustomerEmails(trip).forEach(e => seatsByDateAndType[key].add(e));
     });
-    
-    const currentAssignedCount = uniqueCustomers.size; // ✅ FIXED: Count unique customers
+    const currentAssignedCount = Math.max(0, ...Object.values(seatsByDateAndType).map(set => set.size));
     const newCustomersCount = route.length;
     const availableSeats = totalSeats - 1 - currentAssignedCount; // -1 for driver
     
@@ -1451,6 +1458,7 @@ router.post('/assign-optimized-route', verifyToken, async (req, res) => {
     const results = [];
     const errors = [];
     const rosterIds = [];
+    const rosterTypeByRosterId = {}; // roster type as stored on the roster document
     const notificationResults = {
       customers: 0,
       driver: 0,
@@ -1580,6 +1588,7 @@ router.post('/assign-optimized-route', verifyToken, async (req, res) => {
         // ====================================================================
         console.log(`   ✅ Adding roster ${rosterId} to rosterIds array for update`);
         rosterIds.push(new ObjectId(rosterId));
+        rosterTypeByRosterId[String(rosterId)] = existingRoster.rosterType;
         console.log(`   📊 rosterIds array now has ${rosterIds.length} roster(s)`);
         
         const roster = existingRoster; // Use the existing roster
@@ -1718,6 +1727,33 @@ router.post('/assign-optimized-route', verifyToken, async (req, res) => {
       scheduledDate: { $in: dateList }
     }, { session }).toArray()).filter(t => !(t.rosterIds || []).some(id => newRosterIdSet.has(String(id))));
     const timeConflictsFound = [];
+
+    // ✅ One vehicle carries ONE company: the new customers must share a company and match what the vehicle already carries
+    const companyOfEmail = (email) => (email && String(email).includes('@')) ? String(email).split('@')[1].toLowerCase().split('.')[0] : null;
+    const newCompanies = new Set(route.map(r => companyOfEmail(r.customerEmail)).filter(Boolean));
+    if (newCompanies.size > 1) {
+      await session.abortTransaction();
+      return res.status(400).json({
+        success: false,
+        error: 'MIXED_COMPANIES',
+        message: `Customers from different companies cannot share a vehicle (${Array.from(newCompanies).join(', ')})`
+      });
+    }
+    const vehicleCompanies = new Set();
+    existingTripsInRange
+      .filter(t => String(t.vehicleId) === String(vehicleId))
+      .forEach(t => tripCustomerEmails(t).forEach(e => { const c = companyOfEmail(e); if (c) vehicleCompanies.add(c); }));
+    if (vehicleCompanies.size > 0 && newCompanies.size > 0 && !Array.from(newCompanies).every(c => vehicleCompanies.has(c))) {
+      await session.abortTransaction();
+      return res.status(409).json({
+        success: false,
+        error: 'COMPANY_MISMATCH',
+        message: `This vehicle already carries ${Array.from(vehicleCompanies).join(', ')}; it cannot also take ${Array.from(newCompanies).join(', ')}`
+      });
+    }
+
+    // the first roster is read once here instead of once per trip
+    const firstRosterDoc = await req.db.collection('rosters').findOne({ _id: rosterIds[0] });
     
     // ✅ NEW: Loop through each date
 for (let dateIndex = 0; dateIndex < dateList.length; dateIndex++) {
@@ -1734,7 +1770,7 @@ for (let dateIndex = 0; dateIndex < dateList.length; dateIndex++) {
   // Extract all unique roster types from the route
   const rosterTypes = new Set();
   for (const stop of route) {
-    const stopRosterType = stop.rosterType || 'both';
+    const stopRosterType = rosterTypeByRosterId[String(stop.rosterId)] || stop.rosterType || 'both';
     rosterTypes.add(stopRosterType);
     console.log(`   - ${stop.customerName}: ${stopRosterType}`);
   }
@@ -1838,9 +1874,7 @@ for (let dateIndex = 0; dateIndex < dateList.length; dateIndex++) {
       }
       
       // Add office drop as final stop
-      const firstRoster = await req.db.collection('rosters').findOne(
-        { _id: rosterIds[0] }
-      );
+      const firstRoster = firstRosterDoc;
       
       tripStops.push({
         stopId: `office-drop-${vehicleId}`,
@@ -1862,9 +1896,7 @@ for (let dateIndex = 0; dateIndex < dateList.length; dateIndex++) {
       console.log('   📍 Route: Office → Home (Evening Drop)');
       
       // Add office pickup as first stop
-      const firstRoster = await req.db.collection('rosters').findOne(
-        { _id: rosterIds[0] }
-      );
+      const firstRoster = firstRosterDoc;
       
       const logoutTime = firstRoster?.endTime || firstRoster?.logoutTime || '18:00';
       
@@ -1959,9 +1991,7 @@ for (let dateIndex = 0; dateIndex < dateList.length; dateIndex++) {
       
     } else {
       // Evening trip: Start at office logout time, end late
-      const firstRoster = await req.db.collection('rosters').findOne(
-        { _id: rosterIds[0] }
-      );
+      const firstRoster = firstRosterDoc;
       
       tripStartTime = extractSafeTime(firstRoster?.endTime || firstRoster?.logoutTime || '18:00', '18:00');
       tripEndTime = extractSafeTime(tripStops[tripStops.length - 1]?.estimatedTime, '20:00');
@@ -1975,7 +2005,7 @@ for (let dateIndex = 0; dateIndex < dateList.length; dateIndex++) {
     const tripData = {
       // Trip Identification
       tripNumber: tripNumber,
-      tripGroupId: tripGroupId,
+      tripGroupId: existingTripsInRange.some(t => t.tripGroupId === tripGroupId) ? tripGroupId + '-' + String(tripStartTime).replace(':', '') : tripGroupId,
       tripType: tripType,
       tripTime: tripTime, // ✅ NEW: 'morning' or 'evening'
       isReturnTrip: !isMorningTrip, // ✅ NEW: true for evening trips
@@ -2610,13 +2640,13 @@ for (const stop of stops) {
     const updatedExistingTrips = await req.db.collection('roster-assigned-trips').find({
       vehicleId: new ObjectId(vehicleId),
       status: { $in: ['assigned', 'started', 'in_progress'] },
-      scheduledDate: today
+      scheduledDate: { $in: dateList }
     }).toArray();
     
     const updatedUniqueCustomers = new Set();
     updatedExistingTrips.forEach(trip => {
       trip.stops?.forEach(stop => {
-        if (stop.type === 'pickup' && stop.customer?.email) {
+        if (stop.customer?.email) {
           updatedUniqueCustomers.add(stop.customer.email);
         }
       });

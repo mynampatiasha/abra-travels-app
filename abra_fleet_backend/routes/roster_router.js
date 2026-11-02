@@ -8,6 +8,20 @@ const { createNotification } = require('../models/notification_model');
 const { calculateRosterDistances } = require('../utils/distance_calculator');
 const NotificationService = require('../services/notification_service');
 
+// The JWT userId is the Mongo _id since Firebase was removed (older tokens/records may still use firebaseUid)
+const findUserDocByToken = async (db, userId) => {
+  let doc = await db.collection('users').findOne({ firebaseUid: userId });
+  if (doc) return doc;
+  if (ObjectId.isValid(userId)) {
+    const _id = new ObjectId(userId);
+    for (const name of ['users', 'customers', 'admin_users', 'employee_admins', 'clients']) {
+      doc = await db.collection(name).findOne({ _id });
+      if (doc) return doc;
+    }
+  }
+  return null;
+};
+
 
 // [OK] ADD THIS HELPER FUNCTION
 function isValidObjectId(id) {
@@ -248,7 +262,7 @@ router.post('/customer/bulk', verifyToken, async (req, res) => {
     let adminEmail = '';
     let adminOrganization = '';
     try {
-      const userDoc = await req.db.collection('users').findOne({ firebaseUid: userId });
+      const userDoc = await findUserDocByToken(req.db, userId);
       if (userDoc) {
         adminName = userDoc.name || 'Unknown';
         adminEmail = userDoc.email || '';
@@ -256,6 +270,11 @@ router.post('/customer/bulk', verifyToken, async (req, res) => {
       }
     } catch (e) {
       console.warn('Could not fetch user details:', e.message);
+    }
+
+    if (!adminOrganization && adminEmail && adminEmail.includes('@')) {
+      const orgLabel = adminEmail.split('@')[1].split('.')[0];
+      adminOrganization = orgLabel.charAt(0).toUpperCase() + orgLabel.slice(1);
     }
 
     // Ensure organization is set for proper filtering
@@ -1684,7 +1703,7 @@ router.get('/admin/assigned-trips', verifyToken, async (req, res) => {
     const { status, company, startDate, endDate } = req.query;
 
     // Get admin's organization
-    const adminUser = await req.db.collection('users').findOne({ firebaseUid: userId });
+    const adminUser = await findUserDocByToken(req.db, userId);
     const adminOrganization = adminUser?.companyName || adminUser?.organizationName || '';
 
     console.log(`[USER] Admin: ${adminUser?.name || 'Unknown'}`);
@@ -1888,7 +1907,7 @@ router.get('/admin/pending', verifyToken, async (req, res) => {
     let adminEmailDomain = null;
 
     try {
-      const adminUser = await req.db.collection('users').findOne({ firebaseUid: userId });
+      const adminUser = await findUserDocByToken(req.db, userId);
       if (adminUser && adminUser.email) {
         const emailParts = adminUser.email.split('@');
         if (emailParts.length === 2) {
@@ -2210,10 +2229,10 @@ router.post('/customer/leave-request', verifyToken, async (req, res) => {
     const end = new Date(endDate);
 
     // Validate date range
-    if (start >= end) {
+    if (start > end) {
       return res.status(400).json({
         success: false,
-        message: 'End date must be after start date'
+        message: 'End date cannot be before start date'
       });
     }
 
@@ -2231,7 +2250,7 @@ router.post('/customer/leave-request', verifyToken, async (req, res) => {
     }
 
     // Always check database for complete user info including organization
-    let userDoc = await req.db.collection('users').findOne({ firebaseUid: userId });
+    let userDoc = await findUserDocByToken(req.db, userId);
 
     // If user doesn't exist in MongoDB, create them
     if (!userDoc) {
@@ -2642,7 +2661,7 @@ router.get('/admin/leave-requests', verifyToken, async (req, res) => {
 
     if (!adminOrganization) {
       // Get admin's organization from database
-      const adminUser = await req.db.collection('users').findOne({ firebaseUid: userId });
+      const adminUser = await findUserDocByToken(req.db, userId);
       if (adminUser && (adminUser.role === 'admin' || adminUser.role === 'client')) {
         adminOrganization = adminUser.companyName || adminUser.organizationName;
       }
@@ -2750,7 +2769,7 @@ router.get('/admin/approved-leave-requests', verifyToken, async (req, res) => {
     let adminOrganization = organizationName;
 
     if (!adminOrganization) {
-      const adminUser = await req.db.collection('users').findOne({ firebaseUid: userId });
+      const adminUser = await findUserDocByToken(req.db, userId);
       if (adminUser && (adminUser.role === 'admin' || adminUser.role === 'client')) {
         adminOrganization = adminUser.companyName || adminUser.organizationName;
       }
@@ -2848,7 +2867,7 @@ router.put('/admin/leave-request/:id/approve', verifyToken, async (req, res) => 
       adminName = userRecord.displayName || userRecord.email || 'Unknown Admin';
       adminEmail = userRecord.email || '';
     } catch (authError) {
-      const userDoc = await req.db.collection('users').findOne({ firebaseUid: userId });
+      const userDoc = await findUserDocByToken(req.db, userId);
       if (userDoc) {
         adminName = userDoc.name || userDoc.email || 'Unknown Admin';
         adminEmail = userDoc.email || '';
@@ -3084,7 +3103,7 @@ router.put('/admin/leave-request/:id/reject', verifyToken, async (req, res) => {
       adminName = userRecord.displayName || userRecord.email || 'Unknown Admin';
       adminEmail = userRecord.email || '';
     } catch (authError) {
-      const userDoc = await req.db.collection('users').findOne({ firebaseUid: userId });
+      const userDoc = await findUserDocByToken(req.db, userId);
       if (userDoc) {
         adminName = userDoc.name || userDoc.email || 'Unknown Admin';
         adminEmail = userDoc.email || '';
@@ -3301,7 +3320,7 @@ router.post('/admin/cancel-leave-trips/:leaveRequestId', verifyToken, async (req
       adminName = userRecord.displayName || userRecord.email || 'Unknown Admin';
       adminEmail = userRecord.email || '';
     } catch (authError) {
-      const userDoc = await req.db.collection('users').findOne({ firebaseUid: userId });
+      const userDoc = await findUserDocByToken(req.db, userId);
       if (userDoc) {
         adminName = userDoc.name || userDoc.email || 'Unknown Admin';
         adminEmail = userDoc.email || '';
@@ -3906,10 +3925,10 @@ router.post(
       const startDate = new Date(fromDate);
       const endDate = new Date(toDate);
 
-      if (startDate >= endDate) {
+      if (startDate > endDate) {
         return res.status(400).json({
           success: false,
-          message: 'End date must be after start date'
+          message: 'End date cannot be before start date'
         });
       }
 
@@ -4324,10 +4343,10 @@ router.put('/customer/:id', verifyToken, async (req, res) => {
       const startDate = new Date(fromDate);
       const endDate = new Date(toDate);
 
-      if (startDate >= endDate) {
+      if (startDate > endDate) {
         return res.status(400).json({
           success: false,
-          message: 'End date must be after start date'
+          message: 'End date cannot be before start date'
         });
       }
     }
