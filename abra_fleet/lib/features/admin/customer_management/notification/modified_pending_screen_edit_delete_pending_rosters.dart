@@ -1252,13 +1252,16 @@ Future<void> _performAdvancedRouteOptimization(int count) async {
         final reason = _safeStringExtract(v['compatibilityReason']) != '' ? _safeStringExtract(v['compatibilityReason']) : 'Unknown reason';
         
         // 🆕 CHECK FOR CONSECUTIVE TRIP ERRORS
-        if (reason.contains('Impossible schedule') || 
-            reason.contains('insufficient time') || 
-            reason.contains('Short by')) {
+        final lowerReason = reason.toLowerCase();
+        if (lowerReason.contains('impossible schedule') ||
+            lowerReason.contains('insufficient time') ||
+            lowerReason.contains('short by') ||
+            lowerReason.contains('not available in time') ||
+            lowerReason.contains('driver/vehicle is')) {
           reasons.add('time_conflict');
         } else if (reason.contains('full') || reason.contains('capacity')) {
           reasons.add('full');
-        } else if (reason.contains('Company') || reason.contains('company')) {
+        } else if (lowerReason.contains('compan')) {
           reasons.add('company_mismatch');
         } else if (reason.contains('driver') || reason.contains('Driver')) {
           reasons.add('no_driver');
@@ -1294,6 +1297,14 @@ Future<void> _performAdvancedRouteOptimization(int count) async {
         errorMessage += '✅ Solution: Use vehicles that match customer email domains\n\n';
       }
       
+      final shownReasons = incompatibleVehicles
+          .map((v) => '• ${_safeStringExtract(v['registrationNumber'] ?? v['vehicleNumber'])}: ${_safeStringExtract(v['compatibilityReason'])}')
+          .take(4)
+          .toList();
+      if (shownReasons.isNotEmpty) {
+        errorMessage += 'Details:\n' + shownReasons.join('\n') + '\n\n';
+      }
+
       errorMessage += '📋 What to do now:\n';
       errorMessage += '1. Go to Vehicle Management\n';
       errorMessage += '2. Check vehicle status and assignments\n';
@@ -3072,11 +3083,16 @@ setState(() => _isOptimizing = false);
         final reasons = <String>{};
         for (final v in incompatibleVehicles) {
           final reason = _safeStringExtract(v['compatibilityReason']) != '' ? _safeStringExtract(v['compatibilityReason']) : 'Unknown reason';
-          if (reason.contains('full') || reason.contains('capacity')) {
+          final lowerReason = reason.toLowerCase();
+          if (lowerReason.contains('not available in time') ||
+              lowerReason.contains('short by') ||
+              lowerReason.contains('driver/vehicle is')) {
+            reasons.add('time_conflict');
+          } else if (lowerReason.contains('full') || lowerReason.contains('capacity')) {
             reasons.add('full');
-          } else if (reason.contains('Company') || reason.contains('company')) {
+          } else if (lowerReason.contains('compan')) {
             reasons.add('company_mismatch');
-          } else if (reason.contains('driver') || reason.contains('Driver')) {
+          } else if (lowerReason.contains('driver')) {
             reasons.add('no_driver');
           }
         }
@@ -3085,6 +3101,15 @@ setState(() => _isOptimizing = false);
         String errorTitle = '🚗 All Vehicles Are Unavailable';
         String errorMessage = 'Cannot assign customers because all vehicles are currently unavailable.\n\n';
         
+        if (reasons.contains('time_conflict')) {
+          errorTitle = '⏰ Driver Not Available in Time';
+          errorMessage = 'The drivers of all available vehicles cannot reach this pickup in time (travel time + buffer) or are already on a trip.\n\n';
+          errorMessage += '✅ Solutions:\n';
+          errorMessage += '   • Choose another pickup time or date\n';
+          errorMessage += '   • Operations can reduce the driver buffer (timer icon on this screen)\n';
+          errorMessage += '   • Add a vehicle with a free driver\n\n';
+        }
+
         if (reasons.contains('full')) {
           errorMessage += '💺 Problem: All vehicles are full\n';
           errorMessage += '✅ Solution: Wait for current trips to complete, or add more vehicles\n\n';
@@ -3098,6 +3123,14 @@ setState(() => _isOptimizing = false);
           errorMessage += '✅ Solution: Use vehicles that match customer email domains\n\n';
         }
         
+        final shownReasons = incompatibleVehicles
+            .map((v) => '• ${_safeStringExtract(v['registrationNumber'] ?? v['vehicleNumber'])}: ${_safeStringExtract(v['compatibilityReason'])}')
+            .take(4)
+            .toList();
+        if (shownReasons.isNotEmpty) {
+          errorMessage += 'Details:\n' + shownReasons.join('\n') + '\n\n';
+        }
+
         errorMessage += '📋 What to do now:\n';
         errorMessage += '1. Go to Vehicle Management\n';
         errorMessage += '2. Check vehicle status and assignments\n';
