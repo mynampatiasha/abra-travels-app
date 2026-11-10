@@ -19,6 +19,7 @@ const { checkEditDeletePermission } = require('../middleware/check_permission');
 const {
   generateDriverTemporaryPassword,
   recordDriverLoginAudit,
+  findLegacyDriverAccount,
 } = require('../services/driver_login_credentials');
 
 // Configure multer for document uploads
@@ -123,17 +124,26 @@ router.get('/profile', async (req, res) => {
     
     let assignedVehicle = null;
     if (driver.assignedVehicle) {
+      // assignedVehicle is stored as the vehicle's ObjectId (see the
+      // assign-vehicle route), but also fall back to a vehicleId code in
+      // case of older data — same pattern used by the admin driver-details route.
+      const avStr = driver.assignedVehicle.toString();
       assignedVehicle = await req.db.collection('vehicles').findOne(
-        { vehicleId: driver.assignedVehicle },
-        { 
-          projection: { 
-            vehicleId: 1, 
-            registrationNumber: 1, 
-            make: 1, 
+        {
+          $or: [
+            (/^[0-9a-fA-F]{24}$/.test(avStr) ? { _id: new ObjectId(avStr) } : { _id: null }),
+            { vehicleId: avStr }
+          ]
+        },
+        {
+          projection: {
+            vehicleId: 1,
+            registrationNumber: 1,
+            make: 1,
             model: 1,
             type: 1,
             status: 1
-          } 
+          }
         }
       );
       console.log('✅ Assigned vehicle found:', assignedVehicle?.vehicleId);
@@ -621,9 +631,24 @@ router.get('/', async (req, res) => {
         }
       }
     ]).toArray();
-    
+
+    // Drivers with no login of their own might already have a working
+    // login via a legacy admin_users (role:'driver') account on the same
+    // email — show those as Active instead of "No login".
+    await Promise.all(
+      drivers.map(async (driver) => {
+        if (driver.loginStatus) return;
+        const driverEmail = driver.email || driver.personalInfo?.email;
+        const legacy = await findLegacyDriverAccount(req.db, driverEmail);
+        if (legacy) {
+          driver.loginStatus = 'ACTIVE';
+          driver.legacyLogin = true;
+        }
+      })
+    );
+
     const totalCount = await req.db.collection('drivers').countDocuments(filter);
-    
+
     console.log(`✅ Fetched ${drivers.length} drivers in ${Date.now() - startTime}ms`);
     
     if (fullDetails === 'true') {
@@ -816,9 +841,12 @@ router.get('/', async (req, res) => {
         },
         totalTrips: totalTrips,  // ✅ FIXED
         completedTrips: totalCompletedTrips,  // ✅ FIXED
+        loginStatus: driver.loginStatus || null,
+        mustChangePassword: !!driver.mustChangePassword,
+        legacyLogin: !!driver.legacyLogin,
       };
     }));
-    
+
     console.log(`✅ Response ready in ${Date.now() - startTime}ms`);
     
     res.json({
@@ -1245,8 +1273,17 @@ router.get('/:id', async (req, res) => {
 
       // Driver app login state
       loginStatus: driver.loginStatus || null,
-      mustChangePassword: !!driver.mustChangePassword
+      mustChangePassword: !!driver.mustChangePassword,
+      legacyLogin: false
     };
+
+    if (!response.loginStatus) {
+      const legacy = await findLegacyDriverAccount(req.db, driver.email || driver.personalInfo?.email);
+      if (legacy) {
+        response.loginStatus = 'ACTIVE';
+        response.legacyLogin = true;
+      }
+    }
 
     res.json({
       success: true,
@@ -1294,7 +1331,9 @@ router.post('/', async (req, res) => {
     const existingDriver = await req.db.collection('drivers').findOne({
       $or: [
         { 'personalInfo.email': personalInfo.email },
-        { 'personalInfo.phone': personalInfo.phone }
+        { 'personalInfo.phone': personalInfo.phone },
+        { email: personalInfo.email.toLowerCase() },
+        { phone: personalInfo.phone }
       ]
     });
     
@@ -1314,6 +1353,12 @@ router.post('/', async (req, res) => {
     
     const newDriver = {
       driverId,
+      // Top-level email/name/phone so login (which matches on these
+      // top-level fields) works for drivers created here, not just ones
+      // granted a login via POST /:id/login.
+      email: personalInfo.email.toLowerCase(),
+      name: `${personalInfo.firstName} ${personalInfo.lastName}`.trim(),
+      phone: personalInfo.phone,
       personalInfo: {
         firstName: personalInfo.firstName,
         lastName: personalInfo.lastName,
@@ -1474,6 +1519,14 @@ router.post('/:id/login', checkEditDeletePermission('drivers'), async (req, res)
       });
     }
     const lowerEmail = email.toLowerCase();
+
+    const legacyAccount = await findLegacyDriverAccount(req.db, lowerEmail);
+    if (legacyAccount) {
+      return res.status(400).json({
+        success: false,
+        message: 'This driver already has a login through an existing account with this email. No separate driver login is needed.'
+      });
+    }
 
     const conflict = await findConflictingAccountForEmail(req.db, lowerEmail, driver._id);
     if (conflict) {

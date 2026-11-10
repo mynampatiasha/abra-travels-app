@@ -74,8 +74,27 @@ async function recordDriverLoginAudit(db, { action, driverId, driverObjectId, pe
   }
 }
 
+/**
+ * Some drivers predate the drivers-collection login system: they already
+ * have a working login stored as an admin_users record with role:'driver'
+ * (a legacy path from before this feature existed), using the same email
+ * as their driver record. For those, "no login" / "create login" would be
+ * wrong — they already have one, just not in the drivers collection.
+ * Returns the legacy account (no secrets) if one exists, else null.
+ */
+async function findLegacyDriverAccount(db, email) {
+  if (!email) return null;
+  const lowerEmail = email.toLowerCase();
+  const legacy = await db.collection('admin_users').findOne(
+    { email: lowerEmail, role: 'driver' },
+    { projection: { _id: 1, email: 1, role: 1, status: 1, createdAt: 1 } }
+  );
+  return legacy || null;
+}
+
 module.exports = {
   generateDriverTemporaryPassword,
   isPasswordAcceptable,
   recordDriverLoginAudit,
+  findLegacyDriverAccount,
 };

@@ -2705,6 +2705,16 @@ class _DriverListPageState extends State<DriverListPage> with SingleTickerProvid
 
   Widget _buildLoginActionButton(Map<String, dynamic> driver) {
     final status = _loginStatusOf(driver);
+
+    if (driver['legacyLogin'] == true) {
+      // This driver already signs in via an older admin account on the
+      // same email — nothing here for this app to create/reset/disable.
+      return Tooltip(
+        message: 'Already has a login via an existing account — managed separately',
+        child: Icon(Icons.vpn_key, size: 18, color: Colors.grey.shade400),
+      );
+    }
+
     return Tooltip(
       message: 'Driver login',
       child: PopupMenuButton<String>(
