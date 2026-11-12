@@ -547,7 +547,7 @@ Future<void> _loadFleetOverview() async {
       ),
       DashboardSummaryItem(
         title: 'Pending Rosters',
-        value: _rosterStats.pending.toString(),
+        value: _isLoadingRosterStats ? '...' : _rosterStats.pending.toString(),
         icon: Icons.calendar_today,
         iconColor: Colors.white,
         backgroundColor: _rosterStats.pending > 0 ? const Color(0xFFF97316) : Colors.grey,

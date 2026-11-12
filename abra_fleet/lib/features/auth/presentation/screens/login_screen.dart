@@ -21,6 +21,8 @@ import 'package:abra_fleet/features/auth/domain/entities/user_entity.dart';
 import 'registration_screen.dart';
 import 'forgot_password_screen.dart';
 import 'post_login_splash_screen.dart';
+import 'package:abra_fleet/core/services/api_service.dart';
+import 'package:abra_fleet/core/widgets/app_error_dialog.dart';
 import 'package:abra_fleet/app/presentation/screens/main_app_shell.dart';
 import 'package:abra_fleet/features/client/client_main_shell.dart';
 
@@ -152,22 +154,82 @@ class _LoginScreenState extends State<LoginScreen> with TickerProviderStateMixin
     } catch (e) {
       debugPrint('Login error: $e');
       if (mounted) {
-        String msg = 'Login failed';
-        if (e.toString().contains('Invalid credentials') ||
-            e.toString().contains('Email or password is incorrect')) {
-          msg = 'Invalid email or password';
-        } else if (e.toString().contains('Account inactive')) {
-          msg = 'Your account is inactive. Contact administrator.';
-        } else if (e.toString().contains('User not found')) {
-          msg = 'No account found with this email';
-        } else {
-          msg = 'Login failed: ${e.toString()}';
+        final rawStr = e.toString().toLowerCase();
+
+        int? statusCode;
+        String? apiMessage;
+        if (e is ApiException) {
+          statusCode = e.statusCode;
+          apiMessage = e.message.toLowerCase();
         }
-        scaffoldMessenger.showSnackBar(SnackBar(
-          content: Text(msg),
-          backgroundColor: Colors.red,
-          duration: const Duration(seconds: 4),
-        ));
+
+        // 1. Invalid credentials / wrong password check FIRST
+        final isInvalidCreds = (statusCode == 401) ||
+            rawStr.contains('invalid credentials') ||
+            rawStr.contains('email or password is incorrect') ||
+            rawStr.contains('invalid password') ||
+            rawStr.contains('incorrect password') ||
+            (apiMessage != null && (apiMessage.contains('password') || apiMessage.contains('credential') || apiMessage.contains('incorrect')));
+
+        // 2. Inactive account or disabled login
+        final isAccountInactive = (statusCode == 403) ||
+            rawStr.contains('account inactive') ||
+            rawStr.contains('login disabled') ||
+            rawStr.contains('contact administrator') ||
+            rawStr.contains('deactivated') ||
+            (apiMessage != null && (apiMessage.contains('inactive') || apiMessage.contains('disabled')));
+
+        // 3. User not found
+        final isUserNotFound = (statusCode == 404) ||
+            rawStr.contains('user not found') ||
+            rawStr.contains('no account found') ||
+            (apiMessage != null && apiMessage.contains('not found'));
+
+        // 4. Genuine Network drop / Server offline (no HTTP response received or 502/503/504)
+        final isNetwork = (statusCode == null && (rawStr.contains('network error') ||
+                rawStr.contains('socketexception') ||
+                rawStr.contains('timeout') ||
+                rawStr.contains('connection refused') ||
+                rawStr.contains('failed host lookup') ||
+                rawStr.contains('backend may be unreachable') ||
+                rawStr.contains('unreachable'))) ||
+            (statusCode != null && (statusCode == 502 || statusCode == 503 || statusCode == 504));
+
+        if (isInvalidCreds) {
+          AppErrorDialog.showBanner(
+            context,
+            message: 'Invalid email or password. Please verify your credentials.',
+            isError: true,
+          );
+        } else if (isAccountInactive) {
+          AppErrorDialog.showBanner(
+            context,
+            message: 'Your account is inactive. Please contact your Fleet Administrator.',
+            isError: true,
+          );
+        } else if (isUserNotFound) {
+          AppErrorDialog.showBanner(
+            context,
+            message: 'No account registered with this email address.',
+            isError: true,
+          );
+        } else if (isNetwork) {
+          AppErrorDialog.showNetworkError(
+            context,
+            onRetry: () => _login(),
+          );
+        } else {
+          // If the backend sent a custom message, show that message cleanly
+          final displayMsg = (e is ApiException)
+              ? e.message
+              : (rawStr.contains('exception:') ? rawStr.split('exception:').last.trim() : 'Unable to sign in. Please try again.');
+
+          AppErrorDialog.showBanner(
+            context,
+            message: displayMsg,
+            isError: true,
+          );
+        }
       }
     } finally {
       if (mounted) setState(() => _isLoading = false);

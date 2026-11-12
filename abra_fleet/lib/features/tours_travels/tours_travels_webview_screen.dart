@@ -106,7 +106,16 @@ class _ToursTravelsWebViewScreenState extends State<ToursTravelsWebViewScreen> {
       params = const PlatformWebViewControllerCreationParams();
     }
 
-    final WebViewController controller = WebViewController.fromPlatformCreationParams(params);
+    // ✅ Grant camera/microphone access when the page calls getUserMedia() (e.g. attendance
+    // photo capture). Without this, Android's WebView denies all media requests even though
+    // the app itself already has the OS-level CAMERA permission.
+    final WebViewController controller = WebViewController.fromPlatformCreationParams(
+      params,
+      onPermissionRequest: (WebViewPermissionRequest request) {
+        debugPrint('🔐 WebView permission requested: ${request.types}');
+        request.grant();
+      },
+    );
 
     controller
       ..setJavaScriptMode(JavaScriptMode.unrestricted)
@@ -161,10 +170,9 @@ class _ToursTravelsWebViewScreenState extends State<ToursTravelsWebViewScreen> {
         },
       );
 
-      // Enable camera, microphone, and other media permissions
-      // Note: setOnPermissionRequest is not available in webview_flutter_android 3.16.9
-      // Permissions are handled through Android manifest and system prompts
-      debugPrint('🔐 Android WebView configured - permissions handled by system');
+      // Camera/microphone media requests are granted via the cross-platform
+      // onPermissionRequest callback passed to WebViewController.fromPlatformCreationParams above.
+      debugPrint('🔐 Android WebView configured - media permissions granted via onPermissionRequest');
     }
 
     // ✅ iOS-SPECIFIC: Configure WKWebView for media permissions

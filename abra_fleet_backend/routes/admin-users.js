@@ -16,7 +16,7 @@ router.get('/', async (req, res) => {
     const db = req.db;
     
     // Check if user is admin
-    if (req.user.role !== 'admin') {
+    if (req.user.role !== 'admin' && req.user.role !== 'super_admin') {
       console.log('❌ Access denied - user is not admin');
       return res.status(403).json({
         success: false,
@@ -80,7 +80,7 @@ router.get('/:userId', async (req, res) => {
     const { userId } = req.params;
     
     // Check if user is admin
-    if (req.user.role !== 'admin') {
+    if (req.user.role !== 'admin' && req.user.role !== 'super_admin') {
       console.log('❌ Access denied - user is not admin');
       return res.status(403).json({
         success: false,
@@ -158,7 +158,7 @@ router.post('/', async (req, res) => {
     const { email, password, name, role, phone, organizationId } = req.body;
     
     // Check if user is admin
-    if (req.user.role !== 'admin') {
+    if (req.user.role !== 'admin' && req.user.role !== 'super_admin') {
       console.log('❌ Access denied - user is not admin');
       return res.status(403).json({
         success: false,
@@ -289,7 +289,7 @@ router.put('/:userId', async (req, res) => {
     const { name, role, phone, organizationId, isActive } = req.body;
     
     // Check if user is admin
-    if (req.user.role !== 'admin') {
+    if (req.user.role !== 'admin' && req.user.role !== 'super_admin') {
       console.log('❌ Access denied - user is not admin');
       return res.status(403).json({
         success: false,
@@ -402,7 +402,7 @@ router.delete('/:userId', async (req, res) => {
     const { userId } = req.params;
     
     // Check if user is admin
-    if (req.user.role !== 'admin') {
+    if (req.user.role !== 'admin' && req.user.role !== 'super_admin') {
       console.log('❌ Access denied - user is not admin');
       return res.status(403).json({
         success: false,

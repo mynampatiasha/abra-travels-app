@@ -18,10 +18,11 @@ const { verifyJWT } = require('./jwt_router');
 // 🛡️ ADMIN-ONLY MIDDLEWARE
 // ============================================================================
 const adminOnlyMiddleware = (req, res, next) => {
-  if (req.user.role !== 'super_admin' && req.user.role !== 'admin') {
-    return res.status(403).json({ 
-      success: false, 
-      message: 'Access denied. Admin privileges required.' 
+  const hasRoleAccessPermission = req.user.permissions?.role_access_control?.can_access === true;
+  if (req.user.role !== 'super_admin' && req.user.role !== 'admin' && !hasRoleAccessPermission) {
+    return res.status(403).json({
+      success: false,
+      message: 'Access denied. Admin privileges required.'
     });
   }
   next();

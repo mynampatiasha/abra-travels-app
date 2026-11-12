@@ -57,6 +57,11 @@ class DriverService {
   Future<Map<String, dynamic>> getDriverStats() async {
     try {
       final response = await _apiService.get('/api/admin/drivers/stats');
+      // Backend returns { success, data: { total, active, onLeave, inactive } } —
+      // unwrap `data` so callers can read ['total'] directly, same as customer/client stats.
+      if (response['data'] is Map<String, dynamic>) {
+        return response['data'] as Map<String, dynamic>;
+      }
       return response;
     } catch (e) {
       print('❌ Error getting driver stats: $e');

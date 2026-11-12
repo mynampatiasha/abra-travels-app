@@ -917,6 +917,65 @@ List<Map<String, dynamic>> _groupRostersLocally(List<Map<String, dynamic>> roste
     });
   }
 
+  // MANUAL assignment of ONE customer (per-row Assign button): same flow as Manual Mode with count = 1
+  Future<void> _assignSingleManual(Map<String, dynamic> roster) async {
+    final originalFiltered = _filteredRosters;
+    setState(() {
+      _filteredRosters = [roster];
+    });
+    await _performManualRouteSelection(1);
+    setState(() {
+      _filteredRosters = originalFiltered;
+    });
+  }
+
+  // Company of a roster = first part of the e-mail domain (the same rule the server uses)
+  String? _companyOfRoster(Map<String, dynamic> roster) {
+    final email = _safeStringExtract(roster['customerEmail'] ?? roster['email'] ?? _safeNestedAccess(roster, 'employeeDetails', 'email'));
+    if (!email.contains('@')) return null;
+    return email.split('@')[1].split('.')[0].toLowerCase();
+  }
+
+  // MANUAL assignment of the TICKED customers: one company only, then the same flow as Manual Mode
+  Future<void> _assignMultipleManual(List<Map<String, dynamic>> selectedRosters) async {
+    if (selectedRosters.isEmpty) {
+      _showSnackBar('No customers selected for assignment', backgroundColor: Colors.orange);
+      return;
+    }
+    final companies = selectedRosters.map(_companyOfRoster).whereType<String>().toSet();
+    if (companies.length > 1) {
+      showDialog(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: Row(
+            children: [
+              Icon(Icons.business, color: Colors.orange[700], size: 28),
+              const SizedBox(width: 12),
+              const Expanded(child: Text('Different companies selected', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold))),
+            ],
+          ),
+          content: Text(
+            'Customers from different companies cannot share a vehicle (${companies.join(', ')}).\n\nPlease select customers from ONE company only.',
+            style: const TextStyle(fontSize: 14, height: 1.5),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(context), child: const Text('OK, I Understand')),
+          ],
+        ),
+      );
+      return;
+    }
+    final originalFiltered = _filteredRosters;
+    setState(() {
+      _filteredRosters = selectedRosters;
+    });
+    await _performManualRouteSelection(selectedRosters.length);
+    setState(() {
+      _filteredRosters = originalFiltered;
+    });
+  }
+
+
   // NEW: Assign Multiple Customers using same flow as grouping
   Future<void> _assignMultipleCustomers(List<Map<String, dynamic>> selectedRosters) async {
     // debugPrint('\n' + '🎯'*40);
@@ -972,7 +1031,15 @@ List<Map<String, dynamic>> _groupRostersLocally(List<Map<String, dynamic>> roste
           if (mode == 'auto') {
             _performAdvancedRouteOptimization(count);
           } else {
-            _performManualRouteSelection(count);
+            if (_selectedRosterIds.isNotEmpty) {
+              // the ticked customers are used (not the closest cluster of N from the list)
+              final selectedForManual = _filteredRosters
+                  .where((r) => _selectedRosterIds.contains(r['id'] ?? r['_id']))
+                  .toList();
+              _assignMultipleManual(selectedForManual);
+            } else {
+              _performManualRouteSelection(count);
+            }
           }
         },
       ),
@@ -3181,7 +3248,15 @@ setState(() => _isOptimizing = false);
         // debugPrint('👤'*40);
         // debugPrint('MANUAL MODE PREPARATION COMPLETED');
         // debugPrint('👤'*40 + '\n');
-        _showManualVehicleSelectionDialog(optimalCustomers, allVehicles);
+        _showManualVehicleSelectionDialog(optimalCustomers, <Map<String, dynamic>>[
+          ...allVehicles,
+          ...incompatibleVehicles.map((v) => <String, dynamic>{
+                ...v,
+                '_unavailableReason': _safeStringExtract(v['compatibilityReason']) != ''
+                    ? _safeStringExtract(v['compatibilityReason'])
+                    : 'Not available',
+              }),
+        ]);
       } else {
         // debugPrint('⚠️ Widget not mounted - Cannot show dialog');
       }
@@ -3367,7 +3442,7 @@ setState(() => _isOptimizing = false);
                                   ),
                                 ),
                                 Text(
-                                  'Only showing vehicles compatible with selected customers',
+                                  'Unavailable vehicles are greyed out with the reason',
                                   style: TextStyle(
                                     color: Colors.white70,
                                     fontSize: 13,
@@ -3470,7 +3545,8 @@ setState(() => _isOptimizing = false);
                                     borderRadius: BorderRadius.circular(12),
                                   ),
                                   child: Text(
-                                    '${vehicles.length} found',
+                                    '${vehicles.where((v) => v['_unavailableReason'] == null).length} available'
+                                    '${vehicles.any((v) => v['_unavailableReason'] != null) ? ' · ${vehicles.where((v) => v['_unavailableReason'] != null).length} unavailable' : ''}',
                                     style: TextStyle(
                                       fontSize: 12,
                                       color: Colors.grey.shade700,
@@ -3633,7 +3709,8 @@ setState(() => _isOptimizing = false);
                                         // 🔥 ENHANCED VEHICLE STATUS
                                         final vehicleStatus = vehicle['status']?.toString().toUpperCase() ?? 'UNKNOWN';
                                         final isActive = vehicleStatus == 'ACTIVE';
-                                        final canSelect = canFit && isActive;
+                                        final unavailableReason = vehicle['_unavailableReason']?.toString();
+                                        final canSelect = canFit && isActive && unavailableReason == null;
                                         
                                         // debugPrint('🚗 Vehicle $index: $vehicleName');
                                         // debugPrint('   - License: $licensePlate');
@@ -3780,7 +3857,9 @@ setState(() => _isOptimizing = false);
                                                         const SizedBox(width: 6),
                                                         Expanded(
                                                           child: Text(
-                                                            !isActive 
+                                                            unavailableReason != null
+                                                                ? unavailableReason
+                                                                : !isActive
                                                                 ? 'Vehicle not active'
                                                                 : driverName == 'No Driver'
                                                                     ? 'No driver assigned'
@@ -6471,24 +6550,8 @@ Future<void> _confirmManualAssignment(
   }
 
   void _showAssignmentModal(Map<String, dynamic> roster) {
-    showDialog(
-      context: context,
-      builder: (context) {
-        return AlertDialog(
-          title: const Text('Manual Assignment'),
-          content: const Text('This will open the driver selection modal list.'),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(context), child: const Text('Close')),
-            ElevatedButton(
-              onPressed: () {
-                Navigator.pop(context);
-              },
-              child: const Text('Assign'),
-            ),
-          ],
-        );
-      },
-    );
+    // Manual assignment of this one customer (same flow as the "Auto" button next to it, but you choose the vehicle)
+    _assignSingleManual(roster);
   }
 
   void _showBulkAssignmentModal() {
@@ -6536,7 +6599,10 @@ Future<void> _confirmManualAssignment(
                 subtitle: const Text('Assign all selected to one driver'),
                 onTap: () {
                    Navigator.pop(context);
-                   // Logic for manual single assignment
+                   final selectedForManual = _filteredRosters
+                       .where((r) => _selectedRosterIds.contains(r['id'] ?? r['_id']))
+                       .toList();
+                   _assignMultipleManual(selectedForManual);
                 },
               ),
               const Divider(),

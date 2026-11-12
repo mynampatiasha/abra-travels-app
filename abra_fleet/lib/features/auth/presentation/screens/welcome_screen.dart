@@ -251,32 +251,39 @@ class _WelcomeScreenState extends State<WelcomeScreen>
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: _blueDark,
       body: LayoutBuilder(builder: (context, constraints) {
         final isWide = constraints.maxWidth > 800;
-        return Stack(
-          children: [
-            // Animated background
-            Positioned.fill(
-              child: AnimatedBuilder(
-                animation: _orbitCtrl,
-                builder: (_, __) => CustomPaint(
-                  painter: _PremiumBgPainter(_orbitCtrl.value),
+        return SizedBox(
+          width: constraints.maxWidth,
+          height: constraints.maxHeight,
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              // Animated background
+              Positioned.fill(
+                child: AnimatedBuilder(
+                  animation: _orbitCtrl,
+                  builder: (_, __) => CustomPaint(
+                    size: Size(constraints.maxWidth, constraints.maxHeight),
+                    painter: _PremiumBgPainter(_orbitCtrl.value),
+                  ),
                 ),
               ),
-            ),
-            // Content
-            _tourActive
-                ? _buildTourView(isWide)
-                : FadeTransition(
-                    opacity: _heroFade,
-                    child: SlideTransition(
-                      position: _heroSlide,
-                      child: isWide
-                          ? _buildHeroWide()
-                          : _buildHeroMobile(),
+              // Content
+              _tourActive
+                  ? _buildTourView(isWide)
+                  : FadeTransition(
+                      opacity: _heroFade,
+                      child: SlideTransition(
+                        position: _heroSlide,
+                        child: isWide
+                            ? _buildHeroWide()
+                            : _buildHeroMobile(),
+                      ),
                     ),
-                  ),
-          ],
+            ],
+          ),
         );
       }),
     );
@@ -375,11 +382,13 @@ class _WelcomeScreenState extends State<WelcomeScreen>
 
   Widget _buildHeroMobile() {
     return SafeArea(
-      child: SingleChildScrollView(
-        padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 48),
-        child: Column(
-          children: [
-            _buildFloatingLogo(size: 110),
+      child: Center(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 36),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _buildFloatingLogo(size: 110),
             const SizedBox(height: 28),
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
@@ -426,6 +435,7 @@ class _WelcomeScreenState extends State<WelcomeScreen>
             _buildFeaturePills(),
           ],
         ),
+      ),
       ),
     );
   }

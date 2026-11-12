@@ -26,6 +26,8 @@ import 'package:abra_fleet/core/services/backend_connection_manager.dart';
 import 'package:abra_fleet/core/services/floating_notification_service.dart';
 import 'package:abra_fleet/core/services/permission_service.dart';
 import 'package:abra_fleet/core/services/hrm_session_service.dart'; // ✅ HRM Session Bridge
+import 'package:abra_fleet/core/widgets/app_error_dialog.dart';
+import 'package:abra_fleet/core/widgets/permission_restricted_dialog.dart';
 // Role navigation handled by backend permissions
 // // Role navigation handled by backend permissions
 // import 'package:abra_fleet/core/services/role_navigation_service.dart';
@@ -134,6 +136,11 @@ import 'package:abra_fleet/features/admin/Billing/billing_main_shell.dart';
 import 'package:abra_fleet/features/support/support_system_screen.dart';
 
 const Color kPrimaryColor = Color(0xFF0D47A1);
+
+// ✅ Sidebar active-item accent colors matching header.php's nav design (--navy-300).
+// Background stays kPrimaryColor (the original admin_main_shell blue) — not header.php's navy.
+const Color kSidebarActiveAccent = Color(0xFF2563C4);
+const Color kSidebarActiveBg = Color(0x382563C4); // rgba(37,99,196,0.22)
 
 // ============================================================================
 // STEP 1: UPDATE NavigationKeys class (around line 110)
@@ -521,11 +528,10 @@ class _IncompleteAlertsViewState extends State<IncompleteAlertsView>
           ElevatedButton(
             onPressed: () {
               if (notesController.text.trim().isEmpty) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('Please enter resolution notes'),
-                    backgroundColor: Colors.red,
-                  ),
+                AppErrorDialog.showBanner(
+                  context,
+                  message: 'Please enter resolution notes',
+                  isError: true,
                 );
                 return;
               }
@@ -1205,21 +1211,19 @@ class _ResolveWithProofDialogState extends State<_ResolveWithProofDialog> {
 
   Future<void> _submitResolution() async {
     if (_notesController.text.trim().isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Please enter resolution notes'),
-          backgroundColor: Colors.red,
-        ),
+      AppErrorDialog.showBanner(
+        context,
+        message: 'Please enter resolution notes',
+        isError: true,
       );
       return;
     }
 
     if (_selectedImagePath == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Please select a proof photo'),
-          backgroundColor: Colors.red,
-        ),
+      AppErrorDialog.showBanner(
+        context,
+        message: 'Please select a proof photo',
+        isError: true,
       );
       return;
     }
@@ -1253,7 +1257,13 @@ class _ResolveWithProofDialogState extends State<_ResolveWithProofDialog> {
       }
     } catch (e) {
       debugPrint('❌ Error submitting resolution: $e');
-      // Error logged to console only - no user-facing message
+      if (mounted) {
+        AppErrorDialog.showNetworkError(
+          context,
+          customMessage: 'Failed to submit SOS resolution. Please check your connection and try again.',
+          onRetry: () => _submitResolution(),
+        );
+      }
     } finally {
       if (mounted) {
         setState(() => _isSubmitting = false);
@@ -1586,6 +1596,41 @@ class _AdminMainShellState extends State<AdminMainShell>
   // Structure: { 'permission_key': { 'can_access': true/false, 'edit_delete': true/false } }
   Map<String, dynamic> _permissions = {};
   bool _permissionsLoaded = false;
+  bool _isErrorDialogShowing = false;
+
+  void _onConnectionStatusChanged() {
+    final status = BackendConnectionManager().connectionStatus.value;
+    if ((status == ConnectionStatus.disconnected || status == ConnectionStatus.error) &&
+        !_isErrorDialogShowing &&
+        mounted) {
+      _isErrorDialogShowing = true;
+      AppErrorDialog.showNetworkError(
+        context,
+        onRetry: () {
+          _isErrorDialogShowing = false;
+          BackendConnectionManager().reconnect();
+          _handleRefresh();
+        },
+      ).then((_) {
+        _isErrorDialogShowing = false;
+      });
+    }
+  }
+
+  String _formatModuleName(String key) {
+    for (final item in _menuItems) {
+      if (item['navKey'] == key && item['title'] != null) {
+        return item['title'] as String;
+      }
+    }
+    final clean = key.replaceAll(RegExp(r'[^a-zA-Z0-9]'), ' ').trim();
+    if (clean.isEmpty) return 'Selected Module';
+    return clean.split(' ').map((word) {
+      if (word.isEmpty) return '';
+      return word[0].toUpperCase() + word.substring(1).toLowerCase();
+    }).join(' ');
+  }
+
 
   // Kept for backward-compat with the remaining references in this file
   Map<String, dynamic> get _userPermissions => _permissions;
@@ -1776,6 +1821,7 @@ class _AdminMainShellState extends State<AdminMainShell>
 
     // Initialize user role
     _initializeUserRole();
+    BackendConnectionManager().connectionStatus.addListener(_onConnectionStatusChanged);
 
     // Initialize RosterService
     _rosterService = RosterService(
@@ -1910,6 +1956,7 @@ class _AdminMainShellState extends State<AdminMainShell>
 
   @override
   void dispose() {
+    BackendConnectionManager().connectionStatus.removeListener(_onConnectionStatusChanged);
     // Cancel timers
     _reAlertTimer?.cancel();
     _rosterCheckTimer?.cancel();
@@ -3484,7 +3531,12 @@ void _navigateToTab(String navigationKey) async {
 
   if (!hasPermission) {
     debugPrint('❌ NAVIGATION BLOCKED: No permission for $navigationKey');
-    debugPrint('🔇 Access denied (logged to console only)');
+    if (mounted) {
+      PermissionRestrictedDialog.show(
+        context,
+        moduleName: _formatModuleName(navigationKey),
+      );
+    }
     return;
   }
 
@@ -3693,7 +3745,12 @@ void _navigateToTab(String navigationKey) async {
     _refreshNotifications();
   } catch (e) {
     debugPrint('❌ Error during refresh: $e');
-    // Error logged to console only - no user-facing message
+    if (mounted) {
+      AppErrorDialog.showNetworkError(
+        context,
+        onRetry: () => _handleRefresh(),
+      );
+    }
   }
 }
 
@@ -4256,6 +4313,7 @@ List<Widget> _buildRoleBasedNavigation(bool isMobile) {
   navigationItems.add(_buildMenuItem(
     title: 'Dashboard',
     icon: Icons.dashboard_rounded,
+    iconColor: const Color(0xFF60A5FA), // fa-bar-chart convention
     navKey: NavigationKeys.dashboard,
     isMobile: isMobile,
   ));
@@ -4265,9 +4323,11 @@ List<Widget> _buildRoleBasedNavigation(bool isMobile) {
     navigationItems.add(_buildHrmDropdown(context, isMobile));
     navigationItems.add(_buildTmsDropdown(context, isMobile));
     navigationItems.add(_buildToursAndTravelsDropdown(context, isMobile)); // ✅ NEW: Tours & Travels section
+    navigationItems.add(_buildSalesMarketingDropdown(context, isMobile)); // ✅ NEW: Sales & Marketing remaining items (WLQ, Budget Planning, Sales)
     navigationItems.add(_buildMenuItem(
       title: 'Feedback Management',
       icon: Icons.feedback,
+      iconColor: const Color(0xFFF472B6), // fa-headphones convention
       navKey: NavigationKeys.feedbackManagement,
       isMobile: isMobile,
     ));
@@ -4279,6 +4339,7 @@ List<Widget> _buildRoleBasedNavigation(bool isMobile) {
     navigationItems.add(_buildMenuItem(
       title: 'Fleet Map View',
       icon: Icons.map,
+      iconColor: const Color(0xFFF87171), // fa-map-marker convention
       navKey: NavigationKeys.fleetMap,
       isMobile: isMobile,
     ));
@@ -4286,19 +4347,23 @@ List<Widget> _buildRoleBasedNavigation(bool isMobile) {
     navigationItems.add(_buildMenuItem(
       title: 'Trips Summary',
       icon: Icons.local_shipping,
+      iconColor: const Color(0xFF94A3B8), // fa-road convention (Trips & Deliveries)
       navKey: NavigationKeys.tripsSummary,
       isMobile: isMobile,
     ));
     navigationItems.add(_buildSosExpansionTile(context, isMobile));
-    navigationItems.add(_buildMenuItem(
-      title: 'Finance Module',
-      icon: Icons.receipt_long,
-      navKey: NavigationKeys.finance,
-      isMobile: isMobile,
-    ));
+    // ❌ COMMENTED OUT: Finance Module (hidden from sidebar per request)
+    // navigationItems.add(_buildMenuItem(
+    //   title: 'Finance Module',
+    //   icon: Icons.receipt_long,
+    //   iconColor: const Color(0xFF4ADE80), // fa-money convention
+    //   navKey: NavigationKeys.finance,
+    //   isMobile: isMobile,
+    // ));
     navigationItems.add(_buildMenuItem(
       title: 'Reports',
       icon: Icons.analytics,
+      iconColor: const Color(0xFF60A5FA), // fa-bar-chart convention
       navKey: NavigationKeys.reports,
       isMobile: isMobile,
     ));
@@ -4307,6 +4372,7 @@ List<Widget> _buildRoleBasedNavigation(bool isMobile) {
     navigationItems.add(_buildMenuItem(
       title: 'Role Access Control',
       icon: Icons.admin_panel_settings,
+      iconColor: const Color(0xFFA78BFA), // fa-user convention
       navKey: NavigationKeys.roleAccessControl,
       isMobile: isMobile,
     ));
@@ -4331,12 +4397,16 @@ List<Widget> _buildRoleBasedNavigation(bool isMobile) {
     
     // ✅ Tours & Travels - Available to all employees
     navigationItems.add(_buildToursAndTravelsDropdown(context, isMobile));
-    
+
+    // ✅ Sales & Marketing - remaining items (WLQ, Budget Planning, Sales); self-hides if no permissions
+    navigationItems.add(_buildSalesMarketingDropdown(context, isMobile));
+
     // Feedback Management
     if (_hasPermission('feedback_management')) {
       navigationItems.add(_buildMenuItem(
         title: 'Feedback Management',
         icon: Icons.feedback,
+        iconColor: const Color(0xFFF472B6), // fa-headphones convention
         navKey: NavigationKeys.feedbackManagement,
         isMobile: isMobile,
       ));
@@ -4367,6 +4437,7 @@ List<Widget> _buildRoleBasedNavigation(bool isMobile) {
       navigationItems.add(_buildMenuItem(
         title: 'Fleet Map View',
         icon: Icons.map,
+        iconColor: const Color(0xFFF87171), // fa-map-marker convention
         navKey: NavigationKeys.fleetMap,
         isMobile: isMobile,
       ));
@@ -4377,6 +4448,7 @@ List<Widget> _buildRoleBasedNavigation(bool isMobile) {
       navigationItems.add(_buildMenuItem(
         title: 'Trips Summary',
         icon: Icons.local_shipping,
+        iconColor: const Color(0xFF94A3B8), // fa-road convention (Trips & Deliveries)
         navKey: NavigationKeys.tripsSummary,
         isMobile: isMobile,
       ));
@@ -4387,21 +4459,23 @@ List<Widget> _buildRoleBasedNavigation(bool isMobile) {
       navigationItems.add(_buildSosExpansionTile(context, isMobile));
     }
     
-    // Finance Module
-    if (_hasPermission('billing')) {
-      navigationItems.add(_buildMenuItem(
-        title: 'Finance Module',
-        icon: Icons.receipt_long,
-        navKey: NavigationKeys.finance,
-        isMobile: isMobile,
-      ));
-    }
+    // ❌ COMMENTED OUT: Finance Module (hidden from sidebar per request)
+    // if (_hasPermission('billing')) {
+    //   navigationItems.add(_buildMenuItem(
+    //     title: 'Finance Module',
+    //     icon: Icons.receipt_long,
+    //     iconColor: const Color(0xFF4ADE80), // fa-money convention
+    //     navKey: NavigationKeys.finance,
+    //     isMobile: isMobile,
+    //   ));
+    // }
     
     // Reports
     if (_hasPermission('reports')) {
       navigationItems.add(_buildMenuItem(
         title: 'Reports',
         icon: Icons.analytics,
+        iconColor: const Color(0xFF60A5FA), // fa-bar-chart convention
         navKey: NavigationKeys.reports,
         isMobile: isMobile,
       ));
@@ -4417,6 +4491,7 @@ List<Widget> _buildRoleBasedNavigation(bool isMobile) {
       navigationItems.add(_buildMenuItem(
         title: 'Role Access Control',
         icon: Icons.admin_panel_settings,
+        iconColor: const Color(0xFFA78BFA), // fa-user convention
         navKey: NavigationKeys.roleAccessControl,
         isMobile: isMobile,
       ));
@@ -4485,34 +4560,41 @@ List<Widget> _buildRoleBasedNavigation(bool isMobile) {
           data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
           child: ExpansionTile(
             initiallyExpanded: isDriverSectionActive,
-            leading: const Icon(Icons.groups, color: Colors.white),
+            leading: const Icon(Icons.groups, color: Color(0xFFA78BFA)), // fa-users convention
             title: isMobile
                 ? const SizedBox.shrink()
-                : const Text('Driver Management', style: TextStyle(color: Colors.white)),
+                : const Text('DRIVER MANAGEMENT', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15, letterSpacing: 0.3)),
             children: driverSubItems.map<Widget>((item) {
               // Add icons for each driver submenu item
               IconData? itemIcon;
+              Color? itemIconColor;
               switch (item['navKey'] as String) {
                 case NavigationKeys.driverList:
                   itemIcon = Icons.list_alt;
+                  itemIconColor = const Color(0xFF38BDF8); // fa-list-alt
                   break;
                 case NavigationKeys.pendingDriverApprovals:
                   itemIcon = Icons.how_to_reg;
+                  itemIconColor = const Color(0xFF4ADE80); // fa-sign-in
                   break;
                 case NavigationKeys.driverTripReports:
                   itemIcon = Icons.description;
+                  itemIconColor = const Color(0xFF60A5FA); // fa-file-text
                   break;
                 case NavigationKeys.driverFeedback:
                   itemIcon = Icons.feedback;
+                  itemIconColor = const Color(0xFFF472B6); // fa-headphones
                   break;
                 case NavigationKeys.vehicleChecklist:
                   itemIcon = Icons.checklist;
+                  itemIconColor = const Color(0xFF38BDF8); // fa-list-alt
                   break;
               }
-              
+
               return _buildSubMenuItem(
                 title: item['title'] as String,
                 icon: itemIcon,
+                iconColor: itemIconColor,
                 isMobile: isMobile,
                 isSelected: _selectedNavigationKey == item['navKey'],
                 onTap: () => _navigateToTab(item['navKey'] as String),
@@ -4615,7 +4697,7 @@ List<Widget> _buildRoleBasedNavigation(bool isMobile) {
               children: [
                 Icon(
                   Icons.directions_car_filled,
-                  color: badgeColor ?? Colors.white,
+                  color: badgeColor ?? const Color(0xFF60A5FA), // fa-car convention
                 ),
                 if (_expiredDocumentsCount > 0)
                   Positioned(
@@ -4653,8 +4735,8 @@ List<Widget> _buildRoleBasedNavigation(bool isMobile) {
                 : Row(
                     children: [
                       const Expanded(
-                        child: Text('Vehicles',
-                            style: TextStyle(color: Colors.white)),
+                        child: Text('VEHICLES',
+                            style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15, letterSpacing: 0.3)),
                       ),
                       if (_expiredDocumentsCount > 0 && !isMobile)
                         Container(
@@ -4681,24 +4763,30 @@ List<Widget> _buildRoleBasedNavigation(bool isMobile) {
               
               // Add icons for each vehicle submenu item
               IconData? itemIcon;
+              Color? itemIconColor;
               switch (item['navKey'] as String) {
                 case NavigationKeys.vehicleMaster:
                   itemIcon = Icons.directions_car_filled;
+                  itemIconColor = const Color(0xFF60A5FA); // fa-car
                   break;
                 case NavigationKeys.vehicleChecklist:
                   itemIcon = Icons.checklist;
+                  itemIconColor = const Color(0xFF38BDF8); // fa-list-alt
                   break;
                 case NavigationKeys.gpsTracking:
                   itemIcon = Icons.gps_fixed;
+                  itemIconColor = const Color(0xFFF87171); // fa-map-marker
                   break;
                 case NavigationKeys.maintenanceManagement:
                   itemIcon = Icons.build;
+                  itemIconColor = const Color(0xFF94A3B8); // fa-wrench
                   break;
               }
-              
+
               return _buildSubMenuItem(
                 title: item['title'] as String,
                 icon: itemIcon,
+                iconColor: itemIconColor,
                 isMobile: isMobile,
                 isSelected: _selectedNavigationKey == item['navKey'],
                 badge: isVehicleMaster && _expiredDocumentsCount > 0
@@ -4772,7 +4860,7 @@ List<Widget> _buildRoleBasedNavigation(bool isMobile) {
             initiallyExpanded: isOperationsSectionActive,
             leading: Stack(
               children: [
-                const Icon(Icons.work_outline, color: Colors.white),
+                const Icon(Icons.work_outline, color: Color(0xFF94A3B8)), // fa-wrench convention
                 if (pendingCount > 0)
                   Positioned(
                     right: 0,
@@ -4802,8 +4890,8 @@ List<Widget> _buildRoleBasedNavigation(bool isMobile) {
                 : Row(
                     children: [
                       const Expanded(
-                        child: Text('Operations',
-                            style: TextStyle(color: Colors.white)),
+                        child: Text('OPERATIONS',
+                            style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15, letterSpacing: 0.3)),
                       ),
                       if (pendingCount > 0 && !isMobile)
                         Container(
@@ -4830,21 +4918,26 @@ List<Widget> _buildRoleBasedNavigation(bool isMobile) {
               
               // Add icons for each operations submenu item
               IconData? itemIcon;
+              Color? itemIconColor;
               switch (item['navKey'] as String) {
                 case NavigationKeys.operationsPendingRosters:
                   itemIcon = Icons.pending_actions;
+                  itemIconColor = const Color(0xFFFBBF24); // fa-bell
                   break;
                 case NavigationKeys.operationsAdminTrips:
                   itemIcon = Icons.admin_panel_settings;
+                  itemIconColor = const Color(0xFFA78BFA); // fa-user
                   break;
                 case NavigationKeys.operationsClientTrips:
                   itemIcon = Icons.business_center;
+                  itemIconColor = const Color(0xFF60A5FA); // fa-building
                   break;
               }
-              
+
               return _buildSubMenuItem(
                 title: item['title'] as String,
                 icon: itemIcon,
+                iconColor: itemIconColor,
                 isMobile: isMobile,
                 isSelected: _selectedNavigationKey == item['navKey'],
                 badge: isPendingRosters && pendingCount > 0 ? pendingCount : null,
@@ -4915,7 +5008,7 @@ List<Widget> _buildRoleBasedNavigation(bool isMobile) {
             initiallyExpanded: isCustomerSectionActive,
             leading: Stack(
               children: [
-                const Icon(Icons.people, color: Colors.white),
+                const Icon(Icons.people, color: Color(0xFFA78BFA)), // fa-users convention
                 if (_pendingRosters.isNotEmpty)
                   Positioned(
                     right: 0,
@@ -4940,29 +5033,34 @@ List<Widget> _buildRoleBasedNavigation(bool isMobile) {
             ),
             title: isMobile
                 ? const SizedBox.shrink()
-                : const Text('Customer Management',
-                    style: TextStyle(color: Colors.white)),
+                : const Text('CUSTOMER MANAGEMENT',
+                    style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15, letterSpacing: 0.3)),
             children: customerSubItems.map<Widget>((item) {
               final isPendingRosters =
                   item['navKey'] == NavigationKeys.pendingRosters;
 
               // Add icons for each customer submenu item
               IconData? itemIcon;
+              Color? itemIconColor;
               switch (item['navKey'] as String) {
                 case NavigationKeys.allCustomers:
                   itemIcon = Icons.people;
+                  itemIconColor = const Color(0xFFA78BFA); // fa-users
                   break;
                 case NavigationKeys.pendingApprovals:
                   itemIcon = Icons.approval;
+                  itemIconColor = const Color(0xFF4ADE80); // fa-check-circle
                   break;
                 case NavigationKeys.pendingRosters:
                   itemIcon = Icons.schedule;
+                  itemIconColor = const Color(0xFFFBBF24); // fa-bell
                   break;
               }
 
               return _buildSubMenuItem(
                 title: item['title'] as String,
                 icon: itemIcon,
+                iconColor: itemIconColor,
                 isMobile: isMobile,
                 isSelected: _selectedNavigationKey == item['navKey'],
                 badge: isPendingRosters && _pendingRosters.isNotEmpty
@@ -5021,15 +5119,16 @@ List<Widget> _buildRoleBasedNavigation(bool isMobile) {
           data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
           child: ExpansionTile(
             initiallyExpanded: isClientSectionActive,
-            leading: const Icon(Icons.business, color: Colors.white),
+            leading: const Icon(Icons.business, color: Color(0xFF60A5FA)), // fa-building convention
             title: isMobile
                 ? const SizedBox.shrink()
-                : const Text('Client Management',
-                    style: TextStyle(color: Colors.white)),
+                : const Text('CLIENT MANAGEMENT',
+                    style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15, letterSpacing: 0.3)),
             children: clientSubItems.map((item) {
               return _buildSubMenuItem(
                 title: item['title'] as String,
                 icon: Icons.business,
+                iconColor: const Color(0xFF60A5FA), // fa-building
                 isMobile: isMobile,
                 isSelected: _selectedNavigationKey == item['navKey'],
                 onTap: () => _navigateToTab(item['navKey'] as String),
@@ -5050,30 +5149,35 @@ List<Widget> _buildRoleBasedNavigation(bool isMobile) {
           'title': 'Employees',
           'url': 'https://www.abra-travels.com/hrm/hr-employees-list.php',
           'icon': Icons.people,
+          'iconColor': const Color(0xFFA78BFA), // fa-user
           'permission': 'hrm_employees',
         },
         {
           'title': 'Departments',
           'url': 'https://www.abra-travels.com/hrm/hr-departments-list.php',
           'icon': Icons.business,
+          'iconColor': const Color(0xFF38BDF8), // fa-sitemap
           'permission': 'hrm_departments',
         },
         {
           'title': 'Attendance',
           'url': 'https://www.abra-travels.com/hrm/hr-attendance-list.php',
           'icon': Icons.calendar_today,
+          'iconColor': const Color(0xFFF472B6), // fa-clock-o
           'permission': 'hrm_attendance',
         },
         {
           'title': 'Leave Requests',
           'url': 'https://www.abra-travels.com/hrm/hr-leave-requests.php',
           'icon': Icons.event_busy,
+          'iconColor': const Color(0xFFFB923C), // fa-calendar
           'permission': 'hrm_leave_requests',
         },
         {
           'title': 'Payroll',
           'url': 'https://abra-travels.com/hrm/hr-payroll.php',
           'icon': Icons.payment,
+          'iconColor': const Color(0xFF4ADE80), // fa-money
           'permission': 'hrm_payroll',
         },
         {
@@ -5086,18 +5190,21 @@ List<Widget> _buildRoleBasedNavigation(bool isMobile) {
           'title': 'Notice Board',
           'url': 'https://abra-travels.com/hrm/hr-notices.php',
           'icon': Icons.announcement,
+          'iconColor': const Color(0xFFFACC15), // fa-bullhorn
           'permission': 'hrm_notice_board',
         },
         {
           'title': 'Expense Tracker',
           'url': 'https://abra-travels.com/hrm/digital-expenses-finance-suite.php',
           'icon': Icons.money,
+          'iconColor': const Color(0xFF4ADE80), // fa-money
           'permission': 'expense_tracker',
         },
         {
           'title': 'Essential Purchases',
           'url': 'https://abra-travels.com/hrm/hr-pantry.php',
           'icon': Icons.shopping_cart,
+          'iconColor': const Color(0xFFF472B6), // fa-shopping-cart
           'permission': 'essential_purchases',
         },
       ];
@@ -5228,13 +5335,14 @@ List<Widget> _buildRoleBasedNavigation(bool isMobile) {
       }
 
       // ✅ Permission-gated sub item used inside the nested groups
-      Widget buildHrmSubItem(String title, String url, IconData icon, String permission) {
+      Widget buildHrmSubItem(String title, String url, IconData icon, String permission, {Color? iconColor}) {
         if (!can(permission)) return const SizedBox.shrink();
         return _buildSubMenuItem(
           title: title,
           icon: icon,
           isMobile: isMobile,
           isSelected: false,
+          iconColor: iconColor,
           onTap: () => navigateToHrmWebView(title, url),
         );
       }
@@ -5248,8 +5356,8 @@ List<Widget> _buildRoleBasedNavigation(bool isMobile) {
         child: Theme(
           data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
           child: ExpansionTile(
-            leading: const Icon(Icons.people_alt, color: Colors.white),
-            title: isMobile ? const SizedBox.shrink() : const Text('HRM', style: TextStyle(color: Colors.white)),
+            leading: const Icon(Icons.people_alt, color: Color(0xFFA78BFA)), // fa-users
+            title: isMobile ? const SizedBox.shrink() : const Text('HRM', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15, letterSpacing: 0.3)),
             children: [
               // ✅ Screening Hub (Workforce Journey → Employee Evaluation + Exit Process)
               if (showScreeningHub)
@@ -5258,14 +5366,15 @@ List<Widget> _buildRoleBasedNavigation(bool isMobile) {
                   title: 'Screening Hub',
                   icon: Icons.filter_alt,
                   isMobile: isMobile,
+                  iconColor: const Color(0xFF818CF8), // fa-filter
                   children: [
-                    buildHrmSubItem('Workforce Journey', 'https://www.abra-travels.com/hrm/hr-employee-overall-data.php', Icons.timeline, 'hrm_workforce_journey'),
-                    buildHrmSubItem('Screening', 'https://www.abra-travels.com/hrm/hr_screening.php', Icons.check_box, 'hrm_hiring_process'),
-                    buildHrmSubItem('Screening KPQ', 'https://www.abra-travels.com/hrm/hr-managing-rounds-kpq.php', Icons.question_answer, 'hrm_screening_kpq'),
-                    buildHrmSubItem('Onboarding', 'https://www.abra-travels.com/hrm/hr-employee-onboarding-pending-list.php', Icons.person_add, 'hrm_onboarding'),
+                    buildHrmSubItem('Workforce Journey', 'https://www.abra-travels.com/hrm/hr-employee-overall-data.php', Icons.timeline, 'hrm_workforce_journey', iconColor: const Color(0xFF94A3B8)), // fa-road
+                    buildHrmSubItem('Screening', 'https://www.abra-travels.com/hrm/hr_screening.php', Icons.check_box, 'hrm_hiring_process', iconColor: const Color(0xFF34D399)), // fa-check-square-o
+                    buildHrmSubItem('Screening KPQ', 'https://www.abra-travels.com/hrm/hr-managing-rounds-kpq.php', Icons.question_answer, 'hrm_screening_kpq', iconColor: const Color(0xFFA78BFA)), // fa-question-circle
+                    buildHrmSubItem('Onboarding', 'https://www.abra-travels.com/hrm/hr-employee-onboarding-pending-list.php', Icons.person_add, 'hrm_onboarding', iconColor: const Color(0xFF4ADE80)), // fa-sign-in
                     buildHrmSubItem('Training and OJE', 'https://www.abra-travels.com/hrm/hr-OJE.php', Icons.school, 'hrm_training_oje'),
-                    buildHrmSubItem('Employee Checklist', 'https://www.abra-travels.com/hrm/hr-employee-preview-checklist.php', Icons.checklist, 'hrm_employee_checklist'),
-                    buildHrmSubItem('Employee Evaluation', 'https://www.abra-travels.com/hrm/hr-employee-OJE.php', Icons.star, 'hrm_employee_evaluation'),
+                    buildHrmSubItem('Employee Checklist', 'https://www.abra-travels.com/hrm/hr-employee-preview-checklist.php', Icons.checklist, 'hrm_employee_checklist', iconColor: const Color(0xFF38BDF8)), // fa-list-alt
+                    buildHrmSubItem('Employee Evaluation', 'https://www.abra-travels.com/hrm/hr-employee-OJE.php', Icons.star, 'hrm_employee_evaluation', iconColor: const Color(0xFFFBBF24)), // fa-star
                     // ✅ Exit Process (nested one level deeper)
                     if (showExitProcess)
                       _buildNestedExpansionTile(
@@ -5274,11 +5383,12 @@ List<Widget> _buildRoleBasedNavigation(bool isMobile) {
                         icon: Icons.logout,
                         isMobile: isMobile,
                         paddingLeft: 32.0,
+                        iconColor: const Color(0xFFFB923C), // fa-sign-out
                         children: [
                           buildHrmSubItem('Exit Initiation', 'https://www.abra-travels.com/hrm/hr-exit-initiation.php', Icons.send, 'hrm_exit_initiation'),
-                          buildHrmSubItem('Exit Handover', 'https://www.abra-travels.com/hrm/hr-exit-handover.php', Icons.swap_horiz, 'hrm_exit_handover'),
-                          buildHrmSubItem('Exit Interview', 'https://www.abra-travels.com/hrm/hr-exit-employee-interview.php', Icons.forum, 'hrm_exit_interview'),
-                          buildHrmSubItem('Settlement & Clearance', 'https://www.abra-travels.com/hrm/hr-exit-settlement.php', Icons.assignment_turned_in, 'hrm_exit_settlement'),
+                          buildHrmSubItem('Exit Handover', 'https://www.abra-travels.com/hrm/hr-exit-handover.php', Icons.swap_horiz, 'hrm_exit_handover', iconColor: const Color(0xFF34D399)), // fa-exchange
+                          buildHrmSubItem('Exit Interview', 'https://www.abra-travels.com/hrm/hr-exit-employee-interview.php', Icons.forum, 'hrm_exit_interview', iconColor: const Color(0xFF34D399)), // fa-comments
+                          buildHrmSubItem('Settlement & Clearance', 'https://www.abra-travels.com/hrm/hr-exit-settlement.php', Icons.assignment_turned_in, 'hrm_exit_settlement', iconColor: const Color(0xFF60A5FA)), // fa-file-text
                         ],
                       ),
                   ],
@@ -5290,9 +5400,10 @@ List<Widget> _buildRoleBasedNavigation(bool isMobile) {
                     title: 'KPI',
                     icon: Icons.bar_chart,
                     isMobile: isMobile,
+                    iconColor: const Color(0xFF60A5FA), // fa-bar-chart
                     children: [
-                      buildHrmSubItem('KPQ', 'https://www.abra-travels.com/hrm/hr-kpq.php', Icons.quiz, 'hrm_kpq'),
-                      buildHrmSubItem('KPI Evaluation', 'https://www.abra-travels.com/hrm/hr-kpi-evaluation.php', Icons.assessment, 'hrm_kpi_evaluation'),
+                      buildHrmSubItem('KPQ', 'https://www.abra-travels.com/hrm/hr-kpq.php', Icons.quiz, 'hrm_kpq', iconColor: const Color(0xFFA78BFA)), // fa-question-circle
+                      buildHrmSubItem('KPI Evaluation', 'https://www.abra-travels.com/hrm/hr-kpi-evaluation.php', Icons.assessment, 'hrm_kpi_evaluation', iconColor: const Color(0xFFFBBF24)), // fa-star
                     ],
                   );
                 }
@@ -5301,11 +5412,296 @@ List<Widget> _buildRoleBasedNavigation(bool isMobile) {
                 return _buildSubMenuItem(
                   title: title,
                   icon: item['icon'] as IconData?,
+                  iconColor: item['iconColor'] as Color?,
                   isMobile: isMobile,
                   isSelected: false,
                   onTap: () => navigateToHrmWebView(title, baseUrl),
                 );
               }),
+            ],
+            iconColor: Colors.white,
+            collapsedIconColor: Colors.white,
+          ),
+        ),
+      );
+    }
+
+    // ✅ Sales & Marketing Dropdown - single top-level section (merged from navigation_config.dart's
+    // dead config + header.php's remaining items): WLQ, Budget Planning, Customer Analytics, Meta Ads,
+    // Google Ads, Search Console, AI Video Studio, Social Media, Sales (Dashboard / Leads) — single entity (AL / elogistics)
+    Widget _buildSalesMarketingDropdown(BuildContext context, bool isMobile) {
+      bool can(String permission) =>
+          _userRole == 'super_admin' || _userRole == 'admin' || _hasPermission(permission);
+
+      final showWlq = can('wa_lead_qualifier_al');
+      final showWaLeads = can('tt_wa_leads');   // Travels bot — leads screen (tv-wa-leads.php)
+      final showWaAgent = can('tt_wa_agent');   // Travels bot — setup (tv-wa-agent.php)
+      final showBudgetPlanning = can('budget_planning_al');
+      final showCustomerAnalytics = can('customer_analytics_al');
+      final showMetaAds = can('meta_ads_analytics_al');
+      final showGoogleAds = can('google_ads_analytics_al');
+      final showSearchConsole = can('search_console_al');
+      final showAiVideoStudio = can('youtube_studio_al');
+      final showSocialMedia = can('social_media_al');
+      final showSalesDashboard = can('al_sales_dashboard');
+      final showLeads = can('al_leads');
+      final showLeadsDatabase = can('al_leads_database');
+      final showSalesGroup = showSalesDashboard || showLeads || showLeadsDatabase;
+      final showDigitalMarketing = showWlq ||
+          showWaLeads ||
+          showWaAgent ||
+          showBudgetPlanning ||
+          showCustomerAnalytics ||
+          showMetaAds ||
+          showGoogleAds ||
+          showSearchConsole ||
+          showAiVideoStudio ||
+          showSocialMedia;
+
+      // Hide the whole section when there is nothing at all to show
+      if (!showWlq &&
+          !showWaLeads &&
+          !showWaAgent &&
+          !showBudgetPlanning &&
+          !showCustomerAnalytics &&
+          !showMetaAds &&
+          !showGoogleAds &&
+          !showSearchConsole &&
+          !showAiVideoStudio &&
+          !showSocialMedia &&
+          !showSalesGroup) {
+        return const SizedBox.shrink();
+      }
+
+      // ✅ Shared WebView navigation for every Sales & Marketing menu entry (same pattern as Tours & Travels)
+      Future<void> navigateToSalesMarketingWebView(String title, String baseUrl) async {
+        debugPrint('📈 ========================================');
+        debugPrint('📈 SALES & MARKETING CLICKED: $title');
+        debugPrint('📈 Base URL: $baseUrl');
+        debugPrint('📈 ========================================');
+
+        final prefs = await SharedPreferences.getInstance();
+        final userDataString = prefs.getString('user_data');
+
+        String? userEmail;
+        if (userDataString != null) {
+          try {
+            final userData = jsonDecode(userDataString);
+            userEmail = userData['email'];
+          } catch (e) {
+            debugPrint('❌ Error parsing user_data: $e');
+          }
+        }
+
+        String finalUrl = baseUrl;
+        if (userEmail != null && userEmail.isNotEmpty) {
+          final separator = baseUrl.contains('?') ? '&' : '?';
+          finalUrl = '$baseUrl${separator}user_email=${Uri.encodeComponent(userEmail)}';
+        }
+
+        if (context.mounted) {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => ToursTravelsWebViewScreen(
+                url: finalUrl,
+                title: title,
+              ),
+            ),
+          );
+        }
+      }
+
+      Widget buildSalesMarketingSubItem(String title, String url, IconData icon, String permission, {Color? iconColor}) {
+        if (!can(permission)) return const SizedBox.shrink();
+        return _buildSubMenuItem(
+          title: title,
+          icon: icon,
+          isMobile: isMobile,
+          isSelected: false,
+          iconColor: iconColor,
+          onTap: () => navigateToSalesMarketingWebView(title, url),
+        );
+      }
+
+      return Container(
+        margin: const EdgeInsets.symmetric(vertical: 4),
+        decoration: BoxDecoration(
+          color: Colors.transparent,
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Theme(
+          data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+          child: ExpansionTile(
+            leading: const Icon(Icons.campaign, color: Colors.white),
+            title: isMobile
+                ? const SizedBox.shrink()
+                : const Text('SALES & MARKETING', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15, letterSpacing: 0.3)),
+            children: [
+              if (showDigitalMarketing)
+                _buildNestedExpansionTile(
+                  context: context,
+                  title: 'Digital Marketing',
+                  icon: Icons.trending_up,
+                  isMobile: isMobile,
+                  children: [
+                    if (showWlq)
+                      buildSalesMarketingSubItem(
+                        'WLQ (WhatsApp Lead Qualifier)',
+                        'https://abra-travels.com/fm-sales/db-wa-agent.php?entity=elogistics',
+                        Icons.chat,
+                        'wa_lead_qualifier_al',
+                        iconColor: const Color(0xFF34D399), // fa-comments
+                      ),
+                    // ✅ Abra Tours & Travels WhatsApp bot (own files, own tables — separate from the AL WLQ above)
+                    if (showWaLeads)
+                      buildSalesMarketingSubItem(
+                        'WhatsApp Leads (Travels)',
+                        'https://www.abra-travels.com/tv-wa-leads.php',
+                        Icons.forum,
+                        'tt_wa_leads',
+                        iconColor: const Color(0xFF25D366), // whatsapp green
+                      ),
+                    if (showWaAgent)
+                      buildSalesMarketingSubItem(
+                        'WhatsApp Bot Setup (Travels)',
+                        'https://www.abra-travels.com/tv-wa-agent.php',
+                        Icons.smart_toy,
+                        'tt_wa_agent',
+                        iconColor: const Color(0xFF60A5FA),
+                      ),
+                    if (showCustomerAnalytics)
+                      buildSalesMarketingSubItem(
+                        'Customer Analytics',
+                        'https://abra-flowxai.abragroup.in/dashboard/customer-analytics.php?entity=travels&token=bd1e63c32f7afa886caa7e9d3e40d75fb411c1b1473e569c',
+                        Icons.trending_up,
+                        'customer_analytics_al',
+                      ),
+                    if (showMetaAds)
+                      buildSalesMarketingSubItem(
+                        'Meta Ads Analytics',
+                        'https://abra-flowxai.abragroup.in/dashboard/meta-ads-dashboard.php?entity=travels&token=bd1e63c32f7afa886caa7e9d3e40d75fb411c1b1473e569c',
+                        Icons.campaign,
+                        'meta_ads_analytics_al',
+                        iconColor: const Color(0xFFFACC15), // fa-bullhorn
+                      ),
+                    if (showGoogleAds)
+                      buildSalesMarketingSubItem(
+                        'Google Ads Analytics',
+                        'https://abra-flowxai.abragroup.in/dashboard/google-ads-dashboard.php?entity=travels&token=bd1e63c32f7afa886caa7e9d3e40d75fb411c1b1473e569c',
+                        Icons.ads_click,
+                        'google_ads_analytics_al',
+                      ),
+                    if (showSearchConsole)
+                      buildSalesMarketingSubItem(
+                        'Search Console',
+                        'https://abra-flowxai.abragroup.in/dashboard/gsc-dashboard.php?entity=travels&token=bd1e63c32f7afa886caa7e9d3e40d75fb411c1b1473e569c',
+                        Icons.search,
+                        'search_console_al',
+                      ),
+                    if (showAiVideoStudio)
+                      _buildNestedExpansionTile(
+                        context: context,
+                        title: 'AI Video Studio',
+                        icon: Icons.auto_awesome,
+                        isMobile: isMobile,
+                        paddingLeft: 32.0,
+                        children: [
+                          buildSalesMarketingSubItem(
+                            'Content Studio',
+                            'https://abra-flowxai.abragroup.in/dashboard/youtube-dashboard.php?entity=travels&token=bd1e63c32f7afa886caa7e9d3e40d75fb411c1b1473e569c',
+                            Icons.auto_awesome,
+                            'youtube_studio_al',
+                            iconColor: const Color(0xFFC084FC), // fa-magic
+                          ),
+                          buildSalesMarketingSubItem(
+                            'Video Insights',
+                            'https://abra-flowxai.abragroup.in/dashboard/youtube-reports.php?entity=travels&token=bd1e63c32f7afa886caa7e9d3e40d75fb411c1b1473e569c',
+                            Icons.bar_chart,
+                            'youtube_studio_al',
+                            iconColor: const Color(0xFF60A5FA), // fa-bar-chart
+                          ),
+                        ],
+                      ),
+                    if (showSocialMedia)
+                      _buildNestedExpansionTile(
+                        context: context,
+                        title: 'Social Media',
+                        icon: Icons.calendar_month,
+                        isMobile: isMobile,
+                        paddingLeft: 32.0,
+                        children: [
+                          buildSalesMarketingSubItem(
+                            'Content & Posts',
+                            'https://abra-flowxai.abragroup.in/dashboard/social-dashboard.php?entity=travels&token=bd1e63c32f7afa886caa7e9d3e40d75fb411c1b1473e569c',
+                            Icons.calendar_month,
+                            'social_media_al',
+                            iconColor: const Color(0xFFFB923C), // fa-calendar
+                          ),
+                          buildSalesMarketingSubItem(
+                            'Reports & Insights',
+                            'https://abra-flowxai.abragroup.in/dashboard/social-reports.php?entity=travels&token=bd1e63c32f7afa886caa7e9d3e40d75fb411c1b1473e569c',
+                            Icons.pie_chart,
+                            'social_media_al',
+                            iconColor: const Color(0xFF60A5FA), // fa-bar-chart
+                          ),
+                        ],
+                      ),
+                    if (showBudgetPlanning)
+                      buildSalesMarketingSubItem(
+                        'Budget Planning',
+                        'https://abra-travels.com/fm-sales/budget-digital-marketing.php?entity=elogistics',
+                        Icons.account_balance_wallet,
+                        'budget_planning_al',
+                        iconColor: const Color(0xFF4ADE80), // fa-money
+                      ),
+                  ],
+                ),
+              if (showSalesGroup)
+                _buildNestedExpansionTile(
+                  context: context,
+                  title: 'Sales',
+                  icon: Icons.bar_chart,
+                  isMobile: isMobile,
+                  iconColor: const Color(0xFF60A5FA), // fa-bar-chart
+                  children: [
+                    if (showSalesDashboard)
+                      buildSalesMarketingSubItem(
+                        'AL Sales Dashboard',
+                        'https://abra-travels.com/fm-sales/sales-admin-dashboard.php?b=',
+                        Icons.dashboard,
+                        'al_sales_dashboard',
+                        iconColor: const Color(0xFF60A5FA), // header.php inline style="color:#60a5fa"
+                      ),
+                    if (showLeads || showLeadsDatabase)
+                      _buildNestedExpansionTile(
+                        context: context,
+                        title: 'AL Leads',
+                        icon: Icons.people_outline,
+                        isMobile: isMobile,
+                        paddingLeft: 32.0,
+                        iconColor: const Color(0xFFFB923C), // fa-truck
+                        children: [
+                          if (showLeads)
+                            buildSalesMarketingSubItem(
+                              'Sale Leads',
+                              'https://abra-travels.com/fm-sales/tt-sale-leads.php?b=al',
+                              Icons.gps_fixed,
+                              'al_leads',
+                              iconColor: const Color(0xFFF87171), // fa-bullseye
+                            ),
+                          if (showLeadsDatabase)
+                            buildSalesMarketingSubItem(
+                              'Customer Database',
+                              'https://abra-travels.com/fm-sales/tt-customer-database.php?b=al',
+                              Icons.storage,
+                              'al_leads_database',
+                              iconColor: const Color(0xFF38BDF8), // fa-database
+                            ),
+                        ],
+                      ),
+                  ],
+                ),
             ],
             iconColor: Colors.white,
             collapsedIconColor: Colors.white,
@@ -5367,11 +5763,11 @@ List<Widget> _buildRoleBasedNavigation(bool isMobile) {
         data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
         child: ExpansionTile(
           initiallyExpanded: isTmsSectionActive,
-          leading: const Icon(Icons.confirmation_number_rounded, color: Colors.white),
+          leading: const Icon(Icons.confirmation_number_rounded, color: Color(0xFFF472B6)), // fa-ticket
           title: isMobile ? const SizedBox.shrink() : Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Text('TMS', style: TextStyle(color: Colors.white)),
+              const Text('TMS', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15, letterSpacing: 0.3)),
               if (_totalTicketsCount > 0) ...[
                 const SizedBox(width: 8),
                 Container(
@@ -5391,24 +5787,30 @@ List<Widget> _buildRoleBasedNavigation(bool isMobile) {
           children: tmsSubItems.map<Widget>((item) {
             // Add icons for each TMS submenu item
             IconData? itemIcon;
+            Color? itemIconColor;
             switch (item['navKey'] as String) {
               case NavigationKeys.raiseTicket:
                 itemIcon = Icons.add_circle_outline;
+                itemIconColor = const Color(0xFF4ADE80); // fa-plus-circle
                 break;
               case NavigationKeys.myTickets:
                 itemIcon = Icons.assignment_ind;
+                itemIconColor = const Color(0xFFA78BFA); // fa-user
                 break;
               case NavigationKeys.allTickets:
                 itemIcon = Icons.assignment;
+                itemIconColor = const Color(0xFF38BDF8); // fa-list
                 break;
               case NavigationKeys.closedTickets:
                 itemIcon = Icons.check_circle_outline;
+                itemIconColor = const Color(0xFF34D399); // fa-check-square
                 break;
             }
-            
+
             return _buildSubMenuItem(
               title: item['title'] as String,
               icon: itemIcon,
+              iconColor: itemIconColor,
               isMobile: isMobile,
               isSelected: _selectedNavigationKey == item['navKey'],
               onTap: () async {
@@ -5470,32 +5872,37 @@ List<Widget> _buildRoleBasedNavigation(bool isMobile) {
         'title': 'Tour Packages',
         'url': 'https://abra-travels.com/abra_travels_all_rate_cards.php',
         'icon': Icons.card_travel,
+        'iconColor': const Color(0xFFFB923C), // fa-plane convention
         'permission': 'tt_tour_packages', // ✅ Add permission key
       },
       {
         'title': 'Custom Quotes',
         'url': 'https://abra-travels.com/abra_travels_custom_quote_list.php',
         'icon': Icons.request_quote,
+        'iconColor': const Color(0xFF60A5FA), // fa-file-text convention
         'permission': 'tt_custom_quotes', // ✅ Add permission key
       },
       {
         'title': 'Sales Leads',
         'url': 'https://www.abra-travels.com/abra_travels_contact_sales.php',
         'icon': Icons.people,
+        'iconColor': const Color(0xFFA78BFA), // fa-user convention
         'permission': 'tt_sales_leads', // ✅ Add permission key
       },
       {
         'title': 'Manual Leads',
         'url': 'https://abra-travels.com/contact_sales_list_page.php',
         'icon': Icons.person_add,
+        'iconColor': const Color(0xFFA78BFA), // fa-user convention
         'permission': 'tt_manual_leads', // ✅ Add permission key
       },
 
-      
+
       {
         'title': 'Careers',
         'url': 'https://www.abra-travels.com/abra_travels_career_list.php',
         'icon': Icons.work,
+        'iconColor': const Color(0xFFFBBF24), // fa-briefcase convention
         'permission': 'tt_careers', // ✅ Add permission key
       },
     ];
@@ -5526,17 +5933,18 @@ List<Widget> _buildRoleBasedNavigation(bool isMobile) {
       child: Theme(
         data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
         child: ExpansionTile(
-          leading: const Icon(Icons.tour, color: Colors.white),
+          leading: const Icon(Icons.tour, color: Color(0xFFFB923C)), // fa-plane convention
           title: isMobile
               ? const SizedBox.shrink()
               : const Text(
-                  'Abra Tours & Travels (T&T)',
-                  style: TextStyle(color: Colors.white),
+                  'ABRA TOURS & TRAVELS (T&T)',
+                  style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15, letterSpacing: 0.3),
                 ),
           children: toursSubItems.map<Widget>((item) {
             return _buildSubMenuItem(
               title: item['title'] as String,
               icon: item['icon'] as IconData?,
+              iconColor: item['iconColor'] as Color?,
               isMobile: isMobile,
               isSelected: false,
 onTap: () async {
@@ -5697,8 +6105,8 @@ onTap: () async {
           leading: const Icon(Icons.feedback, color: Colors.white),
           title: isMobile
               ? const SizedBox.shrink()
-              : const Text('Feedback Management',
-                  style: TextStyle(color: Colors.white)),
+              : const Text('FEEDBACK MANAGEMENT',
+                  style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15, letterSpacing: 0.3)),
           selected: isFeedbackSectionActive,
           onTap: () {
             debugPrint(
@@ -5782,14 +6190,20 @@ onTap: () async {
         {required String title,
         required IconData icon,
         required String navKey,
-        required bool isMobile}) {
+        required bool isMobile,
+        Color? iconColor}) {
       final isSelected = _selectedNavigationKey == navKey;
       return Container(
         margin: const EdgeInsets.symmetric(vertical: 4),
         decoration: BoxDecoration(
-          color:
-              isSelected ? Colors.black.withOpacity(0.3) : Colors.transparent,
+          color: isSelected ? kSidebarActiveBg : Colors.transparent,
           borderRadius: BorderRadius.circular(8),
+          border: Border(
+            left: BorderSide(
+              color: isSelected ? kSidebarActiveAccent : Colors.transparent,
+              width: 3,
+            ),
+          ),
         ),
         child: InkWell(
           onTap: () => _navigateToTab(navKey),
@@ -5799,10 +6213,21 @@ onTap: () async {
               mainAxisAlignment:
                   isMobile ? MainAxisAlignment.center : MainAxisAlignment.start,
               children: [
-                Icon(icon, color: Colors.white),
+                Icon(icon, color: iconColor ?? Colors.white),
                 if (!isMobile) ...[
                   const SizedBox(width: 16),
-                  Text(title, style: const TextStyle(color: Colors.white)),
+                  Expanded(
+                    child: Text(
+                      title.toUpperCase(),
+                      softWrap: true,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 15,
+                        letterSpacing: 0.3,
+                      ),
+                    ),
+                  ),
                 ]
               ],
             ),
@@ -5830,12 +6255,13 @@ onTap: () async {
       data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
       child: ExpansionTile(
         initiallyExpanded: isSosSectionActive,
-        leading: const Icon(Icons.sos_rounded, color: Colors.white),
-        title: isMobile ? const SizedBox.shrink() : const Text('SOS Alerts', style: TextStyle(color: Colors.white)),
+        leading: const Icon(Icons.sos_rounded, color: Color(0xFFF87171)), // urgency red
+        title: isMobile ? const SizedBox.shrink() : const Text('SOS ALERTS', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15, letterSpacing: 0.3)),
         children: [
           _buildSubMenuItem(
             title: 'Incomplete',
             icon: Icons.warning_amber_rounded,
+            iconColor: const Color(0xFFFBBF24), // fa-bell convention
             isMobile: isMobile,
             isSelected: _selectedNavigationKey == NavigationKeys.incompleteAlerts,
             onTap: () => _navigateToTab(NavigationKeys.incompleteAlerts),
@@ -5843,6 +6269,7 @@ onTap: () async {
           _buildSubMenuItem(
             title: 'Resolved',
             icon: Icons.check_circle,
+            iconColor: const Color(0xFF4ADE80), // fa-check-circle convention
             isMobile: isMobile,
             isSelected: _selectedNavigationKey == NavigationKeys.resolvedAlerts,
             onTap: () => _navigateToTab(NavigationKeys.resolvedAlerts),
@@ -5862,6 +6289,7 @@ onTap: () async {
       required bool isMobile,
       required List<Widget> children,
       double paddingLeft = 16.0,
+      Color? iconColor,
     }) {
       // Icon-only/mobile sidebar: show the group's items flat instead of hiding them
       if (isMobile) return Column(mainAxisSize: MainAxisSize.min, children: children);
@@ -5870,8 +6298,16 @@ onTap: () async {
         child: Theme(
           data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
           child: ExpansionTile(
-            leading: Icon(icon, color: Colors.white, size: 24),
-            title: Text(title, style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w500)),
+            leading: Icon(icon, color: iconColor ?? Colors.white, size: 24),
+            title: Text(
+              title.toUpperCase(),
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: paddingLeft > 16.0 ? 13 : 14,
+                fontWeight: FontWeight.w600,
+                letterSpacing: 0.2,
+              ),
+            ),
             iconColor: Colors.white,
             collapsedIconColor: Colors.white,
             children: children,
@@ -5888,13 +6324,24 @@ onTap: () async {
       required VoidCallback onTap,
       int? badge,
       Color? badgeColor,
+      Color? iconColor,
     }) {
       final effectiveBadgeColor = badgeColor ?? Colors.orange;
-      return ListTile(
+      final effectiveIconColor = iconColor ?? Colors.white;
+      return Container(
+        decoration: BoxDecoration(
+          border: Border(
+            left: BorderSide(
+              color: isSelected ? kSidebarActiveAccent : Colors.transparent,
+              width: 3,
+            ),
+          ),
+        ),
+        child: ListTile(
         leading: icon != null
             ? Stack(
                 children: [
-                  Icon(icon, color: isSelected ? Colors.white : Colors.white),
+                  Icon(icon, color: isSelected ? Colors.white : effectiveIconColor),
                   if (badge != null && badge > 0)
                     Positioned(
                       right: 0,
@@ -5932,12 +6379,12 @@ onTap: () async {
                 children: [
                   Expanded(
                     child: Text(
-                      title,
-                      style: TextStyle(
-                        color: isSelected ? Colors.white : Colors.white,
-                        fontWeight:
-                            isSelected ? FontWeight.bold : FontWeight.w500,
-                        fontSize: 14,
+                      title.toUpperCase(),
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 13,
+                        letterSpacing: 0.2,
                       ),
                     ),
                   ),
@@ -5973,6 +6420,7 @@ onTap: () async {
         contentPadding: isMobile
             ? null
             : (icon == null ? const EdgeInsets.only(left: 48) : null),
+        ),
       );
     }
 

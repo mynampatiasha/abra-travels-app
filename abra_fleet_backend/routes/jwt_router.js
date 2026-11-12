@@ -461,10 +461,15 @@ router.post('/login', async (req, res) => {
     let userRole = null;
     
     for (const collection of collections) {
-      user = await req.db.collection(collection.name).findOne({ 
-        email: email.toLowerCase() 
-      });
-      
+      // Drivers may only have an email under personalInfo.email (older
+      // records, or ones created before the top-level email fix) — match
+      // either. Other collections keep the plain top-level lookup.
+      const query = collection.name === 'drivers'
+        ? { $or: [{ email: email.toLowerCase() }, { 'personalInfo.email': email.toLowerCase() }] }
+        : { email: email.toLowerCase() };
+
+      user = await req.db.collection(collection.name).findOne(query);
+
       if (user) {
         userCollection = collection.name;
         userRole = user.role || collection.role;

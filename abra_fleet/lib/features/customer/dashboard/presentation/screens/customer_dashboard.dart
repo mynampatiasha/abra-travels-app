@@ -114,7 +114,6 @@ class _CustomerDashboardState extends State<CustomerDashboard> {
     super.initState();
     _initializeApp();
     _loadQuickStats();
-    _listenForSOSHistory();
     
     _setupNotificationListener();
     _loadUnreadCount();
@@ -522,8 +521,14 @@ class _CustomerDashboardState extends State<CustomerDashboard> {
         }
       }
       debugPrint('👤 User initialized: $_userName ($_userId)');
+      _listenForSOSHistory();
     } catch (e) {
       debugPrint('❌ Error initializing app: $e');
+      if (mounted) {
+        setState(() {
+          _sosHistoryLoading = false;
+        });
+      }
     }
   }
 
@@ -724,10 +729,18 @@ class _CustomerDashboardState extends State<CustomerDashboard> {
   }
 
   void _listenForSOSHistory() async {
-    if (token == null || token!.isEmpty || _userId == null) return;
+    if (token == null || token!.isEmpty || _userId == null) {
+      if (mounted) {
+        setState(() {
+          _sosHistoryLoading = false;
+        });
+      }
+      return;
+    }
 
     await _fetchSOSHistory();
 
+    _sosHistorySubscription?.cancel();
     _sosHistorySubscription = Stream.periodic(const Duration(seconds: 10))
         .asyncMap((_) => _fetchSOSHistory())
         .listen((_) {}, onError: (error) {
@@ -741,6 +754,11 @@ class _CustomerDashboardState extends State<CustomerDashboard> {
   Future<void> _fetchSOSHistory() async {
     if (!mounted || token == null || _userId == null) {
       debugPrint('❌ Cannot fetch SOS history: Missing required parameters');
+      if (mounted) {
+        setState(() {
+          _sosHistoryLoading = false;
+        });
+      }
       return;
     }
 

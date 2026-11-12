@@ -28,7 +28,8 @@ router.get('/trips/verification', verifyToken, async (req, res) => {
     
     // Check if user is admin
     const userRole = req.user.role || req.user.userRole;
-    if (!['admin', 'super_admin'].includes(userRole)) {
+    const hasDriversPermission = req.user.permissions?.drivers?.can_access === true;
+    if (!['admin', 'super_admin'].includes(userRole) && !hasDriversPermission) {
       return res.status(403).json({
         success: false,
         message: 'Access denied. Admin privileges required.'
@@ -186,7 +187,8 @@ router.get('/trips/:tripId/details', verifyToken, async (req, res) => {
     
     // Check admin role
     const userRole = req.user.role || req.user.userRole;
-    if (!['admin', 'super_admin'].includes(userRole)) {
+    const hasDriversPermission = req.user.permissions?.drivers?.can_access === true;
+    if (!['admin', 'super_admin'].includes(userRole) && !hasDriversPermission) {
       return res.status(403).json({
         success: false,
         message: 'Access denied. Admin privileges required.'
@@ -241,7 +243,8 @@ router.get('/odometer-photo/:photoId', verifyToken, async (req, res) => {
     
     // Check admin role
     const userRole = req.user.role || req.user.userRole;
-    if (!['admin', 'super_admin'].includes(userRole)) {
+    const hasDriversPermission = req.user.permissions?.drivers?.can_access === true;
+    if (!['admin', 'super_admin'].includes(userRole) && !hasDriversPermission) {
       return res.status(403).json({
         success: false,
         message: 'Access denied. Admin privileges required.'
@@ -296,7 +299,8 @@ router.get('/odometer-photo/:photoId', verifyToken, async (req, res) => {
 router.get('/drivers/list', verifyToken, async (req, res) => {
   try {
     const userRole = req.user.role || req.user.userRole;
-    if (!['admin', 'super_admin'].includes(userRole)) {
+    const hasDriversPermission = req.user.permissions?.drivers?.can_access === true;
+    if (!['admin', 'super_admin'].includes(userRole) && !hasDriversPermission) {
       return res.status(403).json({
         success: false,
         message: 'Access denied'
@@ -342,7 +346,8 @@ router.get('/drivers/list', verifyToken, async (req, res) => {
 router.get('/vehicles/list', verifyToken, async (req, res) => {
   try {
     const userRole = req.user.role || req.user.userRole;
-    if (!['admin', 'super_admin'].includes(userRole)) {
+    const hasDriversPermission = req.user.permissions?.drivers?.can_access === true;
+    if (!['admin', 'super_admin'].includes(userRole) && !hasDriversPermission) {
       return res.status(403).json({
         success: false,
         message: 'Access denied'

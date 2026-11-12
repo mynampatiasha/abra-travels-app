@@ -2145,7 +2145,6 @@ router.get('/admin/stats', verifyToken, async (req, res) => {
     ]).toArray();
 
     // Initialize counters
-    let pending = 0;
     let assigned = 0;
     let inProgress = 0;
     let completed = 0;
@@ -2154,11 +2153,6 @@ router.get('/admin/stats', verifyToken, async (req, res) => {
     // Map status counts
     stats.forEach(stat => {
       switch (stat._id) {
-        case 'pending':
-        case 'pending_assignment':
-        case 'created':
-          pending += stat.count;
-          break;
         case 'assigned':
         case 'scheduled':
           assigned += stat.count;
@@ -2177,6 +2171,21 @@ router.get('/admin/stats', verifyToken, async (req, res) => {
           cancelled += stat.count;
           break;
       }
+    });
+
+    // ✅ FIX: "pending" must mean the same thing GET /admin/pending uses —
+    // status pending/pending_assignment/created AND nothing assigned yet
+    // (no vehicle, driver or trip). Counting by status alone over-counted
+    // rosters that already have a vehicle/driver/trip but a stale status.
+    const pending = await req.db.collection('rosters').countDocuments({
+      $and: [
+        { status: { $in: ['pending_assignment', 'pending', 'created'] } },
+        { $or: [{ vehicleId: { $exists: false } }, { vehicleId: null }, { vehicleId: '' }, { vehicleId: 'null' }] },
+        { $or: [{ driverId: { $exists: false } }, { driverId: null }, { driverId: '' }, { driverId: 'null' }] },
+        { $or: [{ assignedVehicleId: { $exists: false } }, { assignedVehicleId: null }, { assignedVehicleId: '' }, { assignedVehicleId: 'null' }] },
+        { $or: [{ assignedDriverId: { $exists: false } }, { assignedDriverId: null }, { assignedDriverId: '' }, { assignedDriverId: 'null' }] },
+        { $or: [{ tripId: { $exists: false } }, { tripId: null }, { tripId: '' }, { tripId: 'null' }] }
+      ]
     });
 
     const total = pending + assigned + inProgress + completed + cancelled;
@@ -5989,55 +5998,6 @@ START BY: ${readyByTime12}`;
   }
 );
 
-// @route   GET api/roster/admin/stats
-// @desc    Get roster statistics for admin dashboard
-// @access  Private (Admin/Manager)
-router.get('/admin/stats', verifyToken, async (req, res) => {
-  try {
-    const [pending, assigned, inProgress, completed, cancelled] = await Promise.all([
-      req.db.collection('rosters').countDocuments({
-        requestType: 'customer_roster',
-        status: 'pending'
-      }),
-      req.db.collection('rosters').countDocuments({
-        requestType: 'customer_roster',
-        status: 'assigned'
-      }),
-      req.db.collection('rosters').countDocuments({
-        requestType: 'customer_roster',
-        status: 'in_progress'
-      }),
-      req.db.collection('rosters').countDocuments({
-        requestType: 'customer_roster',
-        status: 'completed'
-      }),
-      req.db.collection('rosters').countDocuments({
-        requestType: 'customer_roster',
-        status: 'cancelled'
-      }),
-    ]);
-
-    res.json({
-      success: true,
-      data: {
-        pending,
-        assigned,
-        inProgress,
-        completed,
-        cancelled,
-        total: pending + assigned + inProgress + completed + cancelled
-      }
-    });
-
-  } catch (error) {
-    console.error('Error fetching roster stats:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to fetch roster statistics'
-    });
-  }
-});
-
 // @route   GET api/roster/admin/all
 // @desc    Get all rosters for admin
 // @access  Private (Admin/Manager)
@@ -6619,66 +6579,6 @@ The route has been optimized and all customers have been notified.`;
       success: false,
       message: 'Failed to assign rosters',
       error: error.message
-    });
-  }
-});
-
-// @route   GET api/roster/admin/stats
-// @desc    Get roster statistics for admin dashboard
-// @access  Private (Admin/Manager)
-router.get('/admin/stats', verifyToken, async (req, res) => {
-  try {
-    console.log('[INFO] Fetching roster statistics for admin dashboard...');
-
-    // Get counts for each status
-    const [pending, assigned, inProgress, completed, cancelled] = await Promise.all([
-      req.db.collection('rosters').countDocuments({
-        requestType: 'customer_roster',
-        status: 'pending'
-      }),
-      req.db.collection('rosters').countDocuments({
-        requestType: 'customer_roster',
-        status: 'assigned'
-      }),
-      req.db.collection('rosters').countDocuments({
-        requestType: 'customer_roster',
-        status: 'in_progress'
-      }),
-      req.db.collection('rosters').countDocuments({
-        requestType: 'customer_roster',
-        status: 'completed'
-      }),
-      req.db.collection('rosters').countDocuments({
-        requestType: 'customer_roster',
-        status: 'cancelled'
-      })
-    ]);
-
-    const total = pending + assigned + inProgress + completed + cancelled;
-
-    const stats = {
-      pending,
-      assigned,
-      inProgress,
-      completed,
-      cancelled,
-      total
-    };
-
-    console.log('[OK] Roster stats calculated:', stats);
-
-    res.json({
-      success: true,
-      message: 'Roster statistics retrieved successfully',
-      data: stats
-    });
-
-  } catch (err) {
-    console.error('[ERROR] Error fetching roster stats:', err.message);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to fetch roster statistics',
-      error: err.message
     });
   }
 });
