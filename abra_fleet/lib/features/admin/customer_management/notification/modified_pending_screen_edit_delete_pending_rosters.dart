@@ -5871,11 +5871,15 @@ Future<void> _confirmManualAssignment(
                 const SizedBox(height: 16),
                 
                 // Action Buttons Row (Edit, Delete, Auto, Assign)
-                Row(
+                Wrap(
+                  alignment: WrapAlignment.spaceBetween,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  spacing: 12,
+                  runSpacing: 10,
                   children: [
-                    Expanded(
-                      child: Row(
-                        children: [
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
                           Icon(Icons.calendar_today_outlined, size: 16, color: const Color(0xFF94A3B8)),
                           const SizedBox(width: 8),
                           Text(
@@ -5891,8 +5895,10 @@ Future<void> _confirmManualAssignment(
                           ),
                         ],
                       ),
-                    ),
 
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
                     // ✅ Edit Button
                     SizedBox(
                       height: 36,
@@ -5961,6 +5967,8 @@ Future<void> _confirmManualAssignment(
                           elevation: 0,
                         ),
                       ),
+                    ),
+                      ],
                     ),
                   ],
                 ),
