@@ -51,13 +51,14 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
     if (_selectedLocation != null) {
       _loadAddressForLocation(_selectedLocation!);
     } else {
-      _getCurrentLocation();
+      _getCurrentLocation(auto: true);
     }
-    
+
     _searchController.addListener(_onSearchTextChanged);
     _searchFocusNode.addListener(_onFocusChanged);
     _loadPopularPlaces();
-    _testSearchFunctionality(); // Debug helper
+    // (debug test search removed from startup: its result was never used and,
+    //  with Google search on, it cost a billed request on every open)
   }
 
   @override
@@ -92,7 +93,7 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
 
       for (final query in popularQueries) {
         try {
-          final results = await _locationService.searchPlaces(query, limit: 1);
+          final results = await _locationService.searchPlaces(query, limit: 1, useGoogle: false);
           if (results.isNotEmpty) {
             _popularPlaces.add(results.first);
           }
@@ -109,7 +110,11 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
     }
   }
 
-  Future<void> _getCurrentLocation() async {
+  /// [auto] is true for the lookup done when the picker opens without a saved
+  /// location: it waits only a few seconds and fails quietly (no error dialogs),
+  /// leaving the map at its default view. The locate button keeps the full
+  /// behaviour (long wait, dialogs).
+  Future<void> _getCurrentLocation({bool auto = false}) async {
     // Show loading indicator
     if (mounted) {
       setState(() => _isLoadingAddress = true);
@@ -148,7 +153,8 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
       if (!hasPermission) {
         if (mounted) {
           setState(() => _isLoadingAddress = false);
-          
+          if (auto) return; // quiet on auto-lookup; the locate button shows the dialog
+
           // Show permission dialog
           final shouldOpenSettings = await showDialog<bool>(
             context: context,
@@ -191,8 +197,20 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
       }
 
       // Get current location with address
-      final locationData = await _locationService.getCurrentLocation(withAddress: true);
-      
+      final locationData = auto
+          ? await _locationService.getCurrentLocation(
+              withAddress: true,
+              timeLimit: const Duration(seconds: 6),
+              retryIfInaccurate: false,
+            )
+          : await _locationService.getCurrentLocation(withAddress: true);
+
+      if (locationData == null && auto) {
+        // Quiet fallback: stop loading, keep the default map, user can search or tap locate.
+        if (mounted) setState(() => _isLoadingAddress = false);
+        return;
+      }
+
       if (locationData != null && mounted) {
         // Check GPS accuracy
         final accuracy = locationData.accuracy ?? 999;

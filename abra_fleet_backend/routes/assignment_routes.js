@@ -424,7 +424,7 @@ ${passengerList}
                 
                 <p><strong>Important:</strong> Please be ready 5 minutes before pickup.</p>
                 
-                <p style="margin-top: 30px;">Best regards,<br><strong>Abra Fleet Team</strong></p>
+                <p style="margin-top: 30px;">Best regards,<br><strong>Corporate Travels Team</strong></p>
               </div>
             `,
           });
@@ -450,7 +450,7 @@ ${passengerList}
                 
                 <p>Check the app for complete details.</p>
                 
-                <p style="margin-top: 30px;">Safe driving!<br><strong>Abra Fleet Dispatch</strong></p>
+                <p style="margin-top: 30px;">Safe driving!<br><strong>Corporate Travels Dispatch</strong></p>
               </div>
             `,
           });

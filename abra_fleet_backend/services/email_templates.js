@@ -22,14 +22,14 @@ function getApprovalEmailTemplate(name, email, companyName) {
 <body>
   <div class="container">
     <div class="header">
-      <h1>🎉 Welcome to Abra Travels!</h1>
+      <h1>🎉 Welcome to Corporate Travels!</h1>
     </div>
     <div class="content">
       <p>Dear <strong>${name}</strong>,</p>
       
-      <p>Great news! Your Abra Travels account has been approved by our administrator.</p>
+      <p>Great news! Your Corporate Travels account has been approved by our administrator.</p>
       
-      <p>You can now login and access all features of our fleet management system.</p>
+      <p>You can now login and access all features of the Corporate Travels platform.</p>
       
       <div class="info-box">
         <h3>📋 Your Account Details:</h3>
@@ -47,10 +47,10 @@ function getApprovalEmailTemplate(name, email, companyName) {
       
       <p>If you have any questions or need assistance, please don't hesitate to contact our support team.</p>
       
-      <p>Best regards,<br><strong>The Abra Travels Team</strong></p>
+      <p>Best regards,<br><strong>The Corporate Travels Team</strong></p>
     </div>
     <div class="footer">
-      <p>© ${new Date().getFullYear()} Abra Travels. All rights reserved.</p>
+      <p>© ${new Date().getFullYear()} Corporate Travels. All rights reserved.</p>
     </div>
   </div>
 </body>
@@ -83,7 +83,7 @@ function getWelcomeWithPasswordSetupTemplate(name, email, companyName, passwordR
 <body>
   <div class="container">
     <div class="header">
-      <h1>🎉 Welcome to Abra Travels!</h1>
+      <h1>🎉 Welcome to Corporate Travels!</h1>
     </div>
     <div class="content">
       <p>Dear <strong>${name}</strong>,</p>
@@ -111,17 +111,17 @@ function getWelcomeWithPasswordSetupTemplate(name, email, companyName, passwordR
       <p><strong>After setting your password, you can:</strong></p>
       <ul>
         <li>Login with your email and new password</li>
-        <li>Access all fleet management features</li>
+        <li>Access all Corporate Travels features</li>
         <li>Book trips and manage your transportation needs</li>
         <li>Track your trips in real-time</li>
       </ul>
       
       <p>If you have any questions or need assistance, please don't hesitate to contact our support team.</p>
       
-      <p>Best regards,<br><strong>The Abra Travels Team</strong></p>
+      <p>Best regards,<br><strong>The Corporate Travels Team</strong></p>
     </div>
     <div class="footer">
-      <p>© ${new Date().getFullYear()} Abra Travels. All rights reserved.</p>
+      <p>© ${new Date().getFullYear()} Corporate Travels. All rights reserved.</p>
       <p>If you didn't request this account, please ignore this email.</p>
     </div>
   </div>
@@ -135,18 +135,18 @@ function getWelcomeWithPasswordSetupTemplate(name, email, companyName, passwordR
  */
 function getApprovalEmailText(name, email, companyName) {
   return `
-Welcome to Abra Travels!
+Welcome to Corporate Travels!
 
 Dear ${name},
 
-Great news! Your Abra Travels account has been approved by our administrator.
+Great news! Your Corporate Travels account has been approved by our administrator.
 
 Account Details:
 - Email: ${email}
 - Company: ${companyName || 'N/A'}
 - Status: Active
 
-You can now login and access all features of our fleet management system.
+You can now login and access all features of the Corporate Travels platform.
 
 What's Next?
 - Login with your registered email and password
@@ -156,9 +156,9 @@ What's Next?
 If you have any questions, please contact our support team.
 
 Best regards,
-The Abra Travels Team
+The Corporate Travels Team
 
-© ${new Date().getFullYear()} Abra Travels. All rights reserved.
+© ${new Date().getFullYear()} Corporate Travels. All rights reserved.
   `;
 }
 
@@ -167,7 +167,7 @@ The Abra Travels Team
  */
 function getWelcomeWithPasswordSetupText(name, email, companyName, passwordResetLink) {
   return `
-Welcome to Abra Travels!
+Welcome to Corporate Travels!
 
 Dear ${name},
 
@@ -188,16 +188,16 @@ Note: This link will expire in 1 hour for security reasons.
 
 After setting your password, you can:
 - Login with your email and new password
-- Access all fleet management features
+- Access all Corporate Travels features
 - Book trips and manage your transportation needs
 - Track your trips in real-time
 
 If you have any questions, please contact our support team.
 
 Best regards,
-The Abra Travels Team
+The Corporate Travels Team
 
-© ${new Date().getFullYear()} Abra Travels. All rights reserved.
+© ${new Date().getFullYear()} Corporate Travels. All rights reserved.
 If you didn't request this account, please ignore this email.
   `;
 }
@@ -229,7 +229,7 @@ function getRejectionEmailTemplate(name, email, reason) {
     <div class="content">
       <p>Dear <strong>${name}</strong>,</p>
       
-      <p>Thank you for your interest in Abra Travels. After reviewing your registration, we regret to inform you that your account application has not been approved at this time.</p>
+      <p>Thank you for your interest in Corporate Travels. After reviewing your registration, we regret to inform you that your account application has not been approved at this time.</p>
       
       ${reason ? `
       <div class="reason-box">
@@ -240,10 +240,10 @@ function getRejectionEmailTemplate(name, email, reason) {
       
       <p>If you believe this is an error or would like to discuss this decision, please contact our support team.</p>
       
-      <p>Best regards,<br><strong>The Abra Travels Team</strong></p>
+      <p>Best regards,<br><strong>The Corporate Travels Team</strong></p>
     </div>
     <div class="footer">
-      <p>© ${new Date().getFullYear()} Abra Travels. All rights reserved.</p>
+      <p>© ${new Date().getFullYear()} Corporate Travels. All rights reserved.</p>
     </div>
   </div>
 </body>
@@ -277,12 +277,12 @@ function getDriverWelcomeTemplate(firstName, lastName, email, driverId, password
 <body>
   <div class="container">
     <div class="header">
-      <h1>🚗 Welcome to Abra Travels Driver Portal!</h1>
+      <h1>🚗 Welcome to Corporate Travels Driver Portal!</h1>
     </div>
     <div class="content">
       <p>Dear <strong>${fullName}</strong>,</p>
       
-      <p>Welcome aboard! Your driver account has been created in the Abra Travels system.</p>
+      <p>Welcome aboard! Your driver account has been created in the Corporate Travels system.</p>
       
       <div class="info-box">
         <h3>📋 Your Driver Account Details:</h3>
@@ -315,16 +315,16 @@ function getDriverWelcomeTemplate(firstName, lastName, email, driverId, password
       <ol>
         <li>Click the "Set Your Password" button above</li>
         <li>Create a strong password for your account</li>
-        <li>Download the Abra Travels Driver app (if using mobile)</li>
+        <li>Download the Corporate Travels Driver app (if using mobile)</li>
         <li>Login with your email and new password</li>
       </ol>
       
       <p>If you have any questions or need assistance, please contact your fleet administrator or our support team.</p>
       
-      <p>Safe driving!<br><strong>The Abra Travels Team</strong></p>
+      <p>Safe driving!<br><strong>The Corporate Travels Team</strong></p>
     </div>
     <div class="footer">
-      <p>© ${new Date().getFullYear()} Abra Travels. All rights reserved.</p>
+      <p>© ${new Date().getFullYear()} Corporate Travels. All rights reserved.</p>
       <p>If you didn't expect this email, please contact your fleet administrator.</p>
     </div>
   </div>
@@ -339,11 +339,11 @@ function getDriverWelcomeTemplate(firstName, lastName, email, driverId, password
 function getDriverWelcomeText(firstName, lastName, email, driverId, passwordResetLink) {
   const fullName = `${firstName} ${lastName}`;
   return `
-Welcome to Abra Travels Driver Portal!
+Welcome to Corporate Travels Driver Portal!
 
 Dear ${fullName},
 
-Welcome aboard! Your driver account has been created in the Abra Travels system.
+Welcome aboard! Your driver account has been created in the Corporate Travels system.
 
 Your Driver Account Details:
 - Driver ID: ${driverId}
@@ -368,15 +368,15 @@ After setting your password, you can:
 Getting Started:
 1. Click the password setup link above
 2. Create a strong password for your account
-3. Download the Abra Travels Driver app (if using mobile)
+3. Download the Corporate Travels Driver app (if using mobile)
 4. Login with your email and new password
 
 If you have any questions, please contact your fleet administrator or our support team.
 
 Safe driving!
-The Abra Travels Team
+The Corporate Travels Team
 
-© ${new Date().getFullYear()} Abra Travels. All rights reserved.
+© ${new Date().getFullYear()} Corporate Travels. All rights reserved.
 If you didn't expect this email, please contact your fleet administrator.
   `;
 }
@@ -480,7 +480,7 @@ function getPasswordResetTemplate(name, resetLink) {
     <div class="content">
       <p>Hello <strong>${name}</strong>,</p>
       
-      <p>We received a request to reset your password for your Abra Travels account.</p>
+      <p>We received a request to reset your password for your Corporate Travels account.</p>
       
       <p>Click the button below to reset your password:</p>
       
@@ -506,11 +506,11 @@ function getPasswordResetTemplate(name, resetLink) {
       
       <p style="margin-top: 30px;">If you didn't request a password reset, you can safely ignore this email. Your password will remain unchanged.</p>
       
-      <p style="margin-top: 20px;">Best regards,<br><strong>The Abra Travels Team</strong></p>
+      <p style="margin-top: 20px;">Best regards,<br><strong>The Corporate Travels Team</strong></p>
     </div>
     <div class="footer">
-      <p>This is an automated message from Abra Travels Management System</p>
-      <p>© ${new Date().getFullYear()} Abra Travels. All rights reserved.</p>
+      <p>This is an automated message from Corporate Travels System</p>
+      <p>© ${new Date().getFullYear()} Corporate Travels. All rights reserved.</p>
     </div>
   </div>
 </body>
@@ -527,7 +527,7 @@ function getPasswordResetText(name, resetLink) {
 
 Hello ${name},
 
-We received a request to reset your password for your Abra Travels account.
+We received a request to reset your password for your Corporate Travels account.
 
 Click the link below to reset your password:
 ${resetLink}
@@ -542,11 +542,11 @@ ${resetLink}
 If you didn't request a password reset, you can safely ignore this email. Your password will remain unchanged.
 
 Best regards,
-The Abra Travels Team
+The Corporate Travels Team
 
 ---
-This is an automated message from Abra Travels Management System
-© ${new Date().getFullYear()} Abra Travels. All rights reserved.
+This is an automated message from Corporate Travels System
+© ${new Date().getFullYear()} Corporate Travels. All rights reserved.
   `;
 }
 

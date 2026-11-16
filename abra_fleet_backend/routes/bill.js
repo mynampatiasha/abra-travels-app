@@ -540,9 +540,9 @@ async function generateBillPDF(bill) {
       doc.pipe(stream);
 
       // Header
-      doc.fontSize(24).fillColor('#2C3E50').text('ABRA FLEET', 50, 50)
+      doc.fontSize(24).fillColor('#2C3E50').text('CORPORATE TRAVELS', 50, 50)
          .fontSize(10).fillColor('#7F8C8D')
-         .text('Fleet Management Solutions', 50, 80)
+         .text('Your Journey, Our Commitment', 50, 80)
          .text('GST: 29XXXXX1234X1Z5', 50, 95);
 
       // Bill Title
@@ -718,8 +718,8 @@ async function sendBillEmail(bill, pdfPath) {
 <body>
   <div class="container">
     <div class="header">
-      <h1>🚗 ABRA FLEET</h1>
-      <p style="margin: 10px 0 0 0; opacity: 0.9;">Fleet Management Solutions</p>
+      <h1>🚗 CORPORATE TRAVELS</h1>
+      <p style="margin: 10px 0 0 0; opacity: 0.9;">Your Journey, Our Commitment</p>
     </div>
     <div class="content">
       <h2 style="color: #2c3e50; margin-top: 0;">Bill from ${bill.vendorName}</h2>
@@ -739,7 +739,7 @@ async function sendBillEmail(bill, pdfPath) {
       <p>The bill PDF is attached to this email for your records.</p>
     </div>
     <div class="footer">
-      <p><strong>Abra Fleet Management Solutions</strong></p>
+      <p><strong>Corporate Travels</strong></p>
       <p>This is an automated email from the billing system.</p>
     </div>
   </div>
@@ -747,7 +747,7 @@ async function sendBillEmail(bill, pdfPath) {
 </html>`;
 
   return emailTransporter.sendMail({
-    from: `"Abra Fleet Billing" <${process.env.SMTP_USER}>`,
+    from: `"Corporate Travels Billing" <${process.env.SMTP_USER}>`,
     to: process.env.BILLING_EMAIL || process.env.SMTP_USER,
     subject: `Bill ${bill.billNumber} from ${bill.vendorName} - ₹${bill.totalAmount.toFixed(2)}`,
     html: emailHtml,
@@ -791,13 +791,13 @@ async function sendPaymentConfirmationEmail(bill, payment) {
         </div>
       </div>
     </div>
-    <div class="footer"><p>Abra Fleet Management | billing@abrafleet.com</p></div>
+    <div class="footer"><p>Corporate Travels | billing@abrafleet.com</p></div>
   </div>
 </body>
 </html>`;
 
   return emailTransporter.sendMail({
-    from: `"Abra Fleet Billing" <${process.env.SMTP_USER}>`,
+    from: `"Corporate Travels Billing" <${process.env.SMTP_USER}>`,
     to: process.env.BILLING_EMAIL || process.env.SMTP_USER,
     subject: `Payment Recorded - ${bill.billNumber} - ₹${payment.amount.toFixed(2)}`,
     html: emailHtml

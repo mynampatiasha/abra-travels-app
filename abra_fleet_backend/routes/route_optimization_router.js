@@ -1940,14 +1940,17 @@ for (let dateIndex = 0; dateIndex < dateList.length; dateIndex++) {
       const pickupStops = stops.filter(s => s.type === 'pickup');
       
       // Reverse the order: Drop nearest customer first, farthest last
+      let eveningClock = parseTime(logoutTime); // running clock: every drop adds the leg from the previous stop
       for (let i = pickupStops.length - 1; i >= 0; i--) {
         const originalStop = pickupStops[i];
         
         // Calculate evening drop time (add travel time progressively)
-        const baseTime = parseTime(logoutTime);
-        const travelTimeFromOffice = Math.round(originalStop.distanceToOffice * 3); // 3 min per km
-        const dropTimeMinutes = baseTime + travelTimeFromOffice;
-        const dropTime = `${String(Math.floor(dropTimeMinutes / 60)).padStart(2, '0')}:${String(dropTimeMinutes % 60).padStart(2, '0')}`;
+        const legKm = (i === pickupStops.length - 1)
+          ? (originalStop.distanceToOffice || 0)                 // office -> nearest customer
+          : (pickupStops[i + 1].distanceFromPrevious || 0);      // previous customer -> this customer
+        eveningClock += Math.round(legKm * 3); // 3 min per km
+        const dropTimeMinutes = eveningClock;
+        const dropTime = `${String(Math.floor(dropTimeMinutes / 60) % 24).padStart(2, '0')}:${String(dropTimeMinutes % 60).padStart(2, '0')}`;
         
         tripStops.push({
           stopId: new ObjectId().toString(),
@@ -2270,12 +2273,91 @@ const updateResult = await req.db.collection('rosters').updateOne(
     
     console.log(`   ✅ Updated ${rosterIds.length} roster(s) with trip information`);
     
+    // ========================================================================
+    // STEP 12: COMMIT TRANSACTION (nobody is notified until the data is saved)
+    // ========================================================================
+    await session.commitTransaction();
+    
+    try {
+    // ========================================================================
+    // STEP 11 (runs AFTER the commit so it sees the new trips): Update vehicle's assigned customers list - ✅ FIXED VERSION
+    // ========================================================================
+    
+    // ✅ FIX: Get current unique customer emails from trips
+    const updatedExistingTrips = await req.db.collection('roster-assigned-trips').find({
+      vehicleId: new ObjectId(vehicleId),
+      status: { $in: ['assigned', 'started', 'in_progress'] },
+      scheduledDate: { $in: dateList }
+    }).toArray();
+    
+    const updatedUniqueCustomers = new Set();
+    updatedExistingTrips.forEach(trip => {
+      trip.stops?.forEach(stop => {
+        if (stop.customer?.email) {
+          updatedUniqueCustomers.add(stop.customer.email);
+        }
+      });
+    });
+    
+    // ✅ Build assignedCustomers array with unique emails
+    const assignedCustomersArray = Array.from(updatedUniqueCustomers).map(email => {
+      // Find corresponding stop data
+      const stopData = route.find(r => r.customerEmail === email);
+      return {
+        email: email,
+        tripId: firstTripId,
+        tripIds: allCreatedTripIds,
+        tripNumber: firstTripNumber,
+        tripNumbers: allCreatedTripNumbers,
+        dateRange: {
+          startDate: assignStartDate,
+          endDate: assignEndDate,
+          totalDays: dateList.length
+        },
+        customerId: stopData?.customerId,
+        customerName: stopData?.customerName,
+        sequence: stopData?.sequence,
+        pickupTime: stopData?.pickupTime,
+        readyByTime: stopData?.readyByTime,
+        distanceToOffice: stopData?.distanceToOffice,
+        assignedAt: new Date()
+      };
+    });
+    
+    await req.db.collection('vehicles').updateOne(
+      { _id: new ObjectId(vehicleId) },
+      {
+        $set: {
+          assignedCustomers: assignedCustomersArray, // ✅ FIXED: Unique customers with full data
+          lastRouteAssignment: new Date(),
+          currentRouteDistance: totalDistance,
+          currentRouteTime: totalTime,
+          currentTripId: firstTripId,
+          currentTripIds: allCreatedTripIds,
+          currentTripNumber: firstTripNumber,
+          currentTripNumbers: allCreatedTripNumbers,
+          assignedDateRange: {
+            startDate: assignStartDate,
+            endDate: assignEndDate,
+            totalDays: dateList.length
+          },
+          updatedAt: new Date()
+        }
+      },
+    );
+    
+    } catch (vehicleUpdateError) {
+      console.error('⚠️  Vehicle summary update failed (trips are already saved):', vehicleUpdateError.message);
+    }
+
     // ====================================================================
 // 🆕 STEP 8: SEND CUSTOMER NOTIFICATIONS (ENHANCED FOR ALL TRIP TYPES)
 // ====================================================================
 console.log('\n' + '='.repeat(80));
 console.log('📧 SENDING CUSTOMER NOTIFICATIONS');
 console.log('='.repeat(80));
+
+const logoutTimeText = (String(firstRosterDoc?.endTime || firstRosterDoc?.logoutTime || '').match(/^(\d{1,2}):(\d{2})/) || []).slice(1).map((x, i) => i === 0 ? x.padStart(2, '0') : x).join(':') || 'Check your roster';
 
 for (const stop of stops) {
   if (stop.type !== 'pickup') continue; // Skip office drop
@@ -2334,7 +2416,7 @@ for (const stop of stops) {
             `   BE READY BY: ${stop.readyByTime}\n` +
             `   Sequence: #${stop.sequence}\n\n` +
             `🌆 EVENING TRIP (Drop):\n` +
-            `   Office Logout Time: Check your roster\n` +
+            `   Office Logout Time: ${logoutTimeText}\n` +
             `   Same vehicle will drop you home\n\n` +
             `Distance to office: ${(stop.distanceToOffice || 0).toFixed(1)} km\n\n` +
             `✅ Same driver & vehicle for both trips!\n` +
@@ -2366,7 +2448,7 @@ for (const stop of stops) {
             `Trip: ${firstTripNumber}\n` +
             `Date Range: ${assignStartDate} to ${assignEndDate} (${dateList.length} day${dateList.length > 1 ? 's' : ''})\n\n` +
             `🌆 EVENING DROP:\n` +
-            `   Office Logout Time: Check your roster\n` +
+            `   Office Logout Time: ${logoutTimeText}\n` +
             `   Driver will pick you from office\n` +
             `   Estimated drop time: ${stop.pickupTime || 'TBD'}\n` +
             `   Sequence: #${stop.sequence}\n\n` +
@@ -2476,17 +2558,26 @@ for (const stop of stops) {
           });
           
           const firstStop = stops[0];
-          const officeTime = stops[stops.length - 1]?.estimatedTime || startTime || '09:00';
+          // Real office time from the roster (the last stop only carries the last PICKUP time).
+          // Morning trips: arrival at the office. Evening-only rosters: the office departure (logout) time.
+          const hhmmOf = (v) => { const m = String(v || '').match(/^(\d{1,2}):(\d{2})/); return m ? m[1].padStart(2, '0') + ':' + m[2] : null; };
+          const driverRosterType = rosterTypeByRosterId[String(rosterIds[0])] || 'both';
+          const isEveningOnlyRoute = ['logout', 'drop'].includes(driverRosterType);
+          const officeTime = isEveningOnlyRoute
+            ? (hhmmOf(firstRosterDoc?.endTime || firstRosterDoc?.logoutTime) || '18:00')
+            : (hhmmOf(firstRosterDoc?.startTime) || stops[stops.length - 1]?.estimatedTime || startTime || '09:00');
+          const officeTimeLabel = isEveningOnlyRoute ? 'Office Departure' : 'Office Arrival';
+          const startByTime = isEveningOnlyRoute ? officeTime : (firstStop?.readyByTime || firstStop?.pickupTime);
           
           const notificationTitle = `New Route - ${route.length} Pickups Assigned`;
           const notificationBody = `You have ${route.length} customers on your route.\n\n` +
                 `Trip: ${firstTripNumber}\n` +
                 `Date Range: ${assignStartDate} to ${assignEndDate} (${dateList.length} day${dateList.length > 1 ? 's' : ''})\n` +
                 `Vehicle: ${vehicle?.registrationNumber || vehicle?.name || 'Vehicle'}\n\n` +
-                `START BY: ${firstStop?.readyByTime || firstStop?.pickupTime}\n\n` +
+                `START BY: ${startByTime}\n\n` +
                 `PICKUP SEQUENCE:\n${routeDetails}\n` +
-                `Office Arrival: ${officeTime}\n` +
-                `Total Distance: ${totalDistance} km\n` +
+                `${officeTimeLabel}: ${officeTime}\n` +
+                `Total Distance: ${Number(totalDistance || 0).toFixed(1)} km\n` +
                 `Total Time: ${totalTime} mins\n\n` +
                 `Check the app for detailed route information.`;
           
@@ -2506,8 +2597,9 @@ for (const stop of stops) {
               totalDays: dateList.length
             },
             trackingRequired: true,
-            startByTime: firstStop.readyByTime,
-            officeArrivalTime: officeTime,
+            startByTime: startByTime,
+            officeArrivalTime: isEveningOnlyRoute ? null : officeTime,
+            officeDepartureTime: isEveningOnlyRoute ? officeTime : null,
             collection: 'roster-assigned-trips',
             type: 'driver_route_assignment'
           };
@@ -2548,7 +2640,7 @@ for (const stop of stops) {
               `Driver: ${driver?.name || 'Unknown'}\n` +
               `Vehicle: ${vehicle?.registrationNumber || vehicle?.vehicleNumber || 'Unknown'}\n` +
               `Total Customers: ${route.length}\n` +
-              `Total Distance: ${totalDistance} km\n` +
+              `Total Distance: ${Number(totalDistance || 0).toFixed(1)} km\n` +
               `Total Time: ${totalTime} mins\n` +
               `First Pickup: ${route[0]?.pickupTime}\n` +
               `Total Trips Created: ${totalTripsCreated}\n\n` +
@@ -2655,79 +2747,6 @@ for (const stop of stops) {
         notificationResults.admin = 0;
       }
     }
-    
-    // ========================================================================
-    // STEP 11: Update vehicle's assigned customers list - ✅ FIXED VERSION
-    // ========================================================================
-    
-    // ✅ FIX: Get current unique customer emails from trips
-    const updatedExistingTrips = await req.db.collection('roster-assigned-trips').find({
-      vehicleId: new ObjectId(vehicleId),
-      status: { $in: ['assigned', 'started', 'in_progress'] },
-      scheduledDate: { $in: dateList }
-    }).toArray();
-    
-    const updatedUniqueCustomers = new Set();
-    updatedExistingTrips.forEach(trip => {
-      trip.stops?.forEach(stop => {
-        if (stop.customer?.email) {
-          updatedUniqueCustomers.add(stop.customer.email);
-        }
-      });
-    });
-    
-    // ✅ Build assignedCustomers array with unique emails
-    const assignedCustomersArray = Array.from(updatedUniqueCustomers).map(email => {
-      // Find corresponding stop data
-      const stopData = route.find(r => r.customerEmail === email);
-      return {
-        email: email,
-        tripId: firstTripId,
-        tripIds: allCreatedTripIds,
-        tripNumber: firstTripNumber,
-        tripNumbers: allCreatedTripNumbers,
-        dateRange: {
-          startDate: assignStartDate,
-          endDate: assignEndDate,
-          totalDays: dateList.length
-        },
-        customerId: stopData?.customerId,
-        customerName: stopData?.customerName,
-        sequence: stopData?.sequence,
-        pickupTime: stopData?.pickupTime,
-        readyByTime: stopData?.readyByTime,
-        distanceToOffice: stopData?.distanceToOffice,
-        assignedAt: new Date()
-      };
-    });
-    
-    await req.db.collection('vehicles').updateOne(
-      { _id: new ObjectId(vehicleId) },
-      {
-        $set: {
-          assignedCustomers: assignedCustomersArray, // ✅ FIXED: Unique customers with full data
-          lastRouteAssignment: new Date(),
-          currentRouteDistance: totalDistance,
-          currentRouteTime: totalTime,
-          currentTripId: firstTripId,
-          currentTripIds: allCreatedTripIds,
-          currentTripNumber: firstTripNumber,
-          currentTripNumbers: allCreatedTripNumbers,
-          assignedDateRange: {
-            startDate: assignStartDate,
-            endDate: assignEndDate,
-            totalDays: dateList.length
-          },
-          updatedAt: new Date()
-        }
-      },
-      { session }
-    );
-    
-    // ========================================================================
-    // STEP 12: COMMIT TRANSACTION
-    // ========================================================================
-    await session.commitTransaction();
     
     // ========================================================================
     // STEP 13: VERIFICATION
@@ -2846,7 +2865,7 @@ for (const stop of stops) {
     });
     
   } catch (error) {
-    await session.abortTransaction();
+    try { if (session.inTransaction()) await session.abortTransaction(); } catch (abortError) { /* already finished */ }
     console.error('\n' + '❌'.repeat(40));
     console.error('GROUPED ROUTE ASSIGNMENT WITH RECURRING TRIPS FAILED');
     console.error('❌'.repeat(40));

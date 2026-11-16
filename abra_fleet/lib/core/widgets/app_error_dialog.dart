@@ -19,7 +19,7 @@ class AppErrorDialog extends StatefulWidget {
   const AppErrorDialog({
     Key? key,
     this.title = 'Connection Lost',
-    this.message = 'Unable to connect to Abra Fleet servers. Please check your internet or try again.',
+    this.message = 'Unable to connect to Corporate Travels servers. Please check your internet or try again.',
     this.onRetry,
     this.retryButtonText = 'Try Again',
     this.onDismiss,
@@ -29,7 +29,7 @@ class AppErrorDialog extends StatefulWidget {
   static Future<void> show(
     BuildContext context, {
     String title = 'Connection Lost',
-    String message = 'Unable to connect to Abra Fleet servers. Please check your internet or try again.',
+    String message = 'Unable to connect to Corporate Travels servers. Please check your internet or try again.',
     VoidCallback? onRetry,
     String retryButtonText = 'Try Again',
   }) {
@@ -58,7 +58,7 @@ class AppErrorDialog extends StatefulWidget {
       context,
       title: 'Connection Lost',
       message: customMessage ??
-          'We couldn\'t reach the Abra Fleet server. Please check your connection or try again.',
+          'We couldn\'t reach the Corporate Travels server. Please check your connection or try again.',
       onRetry: onRetry,
     );
   }

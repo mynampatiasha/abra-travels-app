@@ -4243,7 +4243,7 @@ void _navigateToTab(String navigationKey) async {
                     ),
                     if (!isMobile) ...[
                       const SizedBox(height: 12),
-                      const Text('Abra Travels',
+                      const Text('Corporate Travels',
                           style: TextStyle(
                               color: Colors.white,
                               fontSize: 18,

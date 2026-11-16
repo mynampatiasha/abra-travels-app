@@ -536,7 +536,7 @@ async function generateJournalPDF(journal, filepath) {
 
     // Header
     doc.fontSize(22).fillColor('#0F172A').font('Helvetica-Bold').text('MANUAL JOURNAL', 50, 50);
-    doc.fontSize(10).fillColor('#64748B').font('Helvetica').text('ABRA Fleet Management', 50, 80);
+    doc.fontSize(10).fillColor('#64748B').font('Helvetica').text('Corporate Travels', 50, 80);
 
     // Status badge
     const statusColors = { Published: '#16A34A', Draft: '#D97706', Void: '#DC2626' };

@@ -494,7 +494,7 @@ const generateSalesOrderPDF = async (salesOrder) => {
         doc.fontSize(22)
            .fillColor('#0066CC')
            .font('Helvetica-Bold')
-           .text('ABRA Travels', 40, 40);
+           .text('Corporate Travels', 40, 40);
         
         doc.fontSize(9)
            .fillColor('#666666')
@@ -763,7 +763,7 @@ const sendSalesOrderEmail = async (salesOrder, pdfBuffer) => {
     const mailOptions = {
       from: process.env.SMTP_FROM || process.env.SMTP_USER,
       to: salesOrder.customerEmail,
-      subject: `Sales Order ${salesOrder.salesOrderNumber} from ${process.env.COMPANY_NAME || 'Abra Fleet'}`,
+      subject: `Sales Order ${salesOrder.salesOrderNumber} from ${process.env.COMPANY_NAME || 'Corporate Travels'}`,
       html: `
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
           <h2>Sales Order ${salesOrder.salesOrderNumber}</h2>
@@ -783,7 +783,7 @@ const sendSalesOrderEmail = async (salesOrder, pdfBuffer) => {
           
           <p>If you have any questions, please don't hesitate to contact us.</p>
           
-          <p>Best regards,<br>${process.env.COMPANY_NAME || 'Abra Fleet'}</p>
+          <p>Best regards,<br>${process.env.COMPANY_NAME || 'Corporate Travels'}</p>
         </div>
       `,
       attachments: [

@@ -983,7 +983,7 @@ router.get('/download/:reportId', async (req, res) => {
     if (!logoLoaded) {
       doc.fontSize(18)
         .fillColor('#0066CC')
-        .text('ABRA Travels', 40, 35);
+        .text('Corporate Travels', 40, 35);
       doc.fontSize(8)
         .fillColor('#666666')
         .text('YOUR JOURNEY, OUR COMMITMENT', 40, 58);

@@ -657,7 +657,7 @@ class _ClientMainShellState extends State<ClientMainShell>
                               ),
                             ),
                             Text(
-                              'Fleet Management Portal',
+                              'Corporate Travels',
                               style: TextStyle(
                                 color: Colors.white.withOpacity(0.55),
                                 fontSize: 13,   // ↑ was 10
@@ -879,7 +879,7 @@ class _ClientMainShellState extends State<ClientMainShell>
                 ),
                 if (_activeScreen == -1)
                   Text(
-                    'Fleet Management Portal',
+                    'Corporate Travels',
                     style: TextStyle(
                       color: Colors.white.withOpacity(0.55),
                       fontSize: 11,
@@ -1389,7 +1389,7 @@ class _ClientMainShellState extends State<ClientMainShell>
               ),
               const SizedBox(width: 10),
               Text(
-                'Powered by Abra Fleet',
+                'Powered by Corporate Travels',
                 style: EDS.body(14, w: FontWeight.w500, color: EDS.textTer),
                 // ↑ was body(12)
               ),
@@ -1397,7 +1397,7 @@ class _ClientMainShellState extends State<ClientMainShell>
           ),
           const SizedBox(height: 4),
           Text(
-            '© ${DateTime.now().year} Abra Fleet Management System',
+            '© ${DateTime.now().year} Corporate Travels',
             style: EDS.body(13, color: EDS.textTer),   // ↑ was body(10)
           ),
         ],

@@ -71,6 +71,18 @@ const checkPermission = (requiredPermission) => {
     console.log('Available permissions:', Object.keys(permissions).join(', '));
     console.log('─'.repeat(80) + '\n');
     
+    // ✅ For read-only GET requests (e.g. background list polling in frontend shell),
+    // return 200 OK with empty dataset instead of 403 so restricted employees don't get error banners.
+    if (req.method === 'GET') {
+      return res.status(200).json({
+        success: true,
+        data: [],
+        count: 0,
+        pagination: { total: 0, page: 1, limit: 10, totalPages: 0 },
+        message: "No data available for this role"
+      });
+    }
+
     return res.status(403).json({
       success: false,
       error: 'Forbidden',
@@ -117,6 +129,18 @@ const checkAnyPermission = (...requiredPermissions) => {
     console.log('Available permissions:', Object.keys(permissions).join(', '));
     console.log('─'.repeat(80) + '\n');
     
+    // ✅ For read-only GET requests (e.g. background list polling in frontend shell),
+    // return 200 OK with empty dataset instead of 403 so restricted employees don't get error banners.
+    if (req.method === 'GET') {
+      return res.status(200).json({
+        success: true,
+        data: [],
+        count: 0,
+        pagination: { total: 0, page: 1, limit: 10, totalPages: 0 },
+        message: "No data available for this role"
+      });
+    }
+
     return res.status(403).json({
       success: false,
       error: 'Forbidden',

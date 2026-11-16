@@ -228,7 +228,7 @@ class _RegistrationScreenState extends State<RegistrationScreen>
                           ),
                           const SizedBox(height: 8),
                           const Text(
-                            'Join the ABRA Travels network.',
+                            'Join the Corporate Travels network.',
                             textAlign: TextAlign.center,
                             style: TextStyle(
                                 fontSize: 14,
@@ -276,12 +276,9 @@ class _RegistrationScreenState extends State<RegistrationScreen>
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text('ABRA TRAVELS',
+            Text('CORPORATE TRAVELS',
                 style: TextStyle(color: Colors.white, fontSize: 17,
                     fontWeight: FontWeight.w800, letterSpacing: 2)),
-            Text('Fleet Management Platform',
-                style: TextStyle(color: Colors.white, fontSize: 10,
-                    letterSpacing: 0.8)),
           ],
         ),
       ],

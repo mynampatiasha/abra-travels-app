@@ -330,7 +330,7 @@ class _WelcomeScreenState extends State<WelcomeScreen>
                                 const SizedBox(width: 6),
                                 Flexible(
                                   child: Text(
-                                    'ENTERPRISE FLEET MANAGEMENT',
+                                    'CORPORATE TRAVELS',
                                     style: TextStyle(color: _goldAccent, fontSize: 10, fontWeight: FontWeight.w700, letterSpacing: 1.5),
                                   ),
                                 ),
@@ -350,7 +350,7 @@ class _WelcomeScreenState extends State<WelcomeScreen>
                           ),
                           const SizedBox(height: 18),
                           Text(
-                            'From bookings to destinations — ABRA Travels gives you '
+                            'From bookings to destinations — Corporate Travels gives you '
                             'complete command over your fleet, drivers, and passenger experience.',
                             style: const TextStyle(
                               fontSize: 16,
@@ -420,7 +420,7 @@ class _WelcomeScreenState extends State<WelcomeScreen>
                     Icon(Icons.star_rounded, color: _goldAccent, size: 12),
                     const SizedBox(width: 6),
                     Flexible(
-                      child: Text('ENTERPRISE FLEET MANAGEMENT',
+                      child: Text('CORPORATE TRAVELS',
                         style: TextStyle(color: _goldAccent, fontSize: 9, fontWeight: FontWeight.w700, letterSpacing: 1.5)),
                     ),
                   ],
@@ -483,18 +483,12 @@ class _WelcomeScreenState extends State<WelcomeScreen>
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text('ABRA TRAVELS',
+            Text('CORPORATE TRAVELS',
               style: TextStyle(
                 color: Colors.white,
                 fontSize: large ? 18 : 15,
                 fontWeight: FontWeight.w800,
                 letterSpacing: 2,
-              )),
-            Text('Fleet Management Platform',
-              style: TextStyle(
-                color: Colors.white.withOpacity(0.5),
-                fontSize: 10,
-                letterSpacing: 0.8,
               )),
           ],
         ),

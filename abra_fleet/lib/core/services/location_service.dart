@@ -10,6 +10,8 @@ import 'package:latlong2/latlong.dart';
 import 'package:http/http.dart' as http;
 import 'package:abra_fleet/core/models/place_suggestion.dart';
 import 'package:abra_fleet/core/services/enhanced_location_search_service.dart';
+import 'package:abra_fleet/app/config/api_config.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class LocationData {
   final double latitude;
@@ -149,7 +151,14 @@ class LocationService extends ChangeNotifier {
   }
 
   /// Get current location once with improved accuracy
-  Future<LocationData?> getCurrentLocation({bool withAddress = false}) async {
+  /// [timeLimit] / [retryIfInaccurate] default to the previous behaviour, so
+  /// existing callers are unaffected. The location picker passes shorter values
+  /// for its automatic (on-open) lookup.
+  Future<LocationData?> getCurrentLocation({
+    bool withAddress = false,
+    Duration timeLimit = const Duration(seconds: 15),
+    bool retryIfInaccurate = true,
+  }) async {
     try {
       if (!hasLocationPermission) {
         bool initialized = await initialize();
@@ -161,11 +170,11 @@ class LocationService extends ChangeNotifier {
       // Use best accuracy for precise location capture
       Position position = await Geolocator.getCurrentPosition(
         desiredAccuracy: LocationAccuracy.best,
-        timeLimit: const Duration(seconds: 15), // Wait up to 15 seconds for accurate GPS
+        timeLimit: timeLimit, // default: wait up to 15 seconds for accurate GPS
       );
 
       // Check if accuracy is acceptable (within 50 meters)
-      if (position.accuracy > 50) {
+      if (retryIfInaccurate && position.accuracy > 50) {
         if (kDebugMode) {
           print('⚠️ GPS accuracy is low: ${position.accuracy}m - trying again...');
         }
@@ -542,9 +551,72 @@ class LocationService extends ChangeNotifier {
     _lastApiCall = DateTime.now();
   }
 
+  /// Search places through the backend Google Places proxy (/api/places/search).
+  /// Never throws: returns an empty list if the user isn't logged in, the
+  /// backend/Google is unavailable, or nothing was found.
+  Future<List<PlaceSuggestion>> _searchViaBackend(String query, int limit) async {
+    if (query.length < 2) return [];
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final token = prefs.getString('jwt_token');
+      if (token == null || token.isEmpty) return [];
+
+      final params = <String, String>{
+        'q': query,
+        'limit': limit.clamp(1, 10).toString(),
+      };
+      if (_currentLocation != null) {
+        params['lat'] = _currentLocation!.latitude.toString();
+        params['lng'] = _currentLocation!.longitude.toString();
+      }
+      final uri = Uri.parse('${ApiConfig.baseUrl}/api/places/search')
+          .replace(queryParameters: params);
+
+      final response = await http.get(uri, headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer $token',
+      }).timeout(const Duration(seconds: 8));
+
+      if (response.statusCode != 200) return [];
+      final body = json.decode(response.body);
+      if (body is! Map || body['success'] != true || body['data'] is! List) return [];
+
+      final results = <PlaceSuggestion>[];
+      for (final item in (body['data'] as List)) {
+        if (item is! Map) continue;
+        final lat = (item['lat'] as num?)?.toDouble();
+        final lng = (item['lng'] as num?)?.toDouble();
+        if (lat == null || lng == null) continue;
+        final types = (item['types'] is List) ? List<String>.from(item['types']) : <String>[];
+        results.add(PlaceSuggestion(
+          title: (item['title'] ?? '').toString(),
+          subtitle: (item['subtitle'] ?? '').toString(),
+          coordinates: LatLng(lat, lng),
+          type: types.contains('establishment')
+              ? PlaceSuggestionType.business
+              : PlaceSuggestionType.address,
+          placeId: item['placeId']?.toString(),
+          metadata: {'source': 'google'},
+        ));
+      }
+      return results;
+    } catch (e) {
+      if (kDebugMode) print('Google places search unavailable, using fallback: $e');
+      return [];
+    }
+  }
+
   /// Enhanced search for places with hybrid approach
-  Future<List<PlaceSuggestion>> searchPlaces(String query, {int limit = 5}) async {
+  Future<List<PlaceSuggestion>> searchPlaces(String query, {int limit = 5, bool useGoogle = true}) async {
     if (query.trim().isEmpty) return [];
+
+    // 1) Google Places via our backend (key stays on the server).
+    //    Returns [] on any problem, so we fall through to the existing search.
+    //    Background/prefetch callers pass useGoogle: false to avoid billed requests.
+    if (useGoogle) {
+      final googleResults = await _searchViaBackend(query.trim(), limit);
+      if (googleResults.isNotEmpty) return googleResults;
+    }
 
     if (kDebugMode) {
       print('\n=== Starting enhanced search for: "$query" ===');

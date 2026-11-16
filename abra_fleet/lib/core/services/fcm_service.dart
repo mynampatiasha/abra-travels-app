@@ -73,7 +73,7 @@ Future<void> _showLocalNotification({
       styleInformation: BigTextStyleInformation(
         body,
         contentTitle: title,
-        summaryText: 'Abra Travels',
+        summaryText: 'Corporate Travels',
       ),
       // 🔥 CRITICAL: These flags ensure heads-up display
       fullScreenIntent: false,

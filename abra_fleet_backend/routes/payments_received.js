@@ -183,7 +183,7 @@ async function sendPaymentReceiptEmail(payment, invoice, proofPaths) {
     </div>
     
     <div class="footer">
-      <p><strong>Abra Fleet Management Solutions</strong></p>
+      <p><strong>Corporate Travels</strong></p>
       <p>This is an automated email. Please do not reply to this message.</p>
     </div>
   </div>
@@ -206,7 +206,7 @@ async function sendPaymentReceiptEmail(payment, invoice, proofPaths) {
     }
 
     const mailOptions = {
-      from: `"Abra Fleet Billing" <${process.env.SMTP_USER}>`,
+      from: `"Corporate Travels Billing" <${process.env.SMTP_USER}>`,
       to: payment.customerEmail || invoice?.customerEmail,
       subject: `Payment Receipt - ${payment.paymentNumber} - ₹${payment.amountReceived.toFixed(2)}`,
       html: emailHtml,

@@ -31,7 +31,7 @@ class SupportSystemScreen extends StatelessWidget {
     final Uri emailUri = Uri(
       scheme: 'mailto',
       path: email,
-      queryParameters: {'subject': 'Support Request', 'body': 'Hello Abra Travels Support Team,\n\n'},
+      queryParameters: {'subject': 'Support Request', 'body': 'Hello Corporate Travels Support Team,\n\n'},
     );
     try {
       await launchUrl(emailUri, mode: LaunchMode.platformDefault);
@@ -196,7 +196,7 @@ class SupportSystemScreen extends StatelessWidget {
                       const SizedBox(width: 10),
                       Expanded(
                         child: Text(
-                          'Committed to your satisfaction and safety. Thank you for choosing Abra Travels!',
+                          'Committed to your satisfaction and safety. Thank you for choosing Corporate Travels!',
                           style: TextStyle(fontSize: 11, color: Colors.grey[600], height: 1.4),
                         ),
                       ),

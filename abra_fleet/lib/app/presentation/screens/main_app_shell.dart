@@ -335,21 +335,12 @@ class _BrandedLoadingScreenState extends State<_BrandedLoadingScreen>
 
                 // Brand name
                 const Text(
-                  'ABRA TRAVELS',
+                  'CORPORATE TRAVELS',
                   style: TextStyle(
                     color: Colors.white,
                     fontSize: 20,
                     fontWeight: FontWeight.w800,
                     letterSpacing: 3,
-                  ),
-                ),
-                const SizedBox(height: 6),
-                Text(
-                  'Fleet Management Platform',
-                  style: TextStyle(
-                    color: Colors.white.withOpacity(0.5),
-                    fontSize: 12,
-                    letterSpacing: 1,
                   ),
                 ),
 

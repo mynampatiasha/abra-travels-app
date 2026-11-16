@@ -1,5 +1,5 @@
 name: abra_fleet
-description: A fleet management application.
+description: Corporate Travels application.
 
 publish_to: 'none'
 
@@ -114,4 +114,4 @@ flutter_launcher_icons:
   image_path: "assets/abra_t_logo.png"
   remove_alpha_ios: true
   adaptive_icon_background: "#ffffff"
-  adaptive_icon_foreground: "assets/abra_t_logo.png"
+  adaptive_icon_foreground: "assets/abra_t_logo.png"

@@ -1908,7 +1908,7 @@ Widget _buildMap() {
         'Driver: *$driverName*\n\n'
         '📍 Track your ride in real time:\n'
         '$liveUrl\n\n'
-        'Thank you for choosing Abra Fleet!';
+        'Thank you for choosing Corporate Travels!';
 
     final customerPhone = vehicle['currentStop']?['customer']?['phone']?.toString() ?? '';
     final driverPhone = vehicle['driverPhone']?.toString() ?? '';

@@ -3470,10 +3470,10 @@ Future<void> showDriverLoginCredentialsDialog(
     final digits = (phone ?? '').replaceAll(RegExp(r'\D'), '');
     if (digits.isEmpty) return;
     final withCountryCode = digits.length == 10 ? '91$digits' : digits;
-    final message = 'Hello $name, your Abra Fleet Driver app login is ready.\n'
+    final message = 'Hello $name, your Corporate Travels Driver app login is ready.\n'
         'Email (username): $username\n'
         'Temporary password: $temporaryPassword\n'
-        'Sign in to the Abra Fleet Driver app with these, then choose your own password.';
+        'Sign in to the Corporate Travels Driver app with these, then choose your own password.';
     final uri = Uri.parse('https://wa.me/$withCountryCode?text=${Uri.encodeComponent(message)}');
     await launchUrl(uri, mode: LaunchMode.externalApplication);
   }

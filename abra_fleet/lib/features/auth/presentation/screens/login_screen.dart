@@ -424,17 +424,12 @@ class _LoginScreenState extends State<LoginScreen> with TickerProviderStateMixin
           mainAxisSize: MainAxisSize.min,
           children: [
             Text(
-              'ABRA TRAVELS',
+              'CORPORATE TRAVELS',
               style: TextStyle(
                   color: Colors.white,
                   fontSize: 17,
                   fontWeight: FontWeight.w800,
                   letterSpacing: 2),
-            ),
-            Text(
-              'Fleet Management Platform',
-              style: TextStyle(
-                  color: Colors.white, fontSize: 10, letterSpacing: 0.8),
             ),
           ],
         ),

@@ -1562,8 +1562,8 @@ Future<void> _showPrivacyPolicyDialog() async {
         title: const Text('Privacy Policy'),
         content: const SingleChildScrollView(
           child: Text(
-            '**Privacy Policy for Fleet Management App**\n\n'
-            'This Privacy Policy describes how your personal information is collected, used, and shared when you use our Fleet Management mobile application.\n\n'
+            '**Privacy Policy for Corporate Travels App**\n\n'
+            'This Privacy Policy describes how your personal information is collected, used, and shared when you use our Corporate Travels mobile application.\n\n'
             '**Information We Collect**\n\n'
             'We collect information about you in a variety of ways when you use our App. This includes:\n'
             '* **Personal Information:** Your name, email address, phone number, and other contact details.\n'
@@ -1605,12 +1605,12 @@ Future<void> _showTermsOfServiceDialog() async {
         title: const Text('Terms of Service'),
         content: const SingleChildScrollView(
           child: Text(
-            '**Terms of Service for Fleet Management App**\n\n'
-            'These Terms of Service govern your use of our Fleet Management mobile application.\n\n'
+            '**Terms of Service for Corporate Travels App**\n\n'
+            'These Terms of Service govern your use of our Corporate Travels mobile application.\n\n'
             '**1. Acceptance of Terms**\n\n'
             'By accessing or using our App, you agree to be bound by these Terms. If you disagree with any part of the terms, you may not access the App.\n\n'
             '**2. Description of Service**\n\n'
-            'Our App provides fleet management services, including but not limited to, vehicle tracking, driver monitoring, and reporting.\n\n'
+            'Our App provides travel management services, including but not limited to, vehicle tracking, driver monitoring, and reporting.\n\n'
             '**3. User Responsibilities**\n\n'
             'You are responsible for your use of the App and for any content you provide, including compliance with applicable laws, rules, and regulations. You are also responsible for safeguarding your account.\n\n'
             '**4. Prohibited Conduct**\n\n'

@@ -53,7 +53,7 @@ foreach ($live_jobs as $j) {
 ?>
 <?php include('includes/html_codes.php'); way_top(); ?>
 <title>Careers — Abra Tours &amp; Travels</title>
-<meta name="description" content="Join the Abra Travels family. Browse open positions and apply online.">
+<meta name="description" content="Join the Corporate Travels family. Browse open positions and apply online.">
 <?php head_nav(); ?>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/swiper@11/swiper-bundle.min.css"/>
 <style>
@@ -338,7 +338,7 @@ select.cr-inp{-webkit-appearance:auto}
 <section class="cr-why">
 <div class="container">
     <div class="cr-sec" style="margin-bottom:28px;">
-        <span class="cr-badge"><i class="fa-solid fa-star"></i> &nbsp;Why Abra Travels</span>
+        <span class="cr-badge"><i class="fa-solid fa-star"></i> &nbsp;Why Corporate Travels</span>
         <h2>Why Join Our Team?</h2>
         <p>We invest in our people just as much as our travellers</p>
     </div>
@@ -527,7 +527,7 @@ select.cr-inp{-webkit-appearance:auto}
                     </div>
                 </div></div>
                 <div class="col-md-12"><div class="form-group mb-0"><label class="cr-lbl">Message / Cover Note <span class="opt">Optional</span></label>
-                    <textarea id="f-message" class="cr-inp" rows="4" placeholder="Tell us why you want to join Abra Travels..."></textarea>
+                    <textarea id="f-message" class="cr-inp" rows="4" placeholder="Tell us why you want to join Corporate Travels..."></textarea>
                 </div></div>
             </div></div>
         </div>
@@ -538,7 +538,7 @@ select.cr-inp{-webkit-appearance:auto}
             <p>Our HR team reviews every application within 5–7 working days.</p>
             <button class="btn-submit" id="submitBtn" onclick="doSubmit()"><i class="fa-solid fa-paper-plane"></i> Submit Application</button>
             <div class="sub-error" id="subErr"></div>
-            <div class="sub-note">By submitting you agree that Abra Travels may contact you regarding your application.</div>
+            <div class="sub-note">By submitting you agree that Corporate Travels may contact you regarding your application.</div>
         </div>
 
     </div><!-- /crFormWrap -->

@@ -88,6 +88,36 @@ if ($check_overrides && mysqli_num_rows($check_overrides) == 0) {
     )");
 }
 
+// FIX: Ensure hr_attendance_access_list table exists for dynamic Admin Attendance permissions
+try {
+    $check_access_tbl = mysqli_query($dbConn, "SHOW TABLES LIKE 'hr_attendance_access_list'");
+    if ($check_access_tbl && mysqli_num_rows($check_access_tbl) == 0) {
+        mysqli_query($dbConn, "CREATE TABLE hr_attendance_access_list (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            employee_id VARCHAR(50) NOT NULL,
+            employee_db_id INT NOT NULL DEFAULT 0,
+            employee_name VARCHAR(150),
+            employee_email VARCHAR(150),
+            can_view_admin ENUM('No','Yes') NOT NULL DEFAULT 'Yes',
+            granted_by VARCHAR(150),
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            UNIQUE KEY uq_emp_id (employee_id)
+        )");
+        // Seed default HR admin (Keerti) if exists
+        $seed_hr = mysqli_query($dbConn, "SELECT id, employee_id, name, email FROM hr_employees WHERE LOWER(name) LIKE '%keerti%' OR LOWER(name) LIKE '%keerthi%'");
+        if ($seed_hr) {
+            while ($shr = mysqli_fetch_assoc($seed_hr)) {
+                $seid = mysqli_real_escape_string($dbConn, $shr['employee_id']);
+                $sedbid = intval($shr['id']);
+                $senm = mysqli_real_escape_string($dbConn, $shr['name']);
+                $seem = mysqli_real_escape_string($dbConn, $shr['email'] ?? '');
+                mysqli_query($dbConn, "INSERT IGNORE INTO hr_attendance_access_list (employee_id, employee_db_id, employee_name, employee_email, can_view_admin, granted_by) VALUES ('$seid', $sedbid, '$senm', '$seem', 'Yes', 'System Default')");
+            }
+        }
+    }
+} catch (Throwable $e) {}
+
 // Ensure the "Attendance Location" column exists (HR-controlled free-login flag)
 try {
     $col_check_afl = mysqli_query($dbConn, "SHOW COLUMNS FROM hr_employees LIKE 'attendance_free_login'");
@@ -275,24 +305,76 @@ function abra_safe_date_range($start_date, $end_date) {
 $currentUserName = isset($_SESSION['user_name']) ? trim($_SESSION['user_name']) : '';
 
 // ============================================================================
-// ROLE DETECTION
+// ROLE DETECTION & MASTER SUPER ADMIN RESOLUTION
 // ============================================================================
-$is_super_admin = (stripos($currentUserName, 'Abishek') !== false || stripos($currentUserName, 'abishek') !== false);
-$atn_tab = isset($_GET['atn_tab']) ? $_GET['atn_tab'] : 'overview';
-$is_keerti      = (stripos($currentUserName, 'Keerti')  !== false || stripos($currentUserName, 'Keerthi') !== false);
+// Identity is taken ONLY from the authenticated session (never straight from a
+// cookie / URL param), so a stale cookie cannot grant someone else's identity.
+$current_probe_email = $_SESSION['flutter_user_email'] ?? $_SESSION['user_email'] ?? $_SESSION['email'] ?? '';
+
+// Master Super Admin (original name rule; the email/ID rule is applied below
+// against the resolved employee record).
+$is_super_admin = (stripos($currentUserName, 'Abishek') !== false);
+$atn_tab   = isset($_GET['atn_tab']) ? $_GET['atn_tab'] : 'overview';
+$is_keerti = (stripos($currentUserName, 'Keerti') !== false || stripos($currentUserName, 'Keerthi') !== false);
 
 $user_emp_data = null;
-if(!empty($currentUserName)) {
+
+// 1. Try resolving by Email (Official or Personal email from session/cookie/request)
+if(!empty($current_probe_email)) {
+    $eml_safe = mysqli_real_escape_string($dbConn, trim(strtolower($current_probe_email)));
+    $emp_check = mysqli_query($dbConn, "SELECT * FROM hr_employees WHERE (LOWER(TRIM(email)) = '$eml_safe' OR LOWER(TRIM(personal_email)) = '$eml_safe') ORDER BY status ASC LIMIT 1");
+    if($emp_check && mysqli_num_rows($emp_check) > 0) {
+        $user_emp_data = mysqli_fetch_assoc($emp_check);
+    }
+}
+
+// 2. Try resolving by employee_id from session if available (e.g. AT006)
+if(!$user_emp_data && !empty($_SESSION['employee_id'])) {
+    $eid_safe = mysqli_real_escape_string($dbConn, trim($_SESSION['employee_id']));
+    $emp_check = mysqli_query($dbConn, "SELECT * FROM hr_employees WHERE employee_id = '$eid_safe' ORDER BY status ASC LIMIT 1");
+    if($emp_check && mysqli_num_rows($emp_check) > 0) {
+        $user_emp_data = mysqli_fetch_assoc($emp_check);
+    }
+}
+
+// 3. Try resolving by user_id from session
+if(!$user_emp_data && !empty($_SESSION['user_id']) && is_numeric($_SESSION['user_id'])) {
+    $uid_safe = intval($_SESSION['user_id']);
+    $emp_check = mysqli_query($dbConn, "SELECT * FROM hr_employees WHERE id = $uid_safe ORDER BY status ASC LIMIT 1");
+    if($emp_check && mysqli_num_rows($emp_check) > 0) {
+        $user_emp_data = mysqli_fetch_assoc($emp_check);
+    }
+}
+
+// 4. Try resolving by Username / Full Name (handles initial/suffix like SREESHMA KS)
+if(!$user_emp_data && !empty($currentUserName)) {
     $name_safe = mysqli_real_escape_string($dbConn, $currentUserName);
     $emp_check = mysqli_query($dbConn, "SELECT * FROM hr_employees WHERE LOWER(TRIM(name)) = LOWER(TRIM('$name_safe')) ORDER BY status ASC LIMIT 1");
+    
+    // Fuzzy matching for names with initials or phonetic variations (e.g. 'sreeshma' or 'shreeshma' -> 'SREESHMA KS')
+    if(!$emp_check || mysqli_num_rows($emp_check) == 0) {
+        // Only accepted when the FIRST NAME matches exactly one employee (no substring matches).
+        $orig_first  = explode(' ', strtolower(trim($currentUserName)))[0];
+        $clean_first = str_replace('sh', 's', $orig_first);
+        $of_safe = mysqli_real_escape_string($dbConn, $orig_first);
+        $cf_safe = mysqli_real_escape_string($dbConn, $clean_first);
+        $emp_check   = mysqli_query($dbConn, "SELECT * FROM hr_employees WHERE
+            (LOWER(SUBSTRING_INDEX(TRIM(name), ' ', 1)) = '$of_safe' OR
+             REPLACE(LOWER(SUBSTRING_INDEX(TRIM(name), ' ', 1)), 'sh', 's') = '$cf_safe')
+            AND status = 'active'
+            ORDER BY id ASC LIMIT 2");
+        if($emp_check && mysqli_num_rows($emp_check) != 1) { $emp_check = null; }
+    }
+
     if(!$emp_check || mysqli_num_rows($emp_check) == 0) {
         if($is_super_admin)
-            $emp_check = mysqli_query($dbConn, "SELECT * FROM hr_employees WHERE (LOWER(name) LIKE '%abishek%' OR employee_id = 'ABRA001') ORDER BY status ASC LIMIT 1");
+            $emp_check = mysqli_query($dbConn, "SELECT * FROM hr_employees WHERE (LOWER(name) LIKE '%abishek%' OR employee_id = 'ABRA001' OR employee_id = 'AT003') ORDER BY status ASC LIMIT 1");
         elseif($is_keerti)
-            $emp_check = mysqli_query($dbConn, "SELECT * FROM hr_employees WHERE (LOWER(name) LIKE '%keerti%' OR LOWER(name) LIKE '%keerthi%') ORDER BY status ASC LIMIT 1");
+            $emp_check = mysqli_query($dbConn, "SELECT * FROM hr_employees WHERE (LOWER(name) LIKE '%keerti%' OR LOWER(name) LIKE '%keerthi%' OR employee_id = 'AT001') ORDER BY status ASC LIMIT 1");
     }
     if($emp_check && mysqli_num_rows($emp_check) > 0)
         $user_emp_data = mysqli_fetch_assoc($emp_check);
+}
 
     $is_active_employee = ($user_emp_data && strtolower($user_emp_data['status'] ?? '') === 'active');
 
@@ -308,19 +390,63 @@ if(!empty($currentUserName)) {
             'status' => 'active'
         ];
     }
+
+// Double check master super admin status against employee record
+if($user_emp_data) {
+    if(!empty($user_emp_data['email']) && stripos($user_emp_data['email'], 'abishek.veeraswamy@fleet.abra-travels.com') !== false) {
+        $is_super_admin = true;
+    }
+    if(!empty($user_emp_data['employee_id']) && $user_emp_data['employee_id'] === 'ABRA001') {
+        $is_super_admin = true;
+    }
 }
 
+// Load authorized admin viewers from hr_attendance_access_list
+$attendance_access_allowed = [];
+try {
+    $acc_chk = mysqli_query($dbConn, "SELECT employee_id, employee_db_id, employee_email FROM hr_attendance_access_list WHERE can_view_admin = 'Yes'");
+    if($acc_chk) {
+        while($arow = mysqli_fetch_assoc($acc_chk)) {
+            if(!empty($arow['employee_id']))    $attendance_access_allowed[strtolower(trim($arow['employee_id']))] = true;
+            if(!empty($arow['employee_email'])) $attendance_access_allowed[strtolower(trim($arow['employee_email']))] = true;
+            if(!empty($arow['employee_db_id'])) $attendance_access_allowed['db_' . intval($arow['employee_db_id'])] = true;
+        }
+    }
+} catch (Throwable $e) {}
+
+// Managing Director / Executive matching with strict word boundary check (prevents false matches like 'sales and marketing')
 $is_managing_director = false;
 if($user_emp_data) {
-    $user_position        = $user_emp_data['position'] ?? '';
+    $user_position = trim($user_emp_data['position'] ?? '');
     $is_managing_director = (
         stripos($user_position, 'managing director') !== false ||
-        stripos($user_position, 'md')                !== false ||
-        stripos($user_position, 'ceo')               !== false
+        preg_match('/\b(md|ceo)\b/i', $user_position) === 1
     );
 }
 
-$is_admin = ($is_super_admin || $is_keerti || $is_managing_director);
+// Check if user has permission to view Admin Attendance Dashboard:
+// 1. Master Super Admin (Abishek / abishek.veeraswamy@fleet.abra-travels.com)
+// 2. HR Admin (Keerti)
+// 3. Legitimate Managing Director / CEO
+// 4. Any employee explicitly granted access in hr_attendance_access_list
+$has_attendance_admin_access = false;
+if($is_super_admin || $is_keerti || $is_managing_director) {
+    $has_attendance_admin_access = true;
+} elseif($user_emp_data) {
+    $cur_eid  = strtolower(trim($user_emp_data['employee_id'] ?? ''));
+    $cur_eml  = strtolower(trim($user_emp_data['email'] ?? ($user_emp_data['personal_email'] ?? '')));
+    $cur_dbid = 'db_' . intval($user_emp_data['id'] ?? 0);
+
+    if(
+        (!empty($cur_eid) && isset($attendance_access_allowed[$cur_eid])) ||
+        (!empty($cur_eml) && isset($attendance_access_allowed[$cur_eml])) ||
+        isset($attendance_access_allowed[$cur_dbid])
+    ) {
+        $has_attendance_admin_access = true;
+    }
+}
+
+$is_admin = $has_attendance_admin_access;
 
 $md_exclude_sql = " AND (position IS NULL OR (LOWER(position) NOT LIKE '%managing director%' AND LOWER(position) NOT LIKE '%ceo%'))";
 
@@ -405,6 +531,71 @@ if(isset($_GET['action']) && $_GET['action'] == 'check_date_status' && $user_emp
 // AJAX: APPLY LATE ATTENDANCE POLICY (admin only)
 // Every 6 total late days in a month = 1 day marked absent
 // ============================================================================
+// ============================================================================
+// AJAX: ATTENDANCE ACCESS LIST (Super Admin & HR)
+// ============================================================================
+if(isset($_GET['action']) && $_GET['action'] == 'get_attendance_access_list' && ($is_super_admin || $is_keerti)) {
+    header('Content-Type: application/json');
+    $emps_q = mysqli_query($dbConn, "
+        SELECT e.id, e.employee_id, e.name, e.department, e.position, e.email,
+               IFNULL(a.can_view_admin, 'No') AS can_view_admin,
+               a.updated_at, a.granted_by
+        FROM hr_employees e
+        LEFT JOIN hr_attendance_access_list a ON (a.employee_id = e.employee_id OR a.employee_db_id = e.id)
+        WHERE e.status = 'active'
+        ORDER BY e.name ASC
+    ");
+    $list = [];
+    if($emps_q) {
+        while($r = mysqli_fetch_assoc($emps_q)) {
+            $list[] = [
+                'id'             => intval($r['id']),
+                'employee_id'    => $r['employee_id'],
+                'name'           => $r['name'],
+                'department'     => $r['department'] ?? '',
+                'position'       => $r['position'] ?? '',
+                'email'          => $r['email'] ?? '',
+                'can_view_admin' => ($r['can_view_admin'] === 'Yes') ? 'Yes' : 'No'
+            ];
+        }
+    }
+    echo json_encode(['success' => true, 'employees' => $list]);
+    exit();
+}
+
+if(isset($_POST['action']) && $_POST['action'] == 'toggle_attendance_access' && ($is_super_admin || $is_keerti)) {
+    header('Content-Type: application/json');
+    $target_emp_id = mysqli_real_escape_string($dbConn, trim($_POST['employee_id'] ?? ''));
+    $target_db_id  = intval($_POST['employee_db_id'] ?? 0);
+    $new_status    = (isset($_POST['can_view_admin']) && $_POST['can_view_admin'] === 'Yes') ? 'Yes' : 'No';
+    $granted_by    = mysqli_real_escape_string($dbConn, $currentUserName ?: 'Admin');
+
+    if(empty($target_emp_id) && $target_db_id <= 0) {
+        echo json_encode(['success' => false, 'message' => 'Invalid employee ID']);
+        exit();
+    }
+
+    $einfo_q = mysqli_query($dbConn, "SELECT id, employee_id, name, email FROM hr_employees WHERE employee_id = '$target_emp_id' OR id = $target_db_id LIMIT 1");
+    $einfo = $einfo_q ? mysqli_fetch_assoc($einfo_q) : null;
+    $emp_id_str = $einfo ? $einfo['employee_id'] : $target_emp_id;
+    $emp_db_id  = $einfo ? intval($einfo['id']) : $target_db_id;
+    $emp_name   = mysqli_real_escape_string($dbConn, $einfo['name'] ?? '');
+    $emp_email  = mysqli_real_escape_string($dbConn, $einfo['email'] ?? '');
+
+    $save_q = mysqli_query($dbConn, "
+        INSERT INTO hr_attendance_access_list (employee_id, employee_db_id, employee_name, employee_email, can_view_admin, granted_by)
+        VALUES ('$emp_id_str', $emp_db_id, '$emp_name', '$emp_email', '$new_status', '$granted_by')
+        ON DUPLICATE KEY UPDATE can_view_admin = '$new_status', granted_by = '$granted_by', updated_at = CURRENT_TIMESTAMP
+    ");
+
+    if($save_q) {
+        echo json_encode(['success' => true, 'message' => 'Access updated successfully', 'can_view_admin' => $new_status]);
+    } else {
+        echo json_encode(['success' => false, 'message' => 'Database update failed: ' . mysqli_error($dbConn)]);
+    }
+    exit();
+}
+
 if(isset($_GET['action']) && $_GET['action'] == 'apply_late_policy' && $is_admin) {
     header('Content-Type: application/json');
     $affected = [];
@@ -2094,6 +2285,11 @@ if($user_emp_data) {
       <?php endif; ?>
     </div>
     <div class="header-stats">
+      <?php if($is_super_admin || $is_keerti): ?>
+      <button type="button" class="btn-header" style="background:linear-gradient(135deg,#4f46e5,#4338ca);color:white;border:none;padding:8px 16px;border-radius:8px;font-weight:700;cursor:pointer;margin-right:8px;font-size:13px;display:inline-flex;align-items:center;gap:6px;" onclick="openAccessListModal()" title="Manage employee access to Admin Attendance">
+        <i class="fas fa-user-shield"></i> Attendance Access List
+      </button>
+      <?php endif; ?>
       <?php if($is_active_employee): ?>
       <button class="btn-header btn-success-custom" onclick="handleMarkAttendance()">
         <i class="fas fa-plus-circle"></i> Mark Attendance
@@ -3422,6 +3618,62 @@ if($user_emp_data) {
 </div>
 <?php endif; ?>
 
+<!-- ATTENDANCE ACCESS LIST MODAL (Super Admin & HR) -->
+<?php if($is_super_admin || $is_keerti): ?>
+<div class="modal fade" id="attendanceAccessListModal" tabindex="-1" role="dialog" aria-hidden="true">
+  <div class="modal-dialog modal-lg" style="max-width:850px;">
+    <div class="modal-content" style="border-radius:12px;border:none;box-shadow:0 10px 30px rgba(0,0,0,0.15);">
+      <div class="modal-header" style="background:linear-gradient(135deg,#1e40af,#3b82f6);color:white;border-radius:12px 12px 0 0;padding:16px 24px;">
+        <h4 class="modal-title" style="font-weight:700;display:flex;align-items:center;gap:10px;margin:0;">
+          <i class="fas fa-user-shield"></i> Attendance Admin Access Permissions
+        </h4>
+        <button type="button" class="close" data-dismiss="modal" aria-label="Close" style="color:white;opacity:0.8;font-size:24px;border:none;background:none;cursor:pointer;">
+          <span aria-hidden="true">&times;</span>
+        </button>
+      </div>
+      <div class="modal-body" style="padding:24px;">
+        <div style="background:#eff6ff;border-left:4px solid #3b82f6;padding:12px 16px;border-radius:6px;margin-bottom:18px;">
+          <div style="font-weight:700;color:#1e40af;font-size:13px;margin-bottom:2px;">
+            <i class="fas fa-info-circle"></i> Access Control Settings
+          </div>
+          <div style="font-size:12px;color:#334155;line-height:1.6;">
+            Employees enabled below have permission to view the company-wide <strong>Admin Attendance Dashboard & Overview</strong>.
+            Employees toggled <strong>Disabled</strong> will only view their own personal attendance.
+            <br>
+            <span style="color:#059669;font-weight:600;"><i class="fas fa-shield-alt"></i> Master Super Admin (<code>abishek.veeraswamy@fleet.abra-travels.com</code>) always has full permanent access.</span>
+          </div>
+        </div>
+
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;gap:12px;">
+          <input type="text" id="accessListSearchInput" class="form-control" placeholder="Search employee name, department, or ID..." style="border-radius:8px;padding:8px 14px;border:1px solid #cbd5e1;font-size:13px;" onkeyup="filterAccessListTable()">
+          <div style="font-size:12px;color:#64748b;white-space:nowrap;" id="accessListCountBadge">Loading...</div>
+        </div>
+
+        <div style="max-height:420px;overflow-y:auto;border:1px solid #e2e8f0;border-radius:8px;">
+          <table class="table table-hover" style="margin:0;font-size:13px;">
+            <thead style="background:#f8fafc;position:sticky;top:0;z-index:2;">
+              <tr>
+                <th style="padding:10px 14px;font-weight:700;color:#475569;">Employee</th>
+                <th style="padding:10px 14px;font-weight:700;color:#475569;">Department</th>
+                <th style="padding:10px 14px;font-weight:700;color:#475569;">Position</th>
+                <th style="padding:10px 14px;font-weight:700;color:#475569;text-align:center;">Admin View</th>
+              </tr>
+            </thead>
+            <tbody id="accessListTableBody">
+              <tr><td colspan="4" style="text-align:center;padding:30px;color:#94a3b8;"><i class="fas fa-spinner fa-spin"></i> Loading access list...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+      <div class="modal-footer" style="background:#f8fafc;border-top:1px solid #e2e8f0;border-radius:0 0 12px 12px;padding:12px 24px;display:flex;justify-content:space-between;align-items:center;">
+        <span style="font-size:11px;color:#64748b;">Changes take effect immediately upon toggle.</span>
+        <button type="button" class="btn btn-secondary" data-dismiss="modal" style="border-radius:6px;padding:7px 18px;font-size:13px;font-weight:600;">Close</button>
+      </div>
+    </div>
+  </div>
+</div>
+<?php endif; ?>
+
 <!-- KPI BLOCKING MODAL -->
 <div class="modal fade" id="kpiBlockingModal" tabindex="-1" data-backdrop="static" data-keyboard="false">
   <div class="modal-dialog modal-lg"><div class="modal-content" style="border:3px solid #dc2626;"><div class="modal-header" style="background:linear-gradient(135deg,#dc2626,#b91c1c);border:none;"><h4 class="modal-title" style="color:white;font-size:24px;font-weight:800;"><i class="fas fa-ban"></i> Complete Your Self-Review First</h4></div><div class="modal-body" style="padding:50px 30px;text-align:center;background:#fef2f2;"><i class="fas fa-lock" style="font-size:100px;color:#dc2626;margin-bottom:30px;display:block;"></i><h2 style="color:#991b1b;font-weight:800;margin-bottom:20px;">Check-Out Blocked</h2>
@@ -3453,6 +3705,133 @@ const ovattRecords            = <?php echo $is_super_admin ? json_encode($ovatt_
 // Single source of truth: mirrors the $bypass_location PHP value computed above,
 // which is now HR-controlled per employee (Add/Edit Employee → "Attendance Location").
 const bypassLocation = <?php echo $bypass_location ? 'true' : 'false'; ?>;
+
+function openAccessListModal() {
+  $('#attendanceAccessListModal').modal('show');
+  loadAccessList();
+}
+
+function loadAccessList() {
+  var tbody = $('#accessListTableBody');
+  tbody.html('<tr><td colspan="4" style="text-align:center;padding:25px;color:#64748b;"><i class="fas fa-spinner fa-spin"></i> Loading employee access list...</td></tr>');
+  
+  $.getJSON('<?php echo $_SERVER['PHP_SELF']; ?>?action=get_attendance_access_list', function(resp) {
+    if(!resp || !resp.success || !resp.employees) {
+      tbody.html('<tr><td colspan="4" style="text-align:center;padding:20px;color:#dc2626;">Failed to load access list.</td></tr>');
+      return;
+    }
+    window._accessListEmployees = resp.employees;
+    renderAccessListRows(resp.employees);
+  }).fail(function() {
+    tbody.html('<tr><td colspan="4" style="text-align:center;padding:20px;color:#dc2626;">Error loading access list. Please try again.</td></tr>');
+  });
+}
+
+function renderAccessListRows(list) {
+  var tbody = $('#accessListTableBody');
+  if(!list || list.length === 0) {
+    tbody.html('<tr><td colspan="4" style="text-align:center;padding:25px;color:#94a3b8;">No active employees found.</td></tr>');
+    $('#accessListCountBadge').text('0 employees');
+    return;
+  }
+  
+  var grantedCount = 0;
+  var html = '';
+  for(var i = 0; i < list.length; i++) {
+    var e = list[i];
+    var isGranted = (e.can_view_admin === 'Yes');
+    if(isGranted) grantedCount++;
+    
+    var isMasterSuper = (
+      (e.name && e.name.toLowerCase().indexOf('abishek') !== -1) ||
+      (e.email && e.email.toLowerCase().indexOf('abishek.veeraswamy@fleet.abra-travels.com') !== -1) ||
+      (e.employee_id === 'ABRA001')
+    );
+    
+    html += '<tr class="access-row" data-search="' + (e.name + ' ' + (e.department||'') + ' ' + (e.position||'') + ' ' + e.employee_id).toLowerCase() + '">';
+    html += '<td style="padding:10px 14px;">';
+    html +=   '<div style="font-weight:700;color:#1e293b;">' + $('<div>').text(e.name).html() + '</div>';
+    html +=   '<div style="font-size:11px;color:#64748b;">' + $('<div>').text(e.employee_id + (e.email ? ' • ' + e.email : '')).html() + '</div>';
+    html += '</td>';
+    html += '<td style="padding:10px 14px;color:#475569;font-size:12px;">' + $('<div>').text(e.department || '—').html() + '</td>';
+    html += '<td style="padding:10px 14px;color:#475569;font-size:12px;">' + $('<div>').text(e.position || '—').html() + '</td>';
+    html += '<td style="padding:10px 14px;text-align:center;vertical-align:middle;">';
+    
+    if(isMasterSuper) {
+      html += '<span style="background:#dcfce7;color:#15803d;padding:4px 10px;border-radius:20px;font-size:11px;font-weight:700;"><i class="fas fa-crown"></i> Super Admin</span>';
+    } else {
+      var checked = isGranted ? 'checked' : '';
+      var labelText = isGranted ? 'Enabled' : 'Disabled';
+      var labelColor = isGranted ? '#059669' : '#94a3b8';
+      
+      html += '<label style="display:inline-flex;align-items:center;gap:8px;cursor:pointer;margin:0;">';
+      html +=   '<input type="checkbox" ' + checked + ' data-empid="' + $('<div>').text(e.employee_id).html() + '" data-dbid="' + e.id + '" onchange="toggleAccessPermission(this)" style="width:18px;height:18px;cursor:pointer;accent-color:#2563eb;">';
+      html +=   '<span id="access_lbl_' + e.id + '" style="font-size:11px;font-weight:700;color:' + labelColor + ';">' + labelText + '</span>';
+      html += '</label>';
+    }
+    
+    html += '</td>';
+    html += '</tr>';
+  }
+  
+  tbody.html(html);
+  $('#accessListCountBadge').text(grantedCount + ' of ' + list.length + ' have admin access');
+}
+
+function filterAccessListTable() {
+  var q = ($('#accessListSearchInput').val() || '').toLowerCase().trim();
+  $('.access-row').each(function() {
+    var s = $(this).attr('data-search') || '';
+    if(!q || s.indexOf(q) !== -1) {
+      $(this).show();
+    } else {
+      $(this).hide();
+    }
+  });
+}
+
+function toggleAccessPermission(cb) {
+  var empId = $(cb).attr('data-empid');
+  var dbId = parseInt($(cb).attr('data-dbid'), 10);
+  var isChecked = cb.checked;
+  var newStatus = isChecked ? 'Yes' : 'No';
+  var lbl = $('#access_lbl_' + dbId);
+  lbl.text('Saving...').css('color', '#d97706');
+  
+  $.post('<?php echo $_SERVER['PHP_SELF']; ?>', {
+    action: 'toggle_attendance_access',
+    employee_id: empId,
+    employee_db_id: dbId,
+    can_view_admin: newStatus
+  }, function(res) {
+    if(res && res.success) {
+      lbl.text(isChecked ? 'Enabled' : 'Disabled').css('color', isChecked ? '#059669' : '#94a3b8');
+      if(window._accessListEmployees) {
+        for(var i=0; i<window._accessListEmployees.length; i++) {
+          if(window._accessListEmployees[i].id == dbId) {
+            window._accessListEmployees[i].can_view_admin = newStatus;
+            break;
+          }
+        }
+      }
+      var count = 0;
+      if(window._accessListEmployees) {
+        for(var i=0; i<window._accessListEmployees.length; i++) {
+          if(window._accessListEmployees[i].can_view_admin === 'Yes') count++;
+        }
+        $('#accessListCountBadge').text(count + ' of ' + window._accessListEmployees.length + ' have admin access');
+      }
+    } else {
+      cb.checked = !isChecked;
+      lbl.text(!isChecked ? 'Enabled' : 'Disabled').css('color', !isChecked ? '#059669' : '#94a3b8');
+      alert('Failed to update access: ' + (res.message || 'Unknown error'));
+    }
+  }, 'json').fail(function() {
+    cb.checked = !isChecked;
+    lbl.text(!isChecked ? 'Enabled' : 'Disabled').css('color', !isChecked ? '#059669' : '#94a3b8');
+    alert('Network error while saving permission.');
+  });
+}
 
 function showNotCheckedIn()  { $('#notCheckedInModal').modal('show'); }
 function showCheckedIn()     { $('#checkedInModal').modal('show'); }

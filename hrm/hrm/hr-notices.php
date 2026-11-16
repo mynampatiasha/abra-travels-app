@@ -126,7 +126,7 @@ if (empty($employee_id)) {
             <div style='font-size:56px;margin-bottom:20px;'>&#128274;</div>
             <h2 style='color:#1e293b;margin-bottom:12px;font-weight:700;font-size:20px;'>Authentication Failed</h2>
             <p style='color:#64748b;margin-bottom:8px;font-size:14px;'>Email received: <strong>" . htmlspecialchars($currentUserEmail ?: '(none)') . "</strong></p>
-            <p style='color:#94a3b8;font-size:13px;margin-top:16px;'>Please access this page through the Abra Fleet app.</p>
+            <p style='color:#94a3b8;font-size:13px;margin-top:16px;'>Please access this page through the Corporate Travels app.</p>
         </div>
     </div>");
 }

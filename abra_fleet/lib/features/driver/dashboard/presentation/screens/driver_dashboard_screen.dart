@@ -50,42 +50,42 @@ class WhatsAppTemplates {
         {
           'label': '🕐 Running Late',
           'message':
-              'Hello, I am your Abra Travels driver. I am running a bit late and will arrive at your pickup location shortly. Sorry for the inconvenience!',
+              'Hello, I am your Corporate Travels driver. I am running a bit late and will arrive at your pickup location shortly. Sorry for the inconvenience!',
         },
         {
           'label': '🚗 Arrived at Pickup',
           'message':
-              'Hello! I am your Abra Travels driver. I have arrived at your pickup location. Please come down, I am waiting for you.',
+              'Hello! I am your Corporate Travels driver. I have arrived at your pickup location. Please come down, I am waiting for you.',
         },
         {
           'label': '⏱️ 5 Minutes Away',
           'message':
-              'Hello, I am your Abra Travels driver. I will be reaching your pickup location in approximately 5 minutes. Please be ready!',
+              'Hello, I am your Corporate Travels driver. I will be reaching your pickup location in approximately 5 minutes. Please be ready!',
         },
         {
           'label': '⏱️ 10 Minutes Away',
           'message':
-              'Hello, I am your Abra Travels driver. I will be reaching your pickup location in approximately 10 minutes. Please be ready!',
+              'Hello, I am your Corporate Travels driver. I will be reaching your pickup location in approximately 10 minutes. Please be ready!',
         },
         {
           'label': '🚦 Stuck in Traffic',
           'message':
-              'Hello, I am your Abra Travels driver. I am currently stuck in traffic. I will reach your pickup location as soon as possible. Thank you for your patience!',
+              'Hello, I am your Corporate Travels driver. I am currently stuck in traffic. I will reach your pickup location as soon as possible. Thank you for your patience!',
         },
         {
           'label': '📍 On My Way',
           'message':
-              'Hello! I am your Abra Travels driver. I am on the way to your pickup location. Please stay ready. Contact me if you need any help.',
+              'Hello! I am your Corporate Travels driver. I am on the way to your pickup location. Please stay ready. Contact me if you need any help.',
         },
         {
           'label': '✅ Trip Started',
           'message':
-              'Hello! Your Abra Travels trip has started. I am on my way to pick you up. See you soon!',
+              'Hello! Your Corporate Travels trip has started. I am on my way to pick you up. See you soon!',
         },
         {
           'label': '🔁 Wrong Location?',
           'message':
-              'Hello! I am your Abra Travels driver. I am at the pickup location mentioned in the app. If you are at a different spot, please let me know.',
+              'Hello! I am your Corporate Travels driver. I am at the pickup location mentioned in the app. If you are at a different spot, please let me know.',
         },
       ];
 }
@@ -1797,7 +1797,7 @@ Future<void> _launchWhatsAppMessage(String cleanPhone, String message) async {
                       'Vehicle: *$vehicleNum*\n\n'
                       '📍 Track your ride in real time:\n'
                       '$liveUrl\n\n'
-                      'Thank you for choosing Abra Fleet!';
+                      'Thank you for choosing Corporate Travels!';
                   
                   return Padding(
                     padding: const EdgeInsets.only(bottom: 10),
@@ -2194,7 +2194,7 @@ Future<void> _launchSupportWhatsApp(BuildContext context) async {
   Future<void> _launchEmail(BuildContext context) async {
     const String email = 'support@fleet.abra-travels.com';
     const String subject = 'Support Request';
-    const String body = 'Hello Abra Travels Support Team,\n\n';
+    const String body = 'Hello Corporate Travels Support Team,\n\n';
 
     try {
       final Uri emailUri = Uri(
@@ -2295,7 +2295,7 @@ Future<void> _launchSupportWhatsApp(BuildContext context) async {
             ),
             const SizedBox(width: 12),
             const Text(
-              'Abra Travels',
+              'Corporate Travels',
               style: TextStyle(
                   color: Colors.white, fontWeight: FontWeight.bold),
             ),

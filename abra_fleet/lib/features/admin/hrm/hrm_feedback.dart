@@ -12,7 +12,12 @@ import 'dart:async';
 import 'package:abra_fleet/core/services/hrm_feedback_service.dart';
 
 class HRMFeedbackScreen extends StatefulWidget {
-  const HRMFeedbackScreen({Key? key}) : super(key: key);
+  /// When true (customer pages that open this screen on their own), the screen
+  /// shows its own app bar with a back button and a width-capped body.
+  /// Default false keeps admin/client/driver embeds exactly as they were.
+  final bool showAppBar;
+
+  const HRMFeedbackScreen({Key? key, this.showAppBar = false}) : super(key: key);
 
   @override
   State<HRMFeedbackScreen> createState() => _HRMFeedbackScreenState();
@@ -610,11 +615,26 @@ class _HRMFeedbackScreenState extends State<HRMFeedbackScreen> with SingleTicker
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: lightBg,
+      appBar: widget.showAppBar
+          ? AppBar(
+              backgroundColor: primaryBlue,
+              foregroundColor: Colors.white,
+              elevation: 0,
+              title: const Text('Feedback & Support', style: TextStyle(fontWeight: FontWeight.w600)),
+            )
+          : null,
       body: _isLoading
           ? const Center(child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [CircularProgressIndicator(strokeWidth: 3, valueColor: AlwaysStoppedAnimation<Color>(primaryBlue)), SizedBox(height: 16), Text('Loading...', style: TextStyle(fontWeight: FontWeight.w600, color: darkText))]))
           : _errorMessage != null
               ? Center(child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [const Icon(Icons.error_outline, size: 64, color: dangerRed), const SizedBox(height: 16), Text(_errorMessage!, style: const TextStyle(color: dangerRed)), const SizedBox(height: 16), ElevatedButton(onPressed: _initializeScreen, style: ElevatedButton.styleFrom(backgroundColor: primaryBlue, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))), child: const Text('Retry', style: TextStyle(color: Colors.white)))]))
-              : _isAdmin ? _buildAdminView() : _buildUserView(),
+              : _isAdmin
+                  ? _buildAdminView()
+                  : (widget.showAppBar
+                      ? Align(
+                          alignment: Alignment.topCenter,
+                          child: ConstrainedBox(constraints: const BoxConstraints(maxWidth: 900), child: _buildUserView()),
+                        )
+                      : _buildUserView()),
     );
   }
   
@@ -900,11 +920,20 @@ class _HRMFeedbackScreenState extends State<HRMFeedbackScreen> with SingleTicker
   Widget _buildPersonalStatistics() {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 20),
-      child: Column(children: [
-        Row(children: [Expanded(child: _buildStatCard('Total', _myStatistics['totalCount'] ?? 0, Icons.chat_bubble, primaryBlue)), const SizedBox(width: 12), Expanded(child: _buildStatCard('Responded', _myStatistics['respondedCount'] ?? 0, Icons.check_circle, successGreen))]),
-        const SizedBox(height: 12),
-        Row(children: [Expanded(child: _buildStatCard('Pending', _myStatistics['pendingCount'] ?? 0, Icons.access_time, warningOrange)), const SizedBox(width: 12), const Expanded(child: SizedBox())])
-      ]),
+      child: LayoutBuilder(builder: (context, constraints) {
+        final total = _buildStatCard('Total', _myStatistics['totalCount'] ?? 0, Icons.chat_bubble, primaryBlue);
+        final responded = _buildStatCard('Responded', _myStatistics['respondedCount'] ?? 0, Icons.check_circle, successGreen);
+        final pending = _buildStatCard('Pending', _myStatistics['pendingCount'] ?? 0, Icons.access_time, warningOrange);
+        if (constraints.maxWidth < 420) {
+          // Phone: one card per row so numbers/labels never get squeezed.
+          return Column(children: [total, const SizedBox(height: 12), responded, const SizedBox(height: 12), pending]);
+        }
+        return Column(children: [
+          Row(children: [Expanded(child: total), const SizedBox(width: 12), Expanded(child: responded)]),
+          const SizedBox(height: 12),
+          Row(children: [Expanded(child: pending), const SizedBox(width: 12), const Expanded(child: SizedBox())])
+        ]);
+      }),
     );
   }
   
@@ -913,13 +942,20 @@ class _HRMFeedbackScreenState extends State<HRMFeedbackScreen> with SingleTicker
       margin: const EdgeInsets.symmetric(horizontal: 20),
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(color: cardWhite, borderRadius: BorderRadius.circular(20), boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 15, offset: const Offset(0, 5))]),
-      child: Row(children: [
-        Expanded(child: InkWell(onTap: () async { final date = await showDatePicker(context: context, initialDate: _myDateFrom != null ? DateTime.parse(_myDateFrom!) : DateTime.now(), firstDate: DateTime(2020), lastDate: DateTime.now()); if (date != null) { setState(() { _myDateFrom = DateFormat('yyyy-MM-dd').format(date); }); } }, child: Container(padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16), decoration: BoxDecoration(color: lightBg, borderRadius: BorderRadius.circular(12), border: Border.all(color: borderGray)), child: Row(children: [const Icon(Icons.calendar_today, size: 16, color: primaryBlue), const SizedBox(width: 8), Expanded(child: Text(_myDateFrom ?? 'From Date', style: TextStyle(fontSize: 14, color: _myDateFrom != null ? darkText : textGray)))])))),
-        const SizedBox(width: 12),
-        Expanded(child: InkWell(onTap: () async { final date = await showDatePicker(context: context, initialDate: _myDateTo != null ? DateTime.parse(_myDateTo!) : DateTime.now(), firstDate: DateTime(2020), lastDate: DateTime.now()); if (date != null) { setState(() { _myDateTo = DateFormat('yyyy-MM-dd').format(date); }); } }, child: Container(padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16), decoration: BoxDecoration(color: lightBg, borderRadius: BorderRadius.circular(12), border: Border.all(color: borderGray)), child: Row(children: [const Icon(Icons.calendar_today, size: 16, color: primaryPurple), const SizedBox(width: 8), Expanded(child: Text(_myDateTo ?? 'To Date', style: TextStyle(fontSize: 14, color: _myDateTo != null ? darkText : textGray)))])))),
-        const SizedBox(width: 12),
-        Container(height: 50, width: 50, decoration: BoxDecoration(gradient: const LinearGradient(colors: [primaryBlue, primaryPurple]), borderRadius: BorderRadius.circular(12), boxShadow: [BoxShadow(color: primaryBlue.withOpacity(0.3), blurRadius: 8, offset: const Offset(0, 4))]), child: IconButton(onPressed: _applyPersonalFilters, icon: const Icon(Icons.filter_list, color: Colors.white)))
-      ]),
+      child: LayoutBuilder(builder: (context, constraints) {
+        final fromField = Expanded(child: InkWell(onTap: () async { final date = await showDatePicker(context: context, initialDate: _myDateFrom != null ? DateTime.parse(_myDateFrom!) : DateTime.now(), firstDate: DateTime(2020), lastDate: DateTime.now()); if (date != null) { setState(() { _myDateFrom = DateFormat('yyyy-MM-dd').format(date); }); } }, child: Container(padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16), decoration: BoxDecoration(color: lightBg, borderRadius: BorderRadius.circular(12), border: Border.all(color: borderGray)), child: Row(children: [const Icon(Icons.calendar_today, size: 16, color: primaryBlue), const SizedBox(width: 8), Expanded(child: Text(_myDateFrom ?? 'From Date', style: TextStyle(fontSize: 14, color: _myDateFrom != null ? darkText : textGray)))]))));
+        final toField = Expanded(child: InkWell(onTap: () async { final date = await showDatePicker(context: context, initialDate: _myDateTo != null ? DateTime.parse(_myDateTo!) : DateTime.now(), firstDate: DateTime(2020), lastDate: DateTime.now()); if (date != null) { setState(() { _myDateTo = DateFormat('yyyy-MM-dd').format(date); }); } }, child: Container(padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16), decoration: BoxDecoration(color: lightBg, borderRadius: BorderRadius.circular(12), border: Border.all(color: borderGray)), child: Row(children: [const Icon(Icons.calendar_today, size: 16, color: primaryPurple), const SizedBox(width: 8), Expanded(child: Text(_myDateTo ?? 'To Date', style: TextStyle(fontSize: 14, color: _myDateTo != null ? darkText : textGray)))]))));
+        final applyBtn = Container(height: 50, width: 50, decoration: BoxDecoration(gradient: const LinearGradient(colors: [primaryBlue, primaryPurple]), borderRadius: BorderRadius.circular(12), boxShadow: [BoxShadow(color: primaryBlue.withOpacity(0.3), blurRadius: 8, offset: const Offset(0, 4))]), child: IconButton(onPressed: _applyPersonalFilters, icon: const Icon(Icons.filter_list, color: Colors.white)));
+        if (constraints.maxWidth < 480) {
+          // Phone: stack the two date pickers, filter button below.
+          return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+            (fromField as Expanded).child, const SizedBox(height: 12),
+            (toField as Expanded).child, const SizedBox(height: 12),
+            Align(alignment: Alignment.centerRight, child: applyBtn),
+          ]);
+        }
+        return Row(children: [fromField, const SizedBox(width: 12), toField, const SizedBox(width: 12), applyBtn]);
+      }),
     );
   }
   
@@ -933,7 +969,7 @@ class _HRMFeedbackScreenState extends State<HRMFeedbackScreen> with SingleTicker
         const SizedBox(height: 20),
         Container(decoration: BoxDecoration(color: lightBg, borderRadius: BorderRadius.circular(12), border: Border.all(color: borderGray)), child: DropdownButtonFormField<String>(dropdownColor: cardWhite, style: const TextStyle(color: darkText, fontSize: 14), decoration: const InputDecoration(labelText: 'Feedback Type *', labelStyle: TextStyle(color: textGray, fontSize: 13), border: InputBorder.none, contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 12)), hint: const Text('Select Type'), items: const [DropdownMenuItem(value: 'suggestion', child: Text('💡 Suggestion')), DropdownMenuItem(value: 'complaint', child: Text('⚠️ Complaint')), DropdownMenuItem(value: 'general', child: Text('📝 General Feedback')), DropdownMenuItem(value: 'appreciation', child: Text('🎉 Appreciation'))], onChanged: (value) { _feedbackTypeController.text = value ?? ''; })),
         const SizedBox(height: 16),
-        Column(crossAxisAlignment: CrossAxisAlignment.start, children: [const Text('Rating *', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: darkText)), const SizedBox(height: 8), Row(children: List.generate(5, (i) => IconButton(onPressed: () => setState(() => _selectedRating = i + 1), icon: Icon(i < _selectedRating ? Icons.star : Icons.star_border, color: warningOrange, size: 36))))]),
+        Column(crossAxisAlignment: CrossAxisAlignment.start, children: [const Text('Rating *', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: darkText)), const SizedBox(height: 8), Wrap(children: List.generate(5, (i) => IconButton(onPressed: () => setState(() => _selectedRating = i + 1), icon: Icon(i < _selectedRating ? Icons.star : Icons.star_border, color: warningOrange, size: 36))))]),
         const SizedBox(height: 16),
         Container(decoration: BoxDecoration(color: lightBg, borderRadius: BorderRadius.circular(12), border: Border.all(color: borderGray)), child: TextField(controller: _subjectController, style: const TextStyle(color: darkText), decoration: const InputDecoration(labelText: 'Subject *', labelStyle: TextStyle(color: textGray, fontSize: 13), hintText: 'Brief subject', border: InputBorder.none, contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 12)))),
         const SizedBox(height: 16),

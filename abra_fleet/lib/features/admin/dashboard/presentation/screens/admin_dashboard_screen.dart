@@ -1268,7 +1268,7 @@ Widget _buildBusinessAnalyticsSection(BuildContext context, bool isDesktop) {
               children: [
                 Text('Welcome Back, ${currentUser.name ?? 'Admin'}!', style: TextStyle(fontSize: isDesktop ? 28 : 22, fontWeight: FontWeight.bold, color: Colors.white)),
                 const SizedBox(height: 8),
-                Text('Fleet Business Analytics Dashboard', style: TextStyle(fontSize: 16, color: Colors.white.withOpacity(0.9))),
+                Text('Corporate Travels Analytics Dashboard', style: TextStyle(fontSize: 16, color: Colors.white.withOpacity(0.9))),
               ],
             ),
           ),

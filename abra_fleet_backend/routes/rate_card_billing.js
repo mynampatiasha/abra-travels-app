@@ -404,7 +404,7 @@ async function generateBillingInvoicePDF(invoice) {
         }
       }
       if (!logoLoaded) {
-        doc.fontSize(20).fillColor('#1a2744').font('Helvetica-Bold').text('ABRA Travels', 40, 40);
+        doc.fontSize(20).fillColor('#1a2744').font('Helvetica-Bold').text('Corporate Travels', 40, 40);
       }
 
       // ── Company info ─────────────────────────────────────────────
@@ -525,9 +525,9 @@ async function generateBillingInvoicePDF(invoice) {
       const fY = 745;
       doc.moveTo(40, fY).lineTo(555, fY).lineWidth(1.5).strokeColor('#1a2744').stroke();
       doc.fontSize(8).fillColor('#1a2744').font('Helvetica-Bold')
-        .text('Thank you for your business with ABRA Travels!', 40, fY + 8, { align: 'center', width: 515 });
+        .text('Thank you for your business with Corporate Travels!', 40, fY + 8, { align: 'center', width: 515 });
       doc.fontSize(7).fillColor('#888').font('Helvetica')
-        .text('ABRA Travels | info@abratravels.com | +91 88672 88076 | www.abratravels.com', 40, fY + 20, { align: 'center', width: 515 });
+        .text('Corporate Travels | info@abratravels.com | +91 88672 88076 | www.abratravels.com', 40, fY + 20, { align: 'center', width: 515 });
 
       doc.end();
 
@@ -573,8 +573,8 @@ async function sendBillingInvoiceEmail(invoice, pdfPath) {
     <table width="100%" cellpadding="0" cellspacing="0"><tr>
       <td width="60%">
         ${logoBase64
-          ? `<img src="${logoBase64}" alt="ABRA Travels" style="max-width:180px;height:auto;display:block;margin-bottom:8px;">`
-          : `<span style="color:#fff;font-size:26px;font-weight:800;">ABRA Travels</span>`}
+          ? `<img src="${logoBase64}" alt="Corporate Travels" style="max-width:180px;height:auto;display:block;margin-bottom:8px;">`
+          : `<span style="color:#fff;font-size:26px;font-weight:800;">Corporate Travels</span>`}
         <p style="color:rgba(255,255,255,0.7);font-size:11px;letter-spacing:1.2px;margin:6px 0 0;">YOUR JOURNEY, OUR COMMITMENT</p>
       </td>
       <td width="40%" style="text-align:right;vertical-align:top;">
@@ -649,16 +649,16 @@ async function sendBillingInvoiceEmail(invoice, pdfPath) {
     </p>
 
     <p style="font-size:14px;color:#2563eb;font-weight:700;text-align:center;margin:24px 0 0;">
-      Thank you for your continued partnership with ABRA Travels 🙏
+      Thank you for your continued partnership with Corporate Travels 🙏
     </p>
   </td></tr>
 
   <!-- Footer -->
   <tr><td style="background:#1a2744;color:#fff;padding:24px 36px;text-align:center;">
-    <p style="margin:0;font-weight:800;font-size:15px;">ABRA Travels</p>
+    <p style="margin:0;font-weight:800;font-size:15px;">Corporate Travels</p>
     <p style="margin:6px 0;font-style:italic;color:rgba(255,255,255,0.6);font-size:11px;letter-spacing:1px;">YOUR JOURNEY, OUR COMMITMENT</p>
     <p style="margin:10px 0 0;color:rgba(255,255,255,0.5);font-size:11px;">📍 Bangalore | ✉️ info@abratravels.com | 📞 +91 88672 88076 | 🔖 GST: 29AABCT1332L1ZM</p>
-    <p style="margin:12px 0 0;color:rgba(255,255,255,0.3);font-size:10px;">© ${new Date().getFullYear()} ABRA Travels. All rights reserved.</p>
+    <p style="margin:12px 0 0;color:rgba(255,255,255,0.3);font-size:10px;">© ${new Date().getFullYear()} Corporate Travels. All rights reserved.</p>
   </td></tr>
 
 </table>
@@ -668,7 +668,7 @@ async function sendBillingInvoiceEmail(invoice, pdfPath) {
 </html>`;
 
   await emailTransporter.sendMail({
-    from:        `"ABRA Travels - Billing" <${process.env.SMTP_USER}>`,
+    from:        `"Corporate Travels - Billing" <${process.env.SMTP_USER}>`,
     to:          invoice.billingEmail,
     subject:     `📄 Billing Invoice ${invoice.invoiceNumber} — ${invoice.billingPeriodLabel} — ₹${invoice.totalAmount.toFixed(2)}`,
     html,

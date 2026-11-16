@@ -74,7 +74,7 @@ $company_smtp = [
         'short'      => 'Abra Zylo',
     ],
     'travel' => [
-        'from_name'  => 'Abra Travels HR',
+        'from_name'  => 'Corporate Travels HR',
         'from_email' => 'hr-admin@abra-travels.com',
         'smtp_host'  => 'mail.abra-travels.com',
         'smtp_user'  => 'hr-admin@abra-travels.com',
@@ -82,7 +82,7 @@ $company_smtp = [
         'smtp_port'  => 465,
         'smtp_enc'   => PHPMailer::ENCRYPTION_SMTPS,
         'color'      => '#7c3aed',
-        'short'      => 'Abra Travels',
+        'short'      => 'Corporate Travels',
     ],
     'design' => [
         'from_name'  => 'Abra Design Build HR',

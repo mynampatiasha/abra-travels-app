@@ -190,7 +190,7 @@ router.post('/schedule', validateMaintenanceSchedule, handleValidationErrors, as
   <div class="container">
     <div class="header">
       <h1>🔧 Maintenance Request</h1>
-      <p>Abra Travels Fleet Management</p>
+      <p>Corporate Travels</p>
     </div>
     <div class="content">
       <p>Dear <strong>${vendorName}</strong>,</p>
@@ -236,17 +236,17 @@ router.post('/schedule', validateMaintenanceSchedule, handleValidationErrors, as
       <p><strong>Contact Information:</strong></p>
       <p>📧 Email: ${process.env.SMTP_USER}<br>
       📞 Phone: +91 9876543210<br>
-      🏢 Abra Travels Fleet Management</p>
+      🏢 Corporate Travels</p>
       
       <p>Please confirm receipt of this request and your availability at your earliest convenience.</p>
       
       <p>Thank you for your continued partnership.</p>
       
-      <p>Best regards,<br><strong>Abra Travels Maintenance Team</strong></p>
+      <p>Best regards,<br><strong>Corporate Travels Maintenance Team</strong></p>
     </div>
     <div class="footer">
-      <p>© ${new Date().getFullYear()} Abra Travels. All rights reserved.</p>
-      <p>This is an automated maintenance request from Abra Travels Fleet Management System</p>
+      <p>© ${new Date().getFullYear()} Corporate Travels. All rights reserved.</p>
+      <p>This is an automated maintenance request from Corporate Travels System</p>
     </div>
   </div>
 </body>
@@ -254,7 +254,7 @@ router.post('/schedule', validateMaintenanceSchedule, handleValidationErrors, as
       `;
 
       const emailText = `
-🔧 Maintenance Request - Abra Travels
+🔧 Maintenance Request - Corporate Travels
 
 Dear ${vendorName},
 
@@ -286,16 +286,16 @@ Next Steps:
 Contact Information:
 Email: ${process.env.SMTP_USER}
 Phone: +91 9876543210
-Abra Travels Fleet Management
+Corporate Travels
 
 Please confirm receipt of this request and your availability at your earliest convenience.
 
 Thank you for your continued partnership.
 
 Best regards,
-Abra Travels Maintenance Team
+Corporate Travels Maintenance Team
 
-© ${new Date().getFullYear()} Abra Travels. All rights reserved.
+© ${new Date().getFullYear()} Corporate Travels. All rights reserved.
       `;
 
       const emailResult = await emailService.sendEmail(

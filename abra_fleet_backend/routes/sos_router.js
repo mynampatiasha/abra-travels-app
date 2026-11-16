@@ -400,7 +400,7 @@ async function sendPoliceEmail(sosData, policeEmail) {
 
                         <div style="margin-top: 30px; padding: 15px; background-color: #FEE2E2; border-left: 4px solid #DC2626;">
                             <p style="margin: 0; color: #991B1B; font-weight: bold;">
-                                ⚠️ This is an automated emergency alert from ${process.env.COMPANY_NAME || 'Abra Fleet Management System'}.
+                                ⚠️ This is an automated emergency alert from ${process.env.COMPANY_NAME || 'Corporate Travels'}.
                             </p>
                             <p style="margin: 10px 0 0 0; color: #991B1B;">
                                 For assistance, contact: ${process.env.SUPPORT_PHONE || '+91-XXXXXXXXXX'}

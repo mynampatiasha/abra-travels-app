@@ -286,9 +286,9 @@ async function generatePurchaseOrderPDF(po) {
       doc.pipe(stream);
 
       // Header
-      doc.fontSize(24).fillColor('#2C3E50').text('ABRA FLEET', 50, 50);
+      doc.fontSize(24).fillColor('#2C3E50').text('CORPORATE TRAVELS', 50, 50);
       doc.fontSize(10).fillColor('#7F8C8D')
-        .text('Fleet Management Solutions', 50, 80)
+        .text('Your Journey, Our Commitment', 50, 80)
         .text('GST: 29XXXXX1234X1Z5', 50, 95);
 
       doc.fontSize(28).fillColor('#2C3E50').text('PURCHASE ORDER', 300, 50, { align: 'right' });
@@ -402,7 +402,7 @@ async function generatePurchaseOrderPDF(po) {
       // Footer
       doc.fontSize(9).fillColor('#95A5A6')
         .text('This is a computer-generated Purchase Order.', 50, 750, { align: 'center', width: 495 })
-        .text('Abra Fleet Management | purchase@abrafleet.com', 50, 765, { align: 'center', width: 495 });
+        .text('Corporate Travels | purchase@abrafleet.com', 50, 765, { align: 'center', width: 495 });
 
       doc.end();
 
@@ -464,11 +464,11 @@ async function sendPurchaseOrderEmail(po, pdfPath) {
 <body>
   <div class="container">
     <div class="header">
-      <h1>🚗 ABRA FLEET</h1>
-      <p style="margin:5px 0 0 0; opacity:0.9;">Fleet Management Solutions</p>
+      <h1>🚗 CORPORATE TRAVELS</h1>
+      <p style="margin:5px 0 0 0; opacity:0.9;">Your Journey, Our Commitment</p>
     </div>
     <div class="content">
-      <h2 style="color:#2c3e50; margin-top:0;">Purchase Order from Abra Fleet</h2>
+      <h2 style="color:#2c3e50; margin-top:0;">Purchase Order from Corporate Travels</h2>
 
       <p>Dear <strong>${po.vendorName}</strong>,</p>
       <p>Please find below our purchase order. Kindly confirm the order and arrange delivery as per the expected delivery date.</p>
@@ -556,7 +556,7 @@ async function sendPurchaseOrderEmail(po, pdfPath) {
       <p>The purchase order PDF is attached to this email for your reference.</p>
     </div>
     <div class="footer">
-      <p><strong>Abra Fleet Management Solutions</strong></p>
+      <p><strong>Corporate Travels</strong></p>
       <p>This is a computer-generated purchase order.</p>
     </div>
   </div>
@@ -564,9 +564,9 @@ async function sendPurchaseOrderEmail(po, pdfPath) {
 </html>`;
 
   return emailTransporter.sendMail({
-    from: `"Abra Fleet Purchase" <${process.env.SMTP_USER}>`,
+    from: `"Corporate Travels Purchase" <${process.env.SMTP_USER}>`,
     to: po.vendorEmail,
-    subject: `Purchase Order ${po.purchaseOrderNumber} from Abra Fleet - ₹${po.totalAmount.toFixed(2)}`,
+    subject: `Purchase Order ${po.purchaseOrderNumber} from Corporate Travels - ₹${po.totalAmount.toFixed(2)}`,
     html: emailHtml,
     attachments: [{
       filename: `PO-${po.purchaseOrderNumber}.pdf`,

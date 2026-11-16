@@ -1412,12 +1412,12 @@ router.post('/', async (req, res) => {
     if (personalInfo.email) {
       try {
         const fullName = `${personalInfo.firstName} ${personalInfo.lastName}`;
-        const emailText = `Welcome to Abra Fleet!\n\nDear ${fullName},\n\nYour driver account has been created.\nDriver ID: ${driverId}\n\nYour administrator will set up your driver app login separately and share your sign-in details with you.`;
-        const emailHtml = `<p>Dear ${fullName},</p><p>Your Abra Fleet driver account has been created.</p><p><strong>Driver ID:</strong> ${driverId}</p><p>Your administrator will set up your driver app login separately and share your sign-in details with you.</p>`;
+        const emailText = `Welcome to Corporate Travels!\n\nDear ${fullName},\n\nYour driver account has been created.\nDriver ID: ${driverId}\n\nYour administrator will set up your driver app login separately and share your sign-in details with you.`;
+        const emailHtml = `<p>Dear ${fullName},</p><p>Your Corporate Travels driver account has been created.</p><p><strong>Driver ID:</strong> ${driverId}</p><p>Your administrator will set up your driver app login separately and share your sign-in details with you.</p>`;
 
         await emailService.sendEmail({
           to: personalInfo.email,
-          subject: 'Welcome to Abra Fleet - Driver Account Created',
+          subject: 'Welcome to Corporate Travels - Driver Account Created',
           html: emailHtml,
           text: emailText
         });
@@ -2550,11 +2550,11 @@ router.post('/:id/send-password-reset', async (req, res) => {
       
       console.log('\n🔍 Step 7: Sending email via email service...');
       console.log('   To:', email);
-      console.log('   Subject: Password Reset - Abra Travels');
+      console.log('   Subject: Password Reset - Corporate Travels');
       
       await emailService.sendEmail(
         email,
-        'Password Reset - Abra Travels',
+        'Password Reset - Corporate Travels',
         emailText,
         emailHtml
       );

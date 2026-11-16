@@ -679,7 +679,7 @@ async function generateCreditNotePDF(creditNote) {
       doc.fontSize(6)
          .fillColor('#888888')
          .font('Helvetica')
-         .text('ABRA Travels | YOUR JOURNEY, OUR COMMITMENT', 40, footerY + 20, {
+         .text('Corporate Travels | YOUR JOURNEY, OUR COMMITMENT', 40, footerY + 20, {
            align: 'center',
            width: 515
          });
@@ -845,10 +845,10 @@ async function sendCreditNoteEmail(creditNote, pdfPath) {
           <!-- Footer -->
           <tr>
             <td style="background-color: #2c3e50; color: #ffffff; padding: 30px; text-align: center;">
-              <p style="margin: 0; font-weight: bold; font-size: 16px;">ABRA Travels</p>
+              <p style="margin: 0; font-weight: bold; font-size: 16px;">Corporate Travels</p>
               <p style="margin: 8px 0; font-style: italic; color: #ecf0f1; font-size: 12px;">YOUR JOURNEY, OUR COMMITMENT</p>
               <p style="margin: 8px 0; color: #95a5a6; font-size: 12px;">📧 info@abratravels.com | 📱 +91 88672 88076</p>
-              <p style="margin-top: 15px; color: #7f8c8d; font-size: 11px;">© ${new Date().getFullYear()} ABRA Travels. All rights reserved.</p>
+              <p style="margin-top: 15px; color: #7f8c8d; font-size: 11px;">© ${new Date().getFullYear()} Corporate Travels. All rights reserved.</p>
             </td>
           </tr>
           
@@ -860,7 +860,7 @@ async function sendCreditNoteEmail(creditNote, pdfPath) {
 </html>`;
   
   const mailOptions = {
-    from: `"ABRA Travels - Billing" <${process.env.SMTP_USER}>`,
+    from: `"Corporate Travels - Billing" <${process.env.SMTP_USER}>`,
     to: creditNote.customerEmail,
     subject: `💳 Credit Note ${creditNote.creditNoteNumber} - ₹${creditNote.totalAmount.toFixed(2)} Available`,
     html: emailHtml,

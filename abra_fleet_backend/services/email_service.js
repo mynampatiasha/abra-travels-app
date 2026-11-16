@@ -90,11 +90,11 @@ class EmailService {
       console.log('📝 Email Type:', isPasswordSetupNeeded ? 'WELCOME + PASSWORD SETUP' : 'APPROVAL ONLY');
       
       const mailOptions = {
-        from: `"Abra Travels Support" <${process.env.SMTP_USER}>`,
+        from: `"Corporate Travels Support" <${process.env.SMTP_USER}>`,
         to: email,
         subject: isPasswordSetupNeeded 
-          ? '🎉 Welcome to Abra Travels - Set Your Password'
-          : '🎉 Your Abra Travels Account Has Been Approved!',
+          ? '🎉 Welcome to Corporate Travels - Set Your Password'
+          : '🎉 Your Corporate Travels Account Has Been Approved!',
         html: isPasswordSetupNeeded
           ? templates.getWelcomeWithPasswordSetupTemplate(name, email, companyName, passwordResetLink)
           : templates.getApprovalEmailTemplate(name, email, companyName),
@@ -169,12 +169,12 @@ class EmailService {
 <body>
   <div class="container">
     <div class="header">
-      <h1>🎉 Welcome to Abra Travels!</h1>
+      <h1>🎉 Welcome to Corporate Travels!</h1>
     </div>
     <div class="content">
       <p>Dear <strong>${name}</strong>,</p>
       
-      <p>Great news! Your Abra Travels account has been approved and is ready to use.</p>
+      <p>Great news! Your Corporate Travels account has been approved and is ready to use.</p>
       
       ${passwordSection}
       
@@ -188,7 +188,7 @@ class EmailService {
       <p><strong>What's Next?</strong></p>
       <ul>
         <li>${passwordResetLink ? 'Set your password using the link above' : 'Login with your registered email and password'}</li>
-        <li>Download the Abra Travels mobile app</li>
+        <li>Download the Corporate Travels mobile app</li>
         <li>Complete your profile setup</li>
         <li>Start booking trips and managing your travel needs</li>
       </ul>
@@ -197,11 +197,11 @@ class EmailService {
       
       <p>Welcome aboard!</p>
       
-      <p><strong>The Abra Travels Team</strong></p>
+      <p><strong>The Corporate Travels Team</strong></p>
     </div>
     <div class="footer">
-      <p>This is an automated message from Abra Travels Management System</p>
-      <p>© ${new Date().getFullYear()} Abra Travels. All rights reserved.</p>
+      <p>This is an automated message from Corporate Travels System</p>
+      <p>© ${new Date().getFullYear()} Corporate Travels. All rights reserved.</p>
     </div>
   </div>
 </body>
@@ -212,13 +212,13 @@ class EmailService {
   // Plain text version for email clients that don't support HTML
   getApprovalEmailText(name, email, companyName) {
     return `
-🎉 Welcome to Abra Travels!
+🎉 Welcome to Corporate Travels!
 
 Dear ${name},
 
-Great news! Your Abra Travels account has been approved by our administrator.
+Great news! Your Corporate Travels account has been approved by our administrator.
 
-You can now login and access all features of our fleet management system.
+You can now login and access all features of the Corporate Travels platform.
 
 📋 Your Account Details:
 - Email: ${email}
@@ -226,7 +226,7 @@ You can now login and access all features of our fleet management system.
 - Status: Active ✅
 
 What's Next?
-- Download the Abra Travels mobile app
+- Download the Corporate Travels mobile app
 - Login with your registered email and password
 - Complete your profile setup
 - Start booking trips and managing your fleet needs
@@ -235,11 +235,11 @@ If you have any questions or need assistance, please don't hesitate to contact o
 
 Welcome aboard!
 
-The Abra Travels Team
+The Corporate Travels Team
 
 ---
-This is an automated message from Abra Travels Management System
-© ${new Date().getFullYear()} Abra Travels. All rights reserved.
+This is an automated message from Corporate Travels System
+© ${new Date().getFullYear()} Corporate Travels. All rights reserved.
     `;
   }
 
@@ -264,9 +264,9 @@ This is an automated message from Abra Travels Management System
 
     try {
       const mailOptions = {
-        from: `"Abra Travels Support" <${process.env.SMTP_USER}>`,
+        from: `"Corporate Travels Support" <${process.env.SMTP_USER}>`,
         to: email,
-        subject: '🔐 Reset Your Abra Travels Password',
+        subject: '🔐 Reset Your Corporate Travels Password',
         html: templates.getPasswordResetTemplate(name, resetLink),
         text: templates.getPasswordResetText(name, resetLink),
       };
@@ -301,9 +301,9 @@ This is an automated message from Abra Travels Management System
 
     try {
       const mailOptions = {
-        from: `"Abra Travels Support" <${process.env.SMTP_USER}>`,
+        from: `"Corporate Travels Support" <${process.env.SMTP_USER}>`,
         to: email,
-        subject: 'Abra Travels Account Registration Update',
+        subject: 'Corporate Travels Account Registration Update',
         html: this.getRejectionEmailTemplate(name, reason),
         text: this.getRejectionEmailText(name, reason),
       };
@@ -337,7 +337,7 @@ This is an automated message from Abra Travels Management System
 
     try {
       const mailOptions = {
-        from: `"Abra Travels Support" <${process.env.SMTP_USER}>`,
+        from: `"Corporate Travels Support" <${process.env.SMTP_USER}>`,
         to: to,
         subject: subject,
         text: textContent,
@@ -381,12 +381,12 @@ This is an automated message from Abra Travels Management System
 <body>
   <div class="container">
     <div class="header">
-      <h1>Abra Travels Registration Update</h1>
+      <h1>Corporate Travels Registration Update</h1>
     </div>
     <div class="content">
       <p>Dear <strong>${name}</strong>,</p>
       
-      <p>Thank you for your interest in Abra Travels.</p>
+      <p>Thank you for your interest in Corporate Travels.</p>
       
       <p>After reviewing your registration, we regret to inform you that your account application could not be approved at this time.</p>
       
@@ -401,11 +401,11 @@ This is an automated message from Abra Travels Management System
       
       <p>Thank you for your understanding.</p>
       
-      <p><strong>The Abra Travels Team</strong></p>
+      <p><strong>The Corporate Travels Team</strong></p>
     </div>
     <div class="footer">
-      <p>This is an automated message from Abra Travels Management System</p>
-      <p>© ${new Date().getFullYear()} Abra Travels. All rights reserved.</p>
+      <p>This is an automated message from Corporate Travels System</p>
+      <p>© ${new Date().getFullYear()} Corporate Travels. All rights reserved.</p>
     </div>
   </div>
 </body>
@@ -416,11 +416,11 @@ This is an automated message from Abra Travels Management System
   // Plain text version for rejection email
   getRejectionEmailText(name, reason) {
     return `
-Abra Travels Registration Update
+Corporate Travels Registration Update
 
 Dear ${name},
 
-Thank you for your interest in Abra Travels.
+Thank you for your interest in Corporate Travels.
 
 After reviewing your registration, we regret to inform you that your account application could not be approved at this time.
 
@@ -430,11 +430,11 @@ If you believe this is an error or would like to discuss this decision, please c
 
 Thank you for your understanding.
 
-The Abra Travels Team
+The Corporate Travels Team
 
 ---
-This is an automated message from Abra Travels Management System
-© ${new Date().getFullYear()} Abra Travels. All rights reserved.
+This is an automated message from Corporate Travels System
+© ${new Date().getFullYear()} Corporate Travels. All rights reserved.
     `;
   }
 }

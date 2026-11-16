@@ -1230,7 +1230,7 @@ class _CustomerDashboardState extends State<CustomerDashboard> {
   Future<void> _launchEmail(BuildContext context) async {
     final String email = 'support@fleet.abra-travels.com';
     final String subject = 'Support Request';
-    final String body = 'Hello Abra Travels Support Team,\n\n';
+    final String body = 'Hello Corporate Travels Support Team,\n\n';
     
     try {
       final Uri emailUri = Uri(
@@ -1668,7 +1668,7 @@ void _showSOSSentConfirmation(List<Map<String, dynamic>> nearbyStations, {bool i
           '👤 Driver: *$driverName*\n\n'
           '📍 Track my ride in real time:\n'
           '$liveTrackingUrl\n\n'
-          'Powered by Abra Travels';
+          'Powered by Corporate Travels';
 
       // Open WhatsApp with message
       await _openWhatsAppWithMessage(message);
@@ -2916,7 +2916,7 @@ String _formatResolvedAt(DateTime dt) {
           const SizedBox(width: 12),
           Expanded(
             child: Text(
-              'Abra Travels',
+              'Corporate Travels',
               style: TextStyle(
                 fontWeight: FontWeight.bold,
                 fontSize: isSmallMobile ? 16 : isMobile ? 18 : 20,

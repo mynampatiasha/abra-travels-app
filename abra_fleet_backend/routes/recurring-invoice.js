@@ -457,8 +457,8 @@ async function sendInvoiceEmail(invoice) {
 <body>
   <div class="container">
     <div class="header">
-      <h1>🚗 ABRA FLEET</h1>
-      <p style="margin: 10px 0 0 0; opacity: 0.9;">Fleet Management Solutions</p>
+      <h1>🚗 CORPORATE TRAVELS</h1>
+      <p style="margin: 10px 0 0 0; opacity: 0.9;">Your Journey, Our Commitment</p>
       <div class="recurring-badge">🔄 RECURRING INVOICE</div>
     </div>
     
@@ -504,7 +504,7 @@ async function sendInvoiceEmail(invoice) {
         <!-- Bank Transfer -->
         <div class="payment-method">
           <h4>🏦 Option 1: Bank Transfer / NEFT / RTGS / IMPS</h4>
-          <div class="payment-detail-item"><strong>Account Holder:</strong> ${paymentInfo.accountHolder || 'Abra Fleet Management'}</div>
+          <div class="payment-detail-item"><strong>Account Holder:</strong> ${paymentInfo.accountHolder || 'Corporate Travels'}</div>
           <div class="payment-detail-item"><strong>Account Number:</strong> ${paymentInfo.bankAccount || 'Not provided'}</div>
           <div class="payment-detail-item"><strong>IFSC Code:</strong> ${paymentInfo.ifscCode || 'Not provided'}</div>
           <div class="payment-detail-item"><strong>Bank Name:</strong> ${paymentInfo.bankName || 'Not provided'}</div>
@@ -533,7 +533,7 @@ async function sendInvoiceEmail(invoice) {
             ${paymentInfo.officeAddress}
           </div>
           <div style="margin-top: 10px; padding: 10px; background: #e8f4f8; border-radius: 5px; font-size: 13px;">
-            💡 Cheques should be drawn in favor of "<strong>${paymentInfo.accountHolder || 'Abra Fleet Management'}</strong>"
+            💡 Cheques should be drawn in favor of "<strong>${paymentInfo.accountHolder || 'Corporate Travels'}</strong>"
           </div>
         </div>
         ` : ''}
@@ -567,7 +567,7 @@ async function sendInvoiceEmail(invoice) {
     </div>
     
     <div class="footer">
-      <p><strong>Abra Fleet Management Solutions</strong></p>
+      <p><strong>Corporate Travels</strong></p>
       <p>GST: ${DEFAULT_PAYMENT.additional.gstNumber}</p>
       <p>This is an automated email from your recurring invoice subscription.</p>
     </div>
@@ -577,9 +577,9 @@ async function sendInvoiceEmail(invoice) {
     `;
     
     const mailOptions = {
-      from: `"Abra Fleet Billing" <${process.env.SMTP_USER}>`,
+      from: `"Corporate Travels Billing" <${process.env.SMTP_USER}>`,
       to: invoice.customerEmail,
-      subject: `🔄 Recurring Invoice ${invoice.invoiceNumber} from Abra Fleet - ₹${invoice.totalAmount.toFixed(2)}`,
+      subject: `🔄 Recurring Invoice ${invoice.invoiceNumber} from Corporate Travels - ₹${invoice.totalAmount.toFixed(2)}`,
       html: emailHtml
     };
     

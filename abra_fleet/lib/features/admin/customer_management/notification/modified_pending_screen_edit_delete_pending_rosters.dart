@@ -5058,8 +5058,11 @@ Future<void> _confirmManualAssignment(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          Wrap(
+            alignment: WrapAlignment.spaceBetween,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            spacing: 12,
+            runSpacing: 8,
             children: [
               const Text(
                 'Pending Roster Overview',
@@ -5069,7 +5072,10 @@ Future<void> _confirmManualAssignment(
                   color: Color(0xFF1E293B),
                 ),
               ),
-              Row(
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                crossAxisAlignment: WrapCrossAlignment.center,
                 children: [
                   // Refresh Button
                   IconButton(
@@ -5079,14 +5085,12 @@ Future<void> _confirmManualAssignment(
                     icon: Icon(Icons.refresh, color: _themeColor),
                     tooltip: 'Refresh',
                   ),
-                  const SizedBox(width: 8),
                   // Driver buffer between trips (operations setting)
                   IconButton(
                     onPressed: () => showDriverBufferDialog(context, widget.rosterService),
                     icon: Icon(Icons.timer_outlined, color: _themeColor),
                     tooltip: 'Driver buffer between trips',
                   ),
-                  const SizedBox(width: 8),
                   // Export to Excel Button
                   ElevatedButton.icon(
                     onPressed: _isExporting ? null : _exportToExcel,
@@ -5105,7 +5109,6 @@ Future<void> _confirmManualAssignment(
                       elevation: 2,
                     ),
                   ),
-                  const SizedBox(width: 8),
                   // Toggle Filter Button
                   OutlinedButton.icon(
                     onPressed: () {
@@ -5122,7 +5125,6 @@ Future<void> _confirmManualAssignment(
                       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
                     ),
                   ),
-                  const SizedBox(width: 8),
                   // Smart Grouping Button (NEW)
                   ElevatedButton.icon(
                     onPressed: _showSmartGroupingDialog,
@@ -5135,7 +5137,6 @@ Future<void> _confirmManualAssignment(
                       elevation: 2,
                     ),
                   ),
-                  const SizedBox(width: 8),
                   // Route Optimization Button (NEW)
                   ElevatedButton.icon(
                     onPressed: _showRouteOptimizationDialog,
@@ -5153,18 +5154,23 @@ Future<void> _confirmManualAssignment(
             ],
           ),
           const SizedBox(height: 16),
-          Row(
-            children: [
-              _buildStatCard('Total', '$total', Icons.folder_open, const Color(0xFF475569)),
-              const SizedBox(width: 12),
-              _buildStatCard('🔥 Urgent', '$urgentCount', Icons.warning, const Color(0xFFEF4444)),
-              const SizedBox(width: 12),
-              _buildStatCard('Login', '$loginCount', Icons.arrow_forward, _themeColor),
-              const SizedBox(width: 12),
-              _buildStatCard('Logout', '$logoutCount', Icons.arrow_back, const Color(0xFF3B82F6)),
-              const SizedBox(width: 12),
-              _buildStatCard('Both', '$bothCount', Icons.swap_horiz, const Color(0xFF8B5CF6)),
-            ],
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final cols = constraints.maxWidth < 560 ? 3 : 5;
+              final cardWidth = (constraints.maxWidth - 12 * (cols - 1)) / cols;
+              Widget card(Widget c) => SizedBox(width: cardWidth, child: Row(children: [c]));
+              return Wrap(
+                spacing: 12,
+                runSpacing: 12,
+                children: [
+                  card(_buildStatCard('Total', '$total', Icons.folder_open, const Color(0xFF475569))),
+                  card(_buildStatCard('🔥 Urgent', '$urgentCount', Icons.warning, const Color(0xFFEF4444))),
+                  card(_buildStatCard('Login', '$loginCount', Icons.arrow_forward, _themeColor)),
+                  card(_buildStatCard('Logout', '$logoutCount', Icons.arrow_back, const Color(0xFF3B82F6))),
+                  card(_buildStatCard('Both', '$bothCount', Icons.swap_horiz, const Color(0xFF8B5CF6))),
+                ],
+              );
+            },
           ),
         ],
       ),

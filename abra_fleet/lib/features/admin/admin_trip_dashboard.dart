@@ -378,7 +378,7 @@ class AdminTripDashboardState extends State<AdminTripDashboard> {
       message += '• Drivers: ${summary['totalDrivers'] ?? 0}\n';
       message += '• Customers: ${summary['totalCustomers'] ?? 0}\n\n';
       
-      message += '📱 Generated from Abra Fleet Management';
+      message += '📱 Generated from Corporate Travels';
 
       // Encode message for URL
       final encodedMessage = Uri.encodeComponent(message);

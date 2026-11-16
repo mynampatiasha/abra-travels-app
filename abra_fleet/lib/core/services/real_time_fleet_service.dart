@@ -931,7 +931,7 @@ class RealTimeFleetService {
     _addToCustomersStream(_customers);
 
     // Send completion notification
-    final message = 'Hi ${customer.customerName}, you have been safely dropped at ${customer.dropAddress}. Thank you for choosing Abra Travels!';
+    final message = 'Hi ${customer.customerName}, you have been safely dropped at ${customer.dropAddress}. Thank you for choosing Corporate Travels!';
     await _sendSMSNotification(customer.customerPhone, message);
   }
 
