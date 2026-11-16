@@ -51,6 +51,14 @@ abstract class AuthRepository {
 
   /// Sends a password reset link to the provided [email].
   Future<void> sendPasswordResetEmail({required String email});
+
+  /// Changes the signed-in user's password (current + new). Used by the
+  /// forced "choose your own password" flow after a temporary-password
+  /// sign-in.
+  Future<void> changePassword({
+    required String currentPassword,
+    required String newPassword,
+  });
   
   /// Forces a refresh of the current user's data from Firestore.
   Future<void> refreshCurrentUser();

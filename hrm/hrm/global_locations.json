@@ -1,0 +1,1417 @@
+{
+    "United States": {
+        "Alabama": [
+            "Birmingham",
+            "Montgomery",
+            "Mobile",
+            "Huntsville",
+            "Tuscaloosa"
+        ],
+        "Alaska": [
+            "Anchorage",
+            "Juneau",
+            "Fairbanks",
+            "Sitka",
+            "Ketchikan"
+        ],
+        "Arizona": [
+            "Phoenix",
+            "Tucson",
+            "Mesa",
+            "Chandler",
+            "Scottsdale"
+        ],
+        "Arkansas": [
+            "Little Rock",
+            "Fort Smith",
+            "Fayetteville",
+            "Springdale",
+            "Jonesboro"
+        ],
+        "California": [
+            "Los Angeles",
+            "San Diego",
+            "San Jose",
+            "San Francisco",
+            "Fresno",
+            "Sacramento",
+            "Long Beach",
+            "Oakland",
+            "Bakersfield",
+            "Anaheim"
+        ],
+        "Colorado": [
+            "Denver",
+            "Colorado Springs",
+            "Aurora",
+            "Fort Collins",
+            "Lakewood"
+        ],
+        "Connecticut": [
+            "Bridgeport",
+            "New Haven",
+            "Hartford",
+            "Stamford",
+            "Waterbury"
+        ],
+        "Delaware": [
+            "Wilmington",
+            "Dover",
+            "Newark",
+            "Middletown",
+            "Smyrna"
+        ],
+        "Florida": [
+            "Jacksonville",
+            "Miami",
+            "Tampa",
+            "Orlando",
+            "St. Petersburg",
+            "Hialeah",
+            "Tallahassee",
+            "Fort Lauderdale",
+            "Port St. Lucie",
+            "Cape Coral"
+        ],
+        "Georgia": [
+            "Atlanta",
+            "Augusta",
+            "Columbus",
+            "Macon",
+            "Savannah"
+        ],
+        "Hawaii": [
+            "Honolulu",
+            "Pearl City",
+            "Hilo",
+            "Kailua",
+            "Waipahu"
+        ],
+        "Idaho": [
+            "Boise",
+            "Meridian",
+            "Nampa",
+            "Idaho Falls",
+            "Pocatello"
+        ],
+        "Illinois": [
+            "Chicago",
+            "Aurora",
+            "Rockford",
+            "Joliet",
+            "Naperville"
+        ],
+        "Indiana": [
+            "Indianapolis",
+            "Fort Wayne",
+            "Evansville",
+            "South Bend",
+            "Carmel"
+        ],
+        "Iowa": [
+            "Des Moines",
+            "Cedar Rapids",
+            "Davenport",
+            "Sioux City",
+            "Waterloo"
+        ],
+        "Kansas": [
+            "Wichita",
+            "Overland Park",
+            "Kansas City",
+            "Topeka",
+            "Olathe"
+        ],
+        "Kentucky": [
+            "Louisville",
+            "Lexington",
+            "Bowling Green",
+            "Owensboro",
+            "Covington"
+        ],
+        "Louisiana": [
+            "New Orleans",
+            "Baton Rouge",
+            "Shreveport",
+            "Metairie",
+            "Lafayette"
+        ],
+        "Maine": [
+            "Portland",
+            "Lewiston",
+            "Bangor",
+            "South Portland",
+            "Auburn"
+        ],
+        "Maryland": [
+            "Baltimore",
+            "Frederick",
+            "Rockville",
+            "Gaithersburg",
+            "Bowie"
+        ],
+        "Massachusetts": [
+            "Boston",
+            "Worcester",
+            "Springfield",
+            "Lowell",
+            "Cambridge"
+        ],
+        "Michigan": [
+            "Detroit",
+            "Grand Rapids",
+            "Warren",
+            "Sterling Heights",
+            "Lansing"
+        ],
+        "Minnesota": [
+            "Minneapolis",
+            "Saint Paul",
+            "Rochester",
+            "Duluth",
+            "Bloomington"
+        ],
+        "Mississippi": [
+            "Jackson",
+            "Gulfport",
+            "Southaven",
+            "Hattiesburg",
+            "Biloxi"
+        ],
+        "Missouri": [
+            "Kansas City",
+            "St. Louis",
+            "Springfield",
+            "Columbia",
+            "Independence"
+        ],
+        "Montana": [
+            "Billings",
+            "Missoula",
+            "Great Falls",
+            "Bozeman",
+            "Butte"
+        ],
+        "Nebraska": [
+            "Omaha",
+            "Lincoln",
+            "Bellevue",
+            "Grand Island",
+            "Kearney"
+        ],
+        "Nevada": [
+            "Las Vegas",
+            "Henderson",
+            "Reno",
+            "North Las Vegas",
+            "Sparks"
+        ],
+        "New Hampshire": [
+            "Manchester",
+            "Nashua",
+            "Concord",
+            "Derry",
+            "Dover"
+        ],
+        "New Jersey": [
+            "Newark",
+            "Jersey City",
+            "Paterson",
+            "Elizabeth",
+            "Edison"
+        ],
+        "New Mexico": [
+            "Albuquerque",
+            "Las Cruces",
+            "Rio Rancho",
+            "Santa Fe",
+            "Roswell"
+        ],
+        "New York": [
+            "New York City",
+            "Buffalo",
+            "Rochester",
+            "Yonkers",
+            "Syracuse",
+            "Albany",
+            "New Rochelle",
+            "Mount Vernon",
+            "Schenectady",
+            "Utica"
+        ],
+        "North Carolina": [
+            "Charlotte",
+            "Raleigh",
+            "Greensboro",
+            "Durham",
+            "Winston-Salem"
+        ],
+        "North Dakota": [
+            "Fargo",
+            "Bismarck",
+            "Grand Forks",
+            "Minot",
+            "West Fargo"
+        ],
+        "Ohio": [
+            "Columbus",
+            "Cleveland",
+            "Cincinnati",
+            "Toledo",
+            "Akron"
+        ],
+        "Oklahoma": [
+            "Oklahoma City",
+            "Tulsa",
+            "Norman",
+            "Broken Arrow",
+            "Lawton"
+        ],
+        "Oregon": [
+            "Portland",
+            "Eugene",
+            "Salem",
+            "Gresham",
+            "Hillsboro"
+        ],
+        "Pennsylvania": [
+            "Philadelphia",
+            "Pittsburgh",
+            "Allentown",
+            "Erie",
+            "Reading"
+        ],
+        "Rhode Island": [
+            "Providence",
+            "Warwick",
+            "Cranston",
+            "Pawtucket",
+            "East Providence"
+        ],
+        "South Carolina": [
+            "Columbia",
+            "Charleston",
+            "North Charleston",
+            "Mount Pleasant",
+            "Rock Hill"
+        ],
+        "South Dakota": [
+            "Sioux Falls",
+            "Rapid City",
+            "Aberdeen",
+            "Brookings",
+            "Watertown"
+        ],
+        "Tennessee": [
+            "Nashville",
+            "Memphis",
+            "Knoxville",
+            "Chattanooga",
+            "Clarksville"
+        ],
+        "Texas": [
+            "Houston",
+            "San Antonio",
+            "Dallas",
+            "Austin",
+            "Fort Worth",
+            "El Paso",
+            "Arlington",
+            "Corpus Christi",
+            "Plano",
+            "Laredo"
+        ],
+        "Utah": [
+            "Salt Lake City",
+            "West Valley City",
+            "Provo",
+            "West Jordan",
+            "Orem"
+        ],
+        "Vermont": [
+            "Burlington",
+            "Essex",
+            "South Burlington",
+            "Colchester",
+            "Rutland"
+        ],
+        "Virginia": [
+            "Virginia Beach",
+            "Norfolk",
+            "Chesapeake",
+            "Richmond",
+            "Newport News"
+        ],
+        "Washington": [
+            "Seattle",
+            "Spokane",
+            "Tacoma",
+            "Vancouver",
+            "Bellevue"
+        ],
+        "West Virginia": [
+            "Charleston",
+            "Huntington",
+            "Parkersburg",
+            "Wheeling",
+            "Morgantown"
+        ],
+        "Wisconsin": [
+            "Milwaukee",
+            "Madison",
+            "Green Bay",
+            "Kenosha",
+            "Racine"
+        ],
+        "Wyoming": [
+            "Cheyenne",
+            "Casper",
+            "Laramie",
+            "Gillette",
+            "Rock Springs"
+        ]
+    },
+    "Canada": {
+        "Alberta": [
+            "Calgary",
+            "Edmonton",
+            "Red Deer",
+            "Lethbridge",
+            "Medicine Hat"
+        ],
+        "British Columbia": [
+            "Vancouver",
+            "Victoria",
+            "Surrey",
+            "Burnaby",
+            "Richmond"
+        ],
+        "Manitoba": [
+            "Winnipeg",
+            "Brandon",
+            "Steinbach",
+            "Thompson",
+            "Portage la Prairie"
+        ],
+        "New Brunswick": [
+            "Saint John",
+            "Moncton",
+            "Fredericton",
+            "Dieppe",
+            "Miramichi"
+        ],
+        "Newfoundland and Labrador": [
+            "St. John's",
+            "Mount Pearl",
+            "Corner Brook",
+            "Conception Bay South",
+            "Grand Falls-Windsor"
+        ],
+        "Northwest Territories": [
+            "Yellowknife",
+            "Hay River",
+            "Inuvik",
+            "Fort Smith",
+            "Behchoko"
+        ],
+        "Nova Scotia": [
+            "Halifax",
+            "Sydney",
+            "Dartmouth",
+            "Truro",
+            "New Glasgow"
+        ],
+        "Nunavut": [
+            "Iqaluit",
+            "Rankin Inlet",
+            "Arviat",
+            "Baker Lake",
+            "Cambridge Bay"
+        ],
+        "Ontario": [
+            "Toronto",
+            "Ottawa",
+            "Mississauga",
+            "Brampton",
+            "Hamilton",
+            "London",
+            "Markham",
+            "Vaughan",
+            "Kitchener",
+            "Windsor"
+        ],
+        "Prince Edward Island": [
+            "Charlottetown",
+            "Summerside",
+            "Stratford",
+            "Cornwall",
+            "Montague"
+        ],
+        "Quebec": [
+            "Montreal",
+            "Quebec City",
+            "Laval",
+            "Gatineau",
+            "Longueuil"
+        ],
+        "Saskatchewan": [
+            "Saskatoon",
+            "Regina",
+            "Prince Albert",
+            "Moose Jaw",
+            "Swift Current"
+        ],
+        "Yukon": [
+            "Whitehorse",
+            "Dawson City",
+            "Watson Lake",
+            "Haines Junction",
+            "Mayo"
+        ]
+    },
+    "United Kingdom": {
+        "England": [
+            "London",
+            "Birmingham",
+            "Manchester",
+            "Liverpool",
+            "Leeds",
+            "Sheffield",
+            "Bristol",
+            "Coventry",
+            "Leicester",
+            "Nottingham"
+        ],
+        "Scotland": [
+            "Glasgow",
+            "Edinburgh",
+            "Aberdeen",
+            "Dundee",
+            "Stirling"
+        ],
+        "Wales": [
+            "Cardiff",
+            "Swansea",
+            "Newport",
+            "Bangor",
+            "St. Davids"
+        ],
+        "Northern Ireland": [
+            "Belfast",
+            "Derry",
+            "Lisburn",
+            "Newtownabbey",
+            "Bangor"
+        ]
+    },
+    "Australia": {
+        "New South Wales": [
+            "Sydney",
+            "Newcastle",
+            "Wollongong",
+            "Maitland",
+            "Wagga Wagga"
+        ],
+        "Victoria": [
+            "Melbourne",
+            "Geelong",
+            "Ballarat",
+            "Bendigo",
+            "Shepparton"
+        ],
+        "Queensland": [
+            "Brisbane",
+            "Gold Coast",
+            "Townsville",
+            "Cairns",
+            "Toowoomba"
+        ],
+        "Western Australia": [
+            "Perth",
+            "Mandurah",
+            "Bunbury",
+            "Rockingham",
+            "Albany"
+        ],
+        "South Australia": [
+            "Adelaide",
+            "Mount Gambier",
+            "Whyalla",
+            "Murray Bridge",
+            "Port Pirie"
+        ],
+        "Tasmania": [
+            "Hobart",
+            "Launceston",
+            "Devonport",
+            "Burnie",
+            "Somerset"
+        ],
+        "Northern Territory": [
+            "Darwin",
+            "Alice Springs",
+            "Palmerston",
+            "Katherine",
+            "Nhulunbuy"
+        ],
+        "Australian Capital Territory": [
+            "Canberra"
+        ]
+    },
+    "India": {
+        "Andhra Pradesh": [
+            "Visakhapatnam",
+            "Vijayawada",
+            "Guntur",
+            "Nellore",
+            "Kurnool"
+        ],
+        "Arunachal Pradesh": [
+            "Itanagar",
+            "Naharlagun",
+            "Pasighat",
+            "Namsai",
+            "Tawang"
+        ],
+        "Assam": [
+            "Guwahati",
+            "Silchar",
+            "Dibrugarh",
+            "Jorhat",
+            "Nagaon"
+        ],
+        "Bihar": [
+            "Patna",
+            "Gaya",
+            "Bhagalpur",
+            "Muzaffarpur",
+            "Purnia"
+        ],
+        "Chhattisgarh": [
+            "Raipur",
+            "Bhilai",
+            "Bilaspur",
+            "Korba",
+            "Durg"
+        ],
+        "Goa": [
+            "Panaji",
+            "Vasco da Gama",
+            "Margao",
+            "Mapusa",
+            "Ponda"
+        ],
+        "Gujarat": [
+            "Ahmedabad",
+            "Surat",
+            "Vadodara",
+            "Rajkot",
+            "Bhavnagar"
+        ],
+        "Haryana": [
+            "Faridabad",
+            "Gurgaon",
+            "Panipat",
+            "Ambala",
+            "Yamunanagar"
+        ],
+        "Himachal Pradesh": [
+            "Shimla",
+            "Dharamshala",
+            "Solan",
+            "Mandi",
+            "Palampur"
+        ],
+        "Jharkhand": [
+            "Ranchi",
+            "Jamshedpur",
+            "Dhanbad",
+            "Bokaro",
+            "Deoghar"
+        ],
+        "Karnataka": [
+            "Bangalore",
+            "Mysore",
+            "Hubli-Dharwad",
+            "Mangalore",
+            "Belgaum"
+        ],
+        "Kerala": [
+            "Thiruvananthapuram",
+            "Kochi",
+            "Kozhikode",
+            "Kollam",
+            "Thrissur"
+        ],
+        "Madhya Pradesh": [
+            "Indore",
+            "Bhopal",
+            "Jabalpur",
+            "Gwalior",
+            "Ujjain"
+        ],
+        "Maharashtra": [
+            "Mumbai",
+            "Pune",
+            "Nagpur",
+            "Thane",
+            "Nashville",
+            "Aurangabad"
+        ],
+        "Manipur": [
+            "Imphal",
+            "Thoubal",
+            "Bishnupur",
+            "Churachandpur",
+            "Kakching"
+        ],
+        "Meghalaya": [
+            "Shillong",
+            "Tura",
+            "Nongpoh",
+            "Jowai",
+            "Baghmara"
+        ],
+        "Mizoram": [
+            "Aizawl",
+            "Lunglei",
+            "Saiha",
+            "Champhai",
+            "Kolasib"
+        ],
+        "Nagaland": [
+            "Kohima",
+            "Dimapur",
+            "Mokokchung",
+            "Tuensang",
+            "Wokha"
+        ],
+        "Odisha": [
+            "Bhubaneswar",
+            "Cuttack",
+            "Rourkela",
+            "Berhampur",
+            "Sambalpur"
+        ],
+        "Punjab": [
+            "Ludhiana",
+            "Amritsar",
+            "Jalandhar",
+            "Patiala",
+            "Bathinda"
+        ],
+        "Rajasthan": [
+            "Jaipur",
+            "Jodhpur",
+            "Kota",
+            "Bikaner",
+            "Ajmer"
+        ],
+        "Sikkim": [
+            "Gangtok",
+            "Namchi",
+            "Geyzing",
+            "Mangan",
+            "Jorethang"
+        ],
+        "Tamil Nadu": [
+            "Chennai",
+            "Coimbatore",
+            "Madurai",
+            "Tiruchirappalli",
+            "Salem"
+        ],
+        "Telangana": [
+            "Hyderabad",
+            "Warangal",
+            "Nizamabad",
+            "Khammam",
+            "Karimnagar"
+        ],
+        "Tripura": [
+            "Agartala",
+            "Dharmanagar",
+            "Udaipur",
+            "Kailashahar",
+            "Belonia"
+        ],
+        "Uttar Pradesh": [
+            "Lucknow",
+            "Kanpur",
+            "Ghaziabad",
+            "Agra",
+            "Varanasi"
+        ],
+        "Uttarakhand": [
+            "Dehradun",
+            "Haridwar",
+            "Roorkee",
+            "Haldwani",
+            "Rudrapur"
+        ],
+        "West Bengal": [
+            "Kolkata",
+            "Howrah",
+            "Durgapur",
+            "Asansol",
+            "Siliguri"
+        ],
+        "Delhi": [
+            "New Delhi",
+            "Delhi",
+            "North Delhi",
+            "South Delhi",
+            "East Delhi"
+        ]
+    },
+    "Germany": {
+        "Baden-W\u00fcrttemberg": [
+            "Stuttgart",
+            "Mannheim",
+            "Karlsruhe",
+            "Freiburg",
+            "Heidelberg"
+        ],
+        "Bavaria": [
+            "Munich",
+            "Nuremberg",
+            "Augsburg",
+            "W\u00fcrzburg",
+            "Regensburg"
+        ],
+        "Berlin": [
+            "Berlin"
+        ],
+        "Brandenburg": [
+            "Potsdam",
+            "Cottbus",
+            "Brandenburg",
+            "Frankfurt",
+            "Oranienburg"
+        ],
+        "Bremen": [
+            "Bremen",
+            "Bremerhaven"
+        ],
+        "Hamburg": [
+            "Hamburg"
+        ],
+        "Hesse": [
+            "Frankfurt am Main",
+            "Wiesbaden",
+            "Kassel",
+            "Darmstadt",
+            "Offenbach"
+        ],
+        "Lower Saxony": [
+            "Hanover",
+            "Braunschweig",
+            "Oldenburg",
+            "Osnabr\u00fcck",
+            "Wolfsburg"
+        ],
+        "Mecklenburg-Vorpommern": [
+            "Rostock",
+            "Schwerin",
+            "Neubrandenburg",
+            "Stralsund",
+            "Greifswald"
+        ],
+        "North Rhine-Westphalia": [
+            "Cologne",
+            "D\u00fcsseldorf",
+            "Dortmund",
+            "Essen",
+            "Duisburg"
+        ],
+        "Rhineland-Palatinate": [
+            "Mainz",
+            "Ludwigshafen",
+            "Koblenz",
+            "Trier",
+            "Kaiserslautern"
+        ],
+        "Saarland": [
+            "Saarbr\u00fccken",
+            "Neunkirchen",
+            "Homburg",
+            "V\u00f6lklingen",
+            "Sankt Ingbert"
+        ],
+        "Saxony": [
+            "Dresden",
+            "Leipzig",
+            "Chemnitz",
+            "Zwickau",
+            "Plauen"
+        ],
+        "Saxony-Anhalt": [
+            "Magdeburg",
+            "Halle",
+            "Dessau",
+            "Wittenberg",
+            "Stendal"
+        ],
+        "Schleswig-Holstein": [
+            "Kiel",
+            "L\u00fcbeck",
+            "Flensburg",
+            "Neum\u00fcnster",
+            "Norderstedt"
+        ],
+        "Thuringia": [
+            "Erfurt",
+            "Jena",
+            "Gera",
+            "Weimar",
+            "Gotha"
+        ]
+    },
+    "France": {
+        "\u00cele-de-France": [
+            "Paris",
+            "Boulogne-Billancourt",
+            "Saint-Denis",
+            "Argenteuil",
+            "Versailles"
+        ],
+        "Provence-Alpes-C\u00f4te d'Azur": [
+            "Marseille",
+            "Nice",
+            "Toulon",
+            "Aix-en-Provence",
+            "Antibes"
+        ],
+        "Auvergne-Rh\u00f4ne-Alpes": [
+            "Lyon",
+            "Saint-\u00c9tienne",
+            "Grenoble",
+            "Villeurbanne",
+            "Clermont-Ferrand"
+        ],
+        "Nouvelle-Aquitaine": [
+            "Bordeaux",
+            "Limoges",
+            "Poitiers",
+            "Pau",
+            "La Rochelle"
+        ],
+        "Occitanie": [
+            "Toulouse",
+            "Montpellier",
+            "N\u00eemes",
+            "Perpignan",
+            "B\u00e9ziers"
+        ],
+        "Hauts-de-France": [
+            "Lille",
+            "Amiens",
+            "Tourcoing",
+            "Roubaix",
+            "Dunkirk"
+        ],
+        "Grand Est": [
+            "Strasbourg",
+            "Reims",
+            "Metz",
+            "Nancy",
+            "Mulhouse"
+        ],
+        "Pays de la Loire": [
+            "Nantes",
+            "Angers",
+            "Le Mans",
+            "Saint-Nazaire",
+            "Cholet"
+        ],
+        "Bretagne": [
+            "Rennes",
+            "Brest",
+            "Quimper",
+            "Lorient",
+            "Vannes"
+        ],
+        "Normandie": [
+            "Le Havre",
+            "Rouen",
+            "Caen",
+            "Cherbourg",
+            "\u00c9vreux"
+        ],
+        "Bourgogne-Franche-Comt\u00e9": [
+            "Dijon",
+            "Besan\u00e7on",
+            "Belfort",
+            "Chalon-sur-Sa\u00f4ne",
+            "Nevers"
+        ],
+        "Centre-Val de Loire": [
+            "Orl\u00e9ans",
+            "Tours",
+            "Bourges",
+            "Chartres",
+            "Ch\u00e2teauroux"
+        ],
+        "Corse": [
+            "Ajaccio",
+            "Bastia",
+            "Porto-Vecchio",
+            "Corte",
+            "Propriano"
+        ]
+    },
+    "Japan": {
+        "Hokkaido": [
+            "Sapporo",
+            "Hakodate",
+            "Asahikawa",
+            "Kushiro",
+            "Obihiro"
+        ],
+        "Tohoku": [
+            "Sendai",
+            "Aomori",
+            "Morioka",
+            "Akita",
+            "Yamagata",
+            "Fukushima"
+        ],
+        "Kanto": [
+            "Tokyo",
+            "Yokohama",
+            "Kawasaki",
+            "Saitama",
+            "Chiba"
+        ],
+        "Chubu": [
+            "Nagoya",
+            "Niigata",
+            "Shizuoka",
+            "Hamamatsu",
+            "Kanazawa"
+        ],
+        "Kansai": [
+            "Osaka",
+            "Kyoto",
+            "Kobe",
+            "Nara",
+            "Wakayama"
+        ],
+        "Chugoku": [
+            "Hiroshima",
+            "Okayama",
+            "Matsue",
+            "Tottori",
+            "Yamaguchi"
+        ],
+        "Shikoku": [
+            "Matsuyama",
+            "Takamatsu",
+            "Tokushima",
+            "Kochi"
+        ],
+        "Kyushu": [
+            "Fukuoka",
+            "Kumamoto",
+            "Kagoshima",
+            "Nagasaki",
+            "Oita"
+        ]
+    },
+    "Brazil": {
+        "S\u00e3o Paulo": [
+            "S\u00e3o Paulo",
+            "Campinas",
+            "Santos",
+            "Ribeir\u00e3o Preto",
+            "Sorocaba"
+        ],
+        "Rio de Janeiro": [
+            "Rio de Janeiro",
+            "Niter\u00f3i",
+            "Nova Igua\u00e7u",
+            "Duque de Caxias",
+            "S\u00e3o Gon\u00e7alo"
+        ],
+        "Minas Gerais": [
+            "Belo Horizonte",
+            "Uberl\u00e2ndia",
+            "Contagem",
+            "Juiz de Fora",
+            "Betim"
+        ],
+        "Bahia": [
+            "Salvador",
+            "Feira de Santana",
+            "Vit\u00f3ria da Conquista",
+            "Cama\u00e7ari",
+            "Itabuna"
+        ],
+        "Paran\u00e1": [
+            "Curitiba",
+            "Londrina",
+            "Maring\u00e1",
+            "Ponta Grossa",
+            "Cascavel"
+        ],
+        "Rio Grande do Sul": [
+            "Porto Alegre",
+            "Caxias do Sul",
+            "Pelotas",
+            "Canoas",
+            "Santa Maria"
+        ],
+        "Pernambuco": [
+            "Recife",
+            "Jaboat\u00e3o dos Guararapes",
+            "Olinda",
+            "Caruaru",
+            "Petrolina"
+        ],
+        "Cear\u00e1": [
+            "Fortaleza",
+            "Caucaia",
+            "Juazeiro do Norte",
+            "Maracana\u00fa",
+            "Sobral"
+        ],
+        "Par\u00e1": [
+            "Bel\u00e9m",
+            "Ananindeua",
+            "Santar\u00e9m",
+            "Marab\u00e1",
+            "Castanhal"
+        ],
+        "Santa Catarina": [
+            "Florian\u00f3polis",
+            "Joinville",
+            "Blumenau",
+            "S\u00e3o Jos\u00e9",
+            "Crici\u00fama"
+        ],
+        "Goi\u00e1s": [
+            "Goi\u00e2nia",
+            "Aparecida de Goi\u00e2nia",
+            "An\u00e1polis",
+            "Rio Verde",
+            "Luzi\u00e2nia"
+        ],
+        "Maranh\u00e3o": [
+            "S\u00e3o Lu\u00eds",
+            "Imperatriz",
+            "Timon",
+            "Caxias",
+            "Cod\u00f3"
+        ],
+        "Para\u00edba": [
+            "Jo\u00e3o Pessoa",
+            "Campina Grande",
+            "Santa Rita",
+            "Patos",
+            "Bayeux"
+        ],
+        "Amazonas": [
+            "Manaus",
+            "Parintins",
+            "Itacoatiara",
+            "Manacapuru",
+            "Coari"
+        ],
+        "Esp\u00edrito Santo": [
+            "Vit\u00f3ria",
+            "Vila Velha",
+            "Serra",
+            "Cariacica",
+            "Linhares"
+        ],
+        "Mato Grosso": [
+            "Cuiab\u00e1",
+            "V\u00e1rzea Grande",
+            "Rondon\u00f3polis",
+            "Sinop",
+            "Tangar\u00e1 da Serra"
+        ],
+        "Rio Grande do Norte": [
+            "Natal",
+            "Mossor\u00f3",
+            "Parnamirim",
+            "S\u00e3o Gon\u00e7alo do Amarante",
+            "Maca\u00edba"
+        ],
+        "Alagoas": [
+            "Macei\u00f3",
+            "Arapiraca",
+            "Rio Largo",
+            "Palmeira dos \u00cdndios",
+            "Uni\u00e3o dos Palmares"
+        ],
+        "Piau\u00ed": [
+            "Teresina",
+            "Parna\u00edba",
+            "Picos",
+            "Piripiri",
+            "Floriano"
+        ],
+        "Distrito Federal": [
+            "Bras\u00edlia"
+        ],
+        "Mato Grosso do Sul": [
+            "Campo Grande",
+            "Dourados",
+            "Tr\u00eas Lagoas",
+            "Corumb\u00e1",
+            "Ponta Por\u00e3"
+        ],
+        "Sergipe": [
+            "Aracaju",
+            "Nossa Senhora do Socorro",
+            "Lagarto",
+            "Itabaiana",
+            "S\u00e3o Crist\u00f3v\u00e3o"
+        ],
+        "Rond\u00f4nia": [
+            "Porto Velho",
+            "Ji-Paran\u00e1",
+            "Ariquemes",
+            "Vilhena",
+            "Cacoal"
+        ],
+        "Tocantins": [
+            "Palmas",
+            "Aragua\u00edna",
+            "Gurupi",
+            "Porto Nacional",
+            "Para\u00edso do Tocantins"
+        ],
+        "Acre": [
+            "Rio Branco",
+            "Cruzeiro do Sul",
+            "Sena Madureira",
+            "Tarauac\u00e1",
+            "Feij\u00f3"
+        ],
+        "Amap\u00e1": [
+            "Macap\u00e1",
+            "Santana",
+            "Laranjal do Jari",
+            "Oiapoque",
+            "Mazag\u00e3o"
+        ],
+        "Roraima": [
+            "Boa Vista",
+            "Rorain\u00f3polis",
+            "Caracara\u00ed",
+            "Alto Alegre",
+            "Mucaja\u00ed"
+        ]
+    },
+    "China": {
+        "Beijing": [
+            "Beijing"
+        ],
+        "Shanghai": [
+            "Shanghai"
+        ],
+        "Tianjin": [
+            "Tianjin"
+        ],
+        "Chongqing": [
+            "Chongqing"
+        ],
+        "Guangdong": [
+            "Guangzhou",
+            "Shenzhen",
+            "Dongguan",
+            "Foshan",
+            "Zhongshan"
+        ],
+        "Jiangsu": [
+            "Nanjing",
+            "Suzhou",
+            "Wuxi",
+            "Changzhou",
+            "Nantong"
+        ],
+        "Shandong": [
+            "Jinan",
+            "Qingdao",
+            "Yantai",
+            "Weifang",
+            "Zibo"
+        ],
+        "Zhejiang": [
+            "Hangzhou",
+            "Ningbo",
+            "Wenzhou",
+            "Jiaxing",
+            "Huzhou"
+        ],
+        "Henan": [
+            "Zhengzhou",
+            "Luoyang",
+            "Nanyang",
+            "Anyang",
+            "Xinyang"
+        ],
+        "Sichuan": [
+            "Chengdu",
+            "Mianyang",
+            "Deyang",
+            "Nanchong",
+            "Yibin"
+        ],
+        "Hubei": [
+            "Wuhan",
+            "Yichang",
+            "Xiangyang",
+            "Jingzhou",
+            "Huanggang"
+        ],
+        "Hunan": [
+            "Changsha",
+            "Zhuzhou",
+            "Xiangtan",
+            "Hengyang",
+            "Shaoyang"
+        ],
+        "Anhui": [
+            "Hefei",
+            "Wuhu",
+            "Bengbu",
+            "Anqing",
+            "Huainan"
+        ],
+        "Hebei": [
+            "Shijiazhuang",
+            "Tangshan",
+            "Qinhuangdao",
+            "Handan",
+            "Xingtai"
+        ],
+        "Liaoning": [
+            "Shenyang",
+            "Dalian",
+            "Anshan",
+            "Fushun",
+            "Benxi"
+        ],
+        "Jilin": [
+            "Changchun",
+            "Jilin",
+            "Siping",
+            "Liaoyuan",
+            "Tonghua"
+        ],
+        "Heilongjiang": [
+            "Harbin",
+            "Qiqihar",
+            "Daqing",
+            "Jiamusi",
+            "Mudanjiang"
+        ],
+        "Shaanxi": [
+            "Xi'an",
+            "Baoji",
+            "Xianyang",
+            "Weinan",
+            "Hanzhong"
+        ],
+        "Shanxi": [
+            "Taiyuan",
+            "Datong",
+            "Yangquan",
+            "Changzhi",
+            "Jincheng"
+        ],
+        "Inner Mongolia": [
+            "Hohhot",
+            "Baotou",
+            "Wuhai",
+            "Chifeng",
+            "Tongliao"
+        ],
+        "Gansu": [
+            "Lanzhou",
+            "Tianshui",
+            "Baiyin",
+            "Wuwei",
+            "Zhangye"
+        ],
+        "Qinghai": [
+            "Xining",
+            "Haidong",
+            "Haibei",
+            "Huangnan",
+            "Hainan"
+        ],
+        "Xinjiang": [
+            "\u00dcr\u00fcmqi",
+            "Karamay",
+            "Turpan",
+            "Hami",
+            "Changji"
+        ],
+        "Tibet": [
+            "Lhasa",
+            "Shigatse",
+            "Chamdo",
+            "Nyingchi",
+            "Shannan"
+        ],
+        "Ningxia": [
+            "Yinchuan",
+            "Shizuishan",
+            "Wuzhong",
+            "Guyuan",
+            "Zhongwei"
+        ],
+        "Guangxi": [
+            "Nanning",
+            "Liuzhou",
+            "Guilin",
+            "Wuzhou",
+            "Beihai"
+        ],
+        "Yunnan": [
+            "Kunming",
+            "Qujing",
+            "Yuxi",
+            "Baoshan",
+            "Zhaotong"
+        ],
+        "Guizhou": [
+            "Guiyang",
+            "Liupanshui",
+            "Zunyi",
+            "Anshun",
+            "Bijie"
+        ],
+        "Fujian": [
+            "Fuzhou",
+            "Xiamen",
+            "Putian",
+            "Sanming",
+            "Quanzhou"
+        ],
+        "Jiangxi": [
+            "Nanchang",
+            "Jingdezhen",
+            "Pingxiang",
+            "Jiujiang",
+            "Xinyu"
+        ],
+        "Hainan": [
+            "Haikou",
+            "Sanya",
+            "Sansha",
+            "Danzhou",
+            "Wuzhishan"
+        ],
+        "Hong Kong": [
+            "Hong Kong"
+        ],
+        "Macau": [
+            "Macau"
+        ]
+    }
+}

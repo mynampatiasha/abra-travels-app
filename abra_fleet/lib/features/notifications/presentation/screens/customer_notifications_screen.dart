@@ -1560,7 +1560,7 @@ class _CustomerNotificationsScreenState extends State<CustomerNotificationsScree
     try {
       Navigator.of(context).push(
         MaterialPageRoute(
-          builder: (context) => HRMFeedbackScreen(),
+          builder: (context) => HRMFeedbackScreen(showAppBar: true),
         ),
       );
     } catch (e) {

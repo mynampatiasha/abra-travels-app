@@ -1052,7 +1052,7 @@ class _CustomerDashboardState extends State<CustomerDashboard> {
   Future<void> _launchEmail(BuildContext context) async {
     final String email = 'hostelmatrix19@gmail.com';
     final String subject = 'Support Request';
-    final String body = 'Hello Abra Travels Support Team,\n\n';
+    final String body = 'Hello Corporate Travels Support Team,\n\n';
     
     try {
       final Uri emailUri = Uri(
@@ -2061,7 +2061,7 @@ Future<void> _initiatePoliceCall(String phoneNumber, String stationName) async {
           // ðŸ“± App Title
           Expanded(
             child: Text(
-              'Abra Travels',
+              'Corporate Travels',
               style: TextStyle(
                 fontWeight: FontWeight.bold,
                 fontSize: isSmallMobile ? 16 : isMobile ? 18 : 20,

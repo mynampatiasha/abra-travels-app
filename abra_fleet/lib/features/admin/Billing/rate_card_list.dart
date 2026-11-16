@@ -261,7 +261,7 @@ class _RateCardListScreenState extends State<RateCardListScreen> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text('Rate Cards', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-          Text('Fleet Management — Trip Pricing Core', style: TextStyle(color: Colors.white60, fontSize: 12)),
+          Text('Corporate Travels — Trip Pricing Core', style: TextStyle(color: Colors.white60, fontSize: 12)),
         ],
       ),
       backgroundColor: kPrimary,

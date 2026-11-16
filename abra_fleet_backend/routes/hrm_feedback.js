@@ -617,7 +617,7 @@ router.get('/all-feedback', verifyJWT, async (req, res) => {
     // Check admin status
     const isAdmin = await isUserAdmin(db, userId, userEmail);
     
-    if (!isAdmin) {
+    if (!isAdmin && !(req.user.permissions?.feedback_management?.can_access === true)) {
       return res.status(403).json({
         success: false,
         message: 'Access denied. Admin privileges required.'
@@ -763,7 +763,7 @@ router.get('/statistics', verifyJWT, async (req, res) => {
     // Check admin status
     const isAdmin = await isUserAdmin(db, userId, userEmail);
     
-    if (!isAdmin) {
+    if (!isAdmin && !(req.user.permissions?.feedback_management?.can_access === true)) {
       return res.status(403).json({
         success: false,
         message: 'Access denied. Admin privileges required.'
@@ -932,7 +932,7 @@ router.get('/user-names', verifyJWT, async (req, res) => {
     // Check admin status
     const isAdmin = await isUserAdmin(db, userId, userEmail);
     
-    if (!isAdmin) {
+    if (!isAdmin && !(req.user.permissions?.feedback_management?.can_access === true)) {
       return res.status(403).json({
         success: false,
         message: 'Access denied. Admin privileges required.'
@@ -1255,7 +1255,7 @@ router.get('/employees-list', verifyJWT, async (req, res) => {
     // Check admin status
     const isAdmin = await isUserAdmin(db, userId, userEmail);
     
-    if (!isAdmin) {
+    if (!isAdmin && !(req.user.permissions?.feedback_management?.can_access === true)) {
       return res.status(403).json({
         success: false,
         message: 'Access denied. Admin privileges required.'
@@ -1305,7 +1305,7 @@ router.get('/check-ticket', verifyJWT, async (req, res) => {
     // Check admin status
     const isAdmin = await isUserAdmin(db, userId, userEmail);
     
-    if (!isAdmin) {
+    if (!isAdmin && !(req.user.permissions?.feedback_management?.can_access === true)) {
       return res.status(403).json({
         success: false,
         message: 'Access denied. Admin privileges required.'
@@ -1379,7 +1379,7 @@ router.post('/create-ticket', verifyJWT, async (req, res) => {
     // Check admin status
     const isAdmin = await isUserAdmin(db, userId, userEmail);
     
-    if (!isAdmin) {
+    if (!isAdmin && !(req.user.permissions?.feedback_management?.can_access === true)) {
       return res.status(403).json({
         success: false,
         message: 'Access denied. Admin privileges required.'
@@ -1546,7 +1546,7 @@ router.get('/export/all', verifyJWT, async (req, res) => {
     // Check admin status
     const isAdmin = await isUserAdmin(db, userId, userEmail);
     
-    if (!isAdmin) {
+    if (!isAdmin && !(req.user.permissions?.feedback_management?.can_access === true)) {
       return res.status(403).json({
         success: false,
         message: 'Access denied. Admin privileges required.'

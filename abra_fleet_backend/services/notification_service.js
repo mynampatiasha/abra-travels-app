@@ -782,7 +782,7 @@ class NotificationService {
       <body>
         <div class="container">
           <div class="header">
-            <h1>Abra Fleet Management</h1>
+            <h1>Corporate Travels</h1>
           </div>
           <div class="content">
             <h2>${notification.title}</h2>
@@ -790,7 +790,7 @@ class NotificationService {
             ${notification.data ? `<p><strong>Details:</strong> ${JSON.stringify(notification.data, null, 2)}</p>` : ''}
           </div>
           <div class="footer">
-            <p>This is an automated message from Abra Fleet Management System.</p>
+            <p>This is an automated message from Corporate Travels.</p>
           </div>
         </div>
       </body>

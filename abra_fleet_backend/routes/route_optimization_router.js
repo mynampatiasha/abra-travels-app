@@ -3,8 +3,243 @@
 const express = require('express');
 const router = express.Router();
 const { ObjectId } = require('mongodb');
+
+// The old mock endpoints (made-up distances, drivers from the wrong collection) are switched off - use compatible-vehicles + assign-optimized-route
+const retiredEndpoint = (req, res) => res.status(410).json({
+  success: false,
+  error: 'ENDPOINT_RETIRED',
+  message: 'This endpoint is retired. Use /api/roster/compatible-vehicles and /api/roster/assign-optimized-route.'
+});
+
+// Total seats of a vehicle INCLUDING the driver seat. `capacity` is a plain number on most vehicles ({ passengers } on some).
+const vehicleTotalSeats = (v) => {
+  const cap = v.capacity && typeof v.capacity === 'object' ? v.capacity.passengers : v.capacity;
+  return Number(cap) || Number(v.seatCapacity) || Number(v.seatingCapacity) || 4;
+};
+
+// Customer e-mails of a roster-assigned trip (they live in stops[].customer.email; older docs may have customerEmail).
+const tripCustomerEmails = (trip) => {
+  const emails = new Set();
+  (trip.stops || []).forEach((s) => { const e = s && s.customer && s.customer.email; if (e) emails.add(String(e).toLowerCase()); });
+  if (trip.customerEmail) emails.add(String(trip.customerEmail).toLowerCase());
+  return Array.from(emails);
+};
+
+// ============================================================================
+// Driver / vehicle time feasibility (the buffer is managed by the operations team)
+// ============================================================================
+const DEFAULT_DRIVER_BUFFER_MINUTES = 30; // used until operations saves a value
+const DEFAULT_TRAVEL_MINUTES = 30;        // used when a stop has no coordinates
+
+const getDriverBufferMinutes = async (db) => {
+  try {
+    const doc = await db.collection('roster_settings').findOne({ _id: 'assignment' });
+    const n = doc && doc.driverBufferMinutes != null ? Number(doc.driverBufferMinutes) : NaN; // no saved value -> default (Number(null) would be 0)
+    return Number.isInteger(n) && n >= 0 && n <= 120 ? n : DEFAULT_DRIVER_BUFFER_MINUTES;
+  } catch (e) {
+    return DEFAULT_DRIVER_BUFFER_MINUTES;
+  }
+};
+
+// Accepts [lng, lat] or { latitude, longitude } / { lat, lng } and returns [lng, lat] (or null)
+const toLngLat = (c) => {
+  if (!c) return null;
+  if (Array.isArray(c)) {
+    return c.length >= 2 && c[0] != null && c[1] != null && isFinite(c[0]) && isFinite(c[1]) ? [Number(c[0]), Number(c[1])] : null;
+  }
+  const lat = c.latitude != null ? c.latitude : c.lat;
+  const lng = c.longitude != null ? c.longitude : (c.lng != null ? c.lng : c.lon);
+  return lat != null && lng != null && isFinite(lat) && isFinite(lng) ? [Number(lng), Number(lat)] : null;
+};
+
+const haversineKm = (a, b) => {
+  const R = 6371;
+  const dLat = (b[1] - a[1]) * Math.PI / 180;
+  const dLon = (b[0] - a[0]) * Math.PI / 180;
+  const h = Math.sin(dLat / 2) ** 2 + Math.cos(a[1] * Math.PI / 180) * Math.cos(b[1] * Math.PI / 180) * Math.sin(dLon / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(h), Math.sqrt(1 - h));
+};
+
+// Estimated drive time: straight-line distance x 1.3 road factor at 25 km/h city speed (default when coordinates are missing)
+const estimateTravelMinutes = (from, to) => {
+  const a = toLngLat(from);
+  const b = toLngLat(to);
+  if (!a || !b) return DEFAULT_TRAVEL_MINUTES;
+  return Math.max(5, Math.ceil((haversineKm(a, b) * 1.3 / 25) * 60));
+};
+
+const hhmmToMin = (s) => {
+  const m = typeof s === 'string' ? s.match(/^(\d{1,2}):(\d{2})/) : null;
+  return m ? Number(m[1]) * 60 + Number(m[2]) : null;
+};
+const minToHHMM = (m) => {
+  const x = ((Math.round(m) % 1440) + 1440) % 1440;
+  return String(Math.floor(x / 60)).padStart(2, '0') + ':' + String(x % 60).padStart(2, '0');
+};
+
+// 'YYYY-MM-DD' of a date value (ISO strings keep their own date part)
+const toDayString = (v) => {
+  if (!v) return null;
+  if (typeof v === 'string' && /^\d{4}-\d{2}-\d{2}/.test(v)) return v.slice(0, 10);
+  const d = new Date(v);
+  return isNaN(d.getTime()) ? null : d.toISOString().split('T')[0];
+};
+
+const WEEKDAY_KEYS = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
+const weekdayKeyOf = (day) => WEEKDAY_KEYS[new Date(day + 'T00:00:00Z').getUTCDay()];
+// working weekdays of a roster as a Set of 'mon'..'sun' (null = nothing stored = every day)
+const rosterWeekdaySet = (roster) => {
+  const list = (roster && (roster.weekdays || roster.weeklyOffDays || roster.workingDays)) || [];
+  const set = new Set((Array.isArray(list) ? list : []).map((x) => String(x).toLowerCase().slice(0, 3)).filter((x) => WEEKDAY_KEYS.includes(x)));
+  return set.size > 0 ? set : null;
+};
+
+const datesBetween = (startDate, endDate) => {
+  const out = [];
+  const start = toDayString(startDate);
+  const end = toDayString(endDate || startDate);
+  if (!start || !end) return out;
+  let t = new Date(start + 'T00:00:00Z').getTime();
+  const last = new Date(end + 'T00:00:00Z').getTime();
+  while (t <= last && out.length < 93) {
+    out.push(new Date(t).toISOString().split('T')[0]);
+    t += 86400000;
+  }
+  return out;
+};
+
+// Time window of a stored (or about-to-be-stored) trip: when the driver must be at the first stop and when he is free again
+const tripWindow = (trip) => {
+  const stops = trip.stops || [];
+  const start = hhmmToMin(trip.startTime);
+  const stored = hhmmToMin(trip.endTime);
+  if (start === null || stored === null || stops.length === 0) return null;
+  const first = stops[0];
+  const last = stops[stops.length - 1];
+  let end = stored;
+  if (trip.tripType === 'pickup' && stops.length >= 2 && !trip.endsAtOffice) {
+    // a pickup trip stores the LAST PICKUP time as its end - the driver is still driving to the office
+    end += estimateTravelMinutes(stops[stops.length - 2].location && stops[stops.length - 2].location.coordinates, last.location && last.location.coordinates);
+  }
+  return {
+    start,
+    end: Math.max(end, start),
+    startCoord: (first.location && first.location.coordinates) || null,
+    endCoord: (last.location && last.location.coordinates) || null
+  };
+};
+
+// Compare one new window with the trips the same vehicle / driver already has on that day
+const findTimeConflicts = (newWin, existingTrips, bufferMinutes) => {
+  const out = [];
+  if (!newWin) return out;
+  for (const e of existingTrips) {
+    const w = tripWindow(e);
+    if (!w) continue;
+    const label = (e.tripNumber || 'an existing trip') + ' (' + minToHHMM(w.start) + '-' + minToHHMM(w.end) + ')';
+    let gap;
+    let travel;
+    let direction;
+    if (w.end <= newWin.start) {
+      direction = 'before';
+      travel = estimateTravelMinutes(w.endCoord, newWin.startCoord);
+      gap = newWin.start - w.end;
+    } else if (newWin.end <= w.start) {
+      direction = 'after';
+      travel = estimateTravelMinutes(newWin.endCoord, w.startCoord);
+      gap = w.start - newWin.end;
+    } else {
+      out.push({ kind: 'overlap', existingTrip: e.tripNumber || null, message: 'Driver/vehicle is already on ' + label + ' at the same time (' + minToHHMM(newWin.start) + '-' + minToHHMM(newWin.end) + ')' });
+      continue;
+    }
+    const needed = travel + bufferMinutes;
+    if (gap < needed) {
+      out.push({
+        kind: 'insufficient_gap',
+        existingTrip: e.tripNumber || null,
+        direction,
+        gapMinutes: gap,
+        travelMinutes: travel,
+        bufferMinutes,
+        shortfallMinutes: needed - gap,
+        message: direction === 'before'
+          ? 'Driver/vehicle is on ' + label + ' and is free at ' + minToHHMM(w.end) + '; needs ' + travel + ' min travel + ' + bufferMinutes + ' min buffer to reach the pickup at ' + minToHHMM(newWin.start) + ' (only ' + gap + ' min, short by ' + (needed - gap) + ')'
+          : 'The new trip ends at ' + minToHHMM(newWin.end) + '; driver/vehicle then needs ' + travel + ' min travel + ' + bufferMinutes + ' min buffer to reach ' + label + ' at ' + minToHHMM(w.start) + ' (only ' + gap + ' min, short by ' + (needed - gap) + ')'
+      });
+    }
+  }
+  return out;
+};
+
+// Estimated windows for a group of rosters that has not been assigned yet (used by the vehicle list)
+const buildNewTripWindows = (rosters) => {
+  const wins = [];
+  const office = rosters.map((r) => r.locations && r.locations.office && r.locations.office.coordinates).find(Boolean) || null;
+  const homes = rosters.map((r) => toLngLat(r.locations && r.locations.pickup && r.locations.pickup.coordinates)).filter(Boolean);
+  const officeLL = toLngLat(office);
+  const far = homes.length ? (officeLL ? homes.reduce((a, b) => (haversineKm(b, officeLL) > haversineKm(a, officeLL) ? b : a)) : homes[0]) : null;
+  const typeOf = (r) => r.rosterType || 'both';
+  const needPickup = rosters.some((r) => ['both', 'login', 'pickup'].includes(typeOf(r)));
+  const needDrop = rosters.some((r) => ['both', 'logout', 'drop'].includes(typeOf(r)));
+  const loginMins = rosters.map((r) => hhmmToMin(r.startTime || r.officeTime || r.loginTime)).filter((m) => m !== null);
+  const logoutMins = rosters.map((r) => hhmmToMin(r.endTime || r.officeEndTime || r.logoutTime)).filter((m) => m !== null);
+  const ride = estimateTravelMinutes(far, officeLL) + 5 * Math.max(0, rosters.length - 1); // the drive + about 5 min per extra stop
+  if (needPickup && loginMins.length) {
+    const at = Math.min(...loginMins);
+    wins.push({ tripType: 'pickup', window: { start: at - ride, end: at, startCoord: far, endCoord: officeLL } });
+  }
+  if (needDrop && logoutMins.length) {
+    const at = Math.max(...logoutMins);
+    wins.push({ tripType: 'drop', window: { start: at, end: at + ride, startCoord: officeLL, endCoord: far } });
+  }
+  return wins;
+};
+
 const { verifyToken } = require('../middleware/auth');
 const { createNotification } = require('../models/notification_model');
+const { checkEditDeletePermission } = require('../middleware/check_permission');
+
+// ============================================================================
+// ASSIGNMENT SETTINGS - managed by the operations team
+// ============================================================================
+// @route   GET api/roster/settings/assignment
+router.get('/settings/assignment', verifyToken, async (req, res) => {
+  try {
+    const doc = await req.db.collection('roster_settings').findOne({ _id: 'assignment' });
+    res.json({
+      success: true,
+      data: {
+        driverBufferMinutes: await getDriverBufferMinutes(req.db),
+        defaultDriverBufferMinutes: DEFAULT_DRIVER_BUFFER_MINUTES,
+        minMinutes: 0,
+        maxMinutes: 120,
+        updatedBy: (doc && doc.updatedBy) || null,
+        updatedAt: (doc && doc.updatedAt) || null
+      }
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: 'Failed to load assignment settings', error: error.message });
+  }
+});
+
+// @route   PUT api/roster/settings/assignment   body: { driverBufferMinutes: 0-120 }
+router.put('/settings/assignment', verifyToken, checkEditDeletePermission('pending_rosters'), async (req, res) => {
+  try {
+    const minutes = Number(req.body && req.body.driverBufferMinutes);
+    if (!Number.isInteger(minutes) || minutes < 0 || minutes > 120) {
+      return res.status(400).json({ success: false, message: 'driverBufferMinutes must be a whole number between 0 and 120' });
+    }
+    await req.db.collection('roster_settings').updateOne(
+      { _id: 'assignment' },
+      { $set: { driverBufferMinutes: minutes, updatedBy: (req.user && (req.user.email || req.user.id)) || 'unknown', updatedAt: new Date() } },
+      { upsert: true }
+    );
+    res.json({ success: true, message: 'Driver buffer saved - it applies to new assignments', data: { driverBufferMinutes: minutes } });
+  } catch (error) {
+    res.status(500).json({ success: false, message: 'Failed to save assignment settings', error: error.message });
+  }
+});
+
 // Note: FCM is handled automatically by notification_model.js when channels: ['fcm', 'database'] is set
 // Note: Using native fetch (Node.js 18+) for OSRM API calls
 
@@ -13,7 +248,7 @@ const { createNotification } = require('../models/notification_model');
 // @route   POST api/roster/optimize
 // @desc    Optimize route assignments for multiple rosters
 // @access  Private (Admin/Manager)
-router.post('/optimize', verifyToken, async (req, res) => {
+router.post('/optimize', verifyToken, retiredEndpoint, async (req, res) => {
   try {
     console.log('🚀 Route optimization request received');
     console.log('Request body:', JSON.stringify(req.body, null, 2));
@@ -160,7 +395,7 @@ router.post('/optimize', verifyToken, async (req, res) => {
 // @route   POST api/roster/assign-bulk
 // @desc    Bulk assign drivers to rosters with notifications
 // @access  Private (Admin/Manager)
-router.post('/assign-bulk', verifyToken, async (req, res) => {
+router.post('/assign-bulk', verifyToken, retiredEndpoint, async (req, res) => {
   try {
     console.log('📦 Bulk assignment request received');
     console.log('Request body:', JSON.stringify(req.body, null, 2));
@@ -396,8 +631,8 @@ router.post('/compatible-vehicles', verifyToken, async (req, res) => {
     }
     
     // ✅ NEW: Calculate date range (default to today if not provided)
-    const checkStartDate = startDate || new Date().toISOString().split('T')[0];
-    const checkEndDate = endDate || checkStartDate;
+    let checkStartDate = startDate || new Date().toISOString().split('T')[0];
+    let checkEndDate = endDate || checkStartDate;
     
     console.log(`📋 Checking compatibility for ${rosterIds.length} customers`);
     console.log(`📅 Date range: ${checkStartDate} to ${checkEndDate}`); // ✅ NEW LOG
@@ -418,6 +653,22 @@ router.post('/compatible-vehicles', verifyToken, async (req, res) => {
       });
     }
     
+    // The app sends only rosterIds: check the selected rosters' own date range instead of just "today"
+    if (!startDate) {
+      const rosterDays = rosters
+        .flatMap(r => [r.startDate, r.endDate])
+        .filter(Boolean)
+        .map(d => new Date(d))
+        .filter(d => !isNaN(d.getTime()))
+        .map(d => d.toISOString().split('T')[0])
+        .sort();
+      if (rosterDays.length > 0) {
+        checkStartDate = rosterDays[0];
+        checkEndDate = endDate || rosterDays[rosterDays.length - 1];
+      }
+    }
+
+
     // ========================================================================
     // STEP 2: Extract compatibility criteria from customers
     // ========================================================================
@@ -574,6 +825,18 @@ router.post('/compatible-vehicles', verifyToken, async (req, res) => {
     
     const compatibleVehicles = [];
     const incompatibleVehicles = [];
+
+    // Buffer set by operations + every active trip in the date range (checked per vehicle AND per driver below)
+    const bufferMinutes = await getDriverBufferMinutes(req.db);
+    const rosterWeekdays = rosters.map(rosterWeekdaySet);
+    const neededWeekdays = rosterWeekdays.some(s => s === null) ? null : new Set(rosterWeekdays.flatMap(s => Array.from(s)));
+    const checkDates = datesBetween(checkStartDate, checkEndDate).filter(d => !neededWeekdays || neededWeekdays.has(weekdayKeyOf(d)));
+    const selectedRosterIds = new Set(rosters.map(r => String(r._id)));
+    const rangeTrips = (await req.db.collection('roster-assigned-trips').find({
+      status: { $in: ['assigned', 'started', 'in_progress'] },
+      scheduledDate: { $gte: checkStartDate, $lte: checkEndDate }
+    }).toArray()).filter(t => !(t.rosterIds || []).some(id => selectedRosterIds.has(String(id))));
+    const newWindows = buildNewTripWindows(rosters);
     
     // ========================================================================
     // STEP 5: Check each vehicle for compatibility WITH CONSECUTIVE TRIP VALIDATION
@@ -616,6 +879,59 @@ router.post('/compatible-vehicles', verifyToken, async (req, res) => {
       console.log(`🚗 Checking: ${vehicleName}`);
       
       // ====================================================================
+      // SUB-STEP 5.0: checks that apply to EVERY vehicle (also vehicles with no trips yet)
+      // ====================================================================
+      if (customerCompanies.size > 1) {
+        console.log(`   ❌ INCOMPATIBLE - Selected customers belong to different companies`);
+        incompatibleVehicles.push({
+          ...vehicle,
+          assignedCustomers: [],
+          compatibilityReason: `Selected customers belong to different companies (${Array.from(customerCompanies).join(', ')}) - one vehicle can only carry one company`,
+          isCompatible: false
+        });
+        continue;
+      }
+      
+      const vehicleUsableSeats = vehicleTotalSeats(vehicle) - 1; // the driver takes one seat
+      if (rosters.length > vehicleUsableSeats) {
+        console.log(`   ❌ INCOMPATIBLE - Not enough seats (${vehicleUsableSeats} for ${rosters.length})`);
+        incompatibleVehicles.push({
+          ...vehicle,
+          assignedCustomers: [],
+          compatibilityReason: `Insufficient capacity: ${vehicleUsableSeats} passenger seat(s), ${rosters.length} customer(s) selected`,
+          isCompatible: false
+        });
+        continue;
+      }
+      
+      // ====================================================================
+      // SUB-STEP 5.0b: can the DRIVER and the vehicle really make it, day by day?
+      // (previous trip end + travel to the new pickup + operations buffer must fit; the trip after is checked the same way)
+      // ====================================================================
+      const vehicleDriverKey = vehicle.assignedDriver && vehicle.assignedDriver._id ? String(vehicle.assignedDriver._id) : '';
+      const vehicleTrips = rangeTrips.filter(t => String(t.vehicleId) === vehicleId || (vehicleDriverKey && String(t.driverId) === vehicleDriverKey));
+      const timeConflicts = [];
+      for (const date of checkDates) {
+        const dayTrips = vehicleTrips.filter(t => t.scheduledDate === date);
+        if (dayTrips.length === 0) continue;
+        for (const w of newWindows) {
+          findTimeConflicts(w.window, dayTrips, bufferMinutes).forEach(c => timeConflicts.push({ ...c, date, tripType: w.tripType }));
+        }
+      }
+      if (timeConflicts.length > 0) {
+        console.log(`   ❌ INCOMPATIBLE - ${timeConflicts.length} time conflict(s)`);
+        incompatibleVehicles.push({
+          ...vehicle,
+          assignedCustomers: [],
+          compatibilityReason: `Driver not available in time (${timeConflicts.length} conflict${timeConflicts.length > 1 ? 's' : ''}). ${timeConflicts[0].date}: ${timeConflicts[0].message}`,
+          isCompatible: false,
+          timeConflicts: timeConflicts.slice(0, 5)
+        });
+        continue;
+      }
+
+
+      // ====================================================================
       // SUB-STEP 5.1: Check existing assignments (from roster-assigned-trips)
       // ✅ UPDATED: Check date range instead of just today
       // ====================================================================
@@ -648,10 +964,12 @@ router.post('/compatible-vehicles', verifyToken, async (req, res) => {
       const existingCompanies = new Set();
       
       existingAssignments.forEach(trip => {
-        const email = trip.customerEmail || '';
-        const emailDomain = email.includes('@') ? email.split('@')[1].toLowerCase() : 'unknown';
-        const company = emailDomain.split('.')[0];
-        existingCompanies.add(company);
+        const tripEmails = tripCustomerEmails(trip);
+        if (tripEmails.length === 0) existingCompanies.add('unknown');
+        tripEmails.forEach(email => {
+          const emailDomain = email.includes('@') ? email.split('@')[1].toLowerCase() : 'unknown';
+          existingCompanies.add(emailDomain.split('.')[0]);
+        });
       });
       
       console.log(`   🏢 Existing companies: ${Array.from(existingCompanies).join(', ')}`);
@@ -674,11 +992,11 @@ router.post('/compatible-vehicles', verifyToken, async (req, res) => {
       // ====================================================================
       // SUB-STEP 5.3: Check capacity
       // ====================================================================
-      const totalSeats = vehicle.capacity?.passengers || 
-                         vehicle.seatCapacity || 
-                         vehicle.seatingCapacity || 
-                         4;
-      const assignedSeats = existingAssignments.length;
+      const totalSeats = vehicleTotalSeats(vehicle);
+      // seats in use = distinct customers already on this vehicle in the date range (not the number of trip documents)
+      const assignedCustomerEmails = new Set();
+      existingAssignments.forEach(trip => tripCustomerEmails(trip).forEach(e => assignedCustomerEmails.add(e)));
+      const assignedSeats = assignedCustomerEmails.size || existingAssignments.length;
       const availableSeats = totalSeats - 1 - assignedSeats;
       
       if (availableSeats <= 0) {
@@ -703,126 +1021,12 @@ router.post('/compatible-vehicles', verifyToken, async (req, res) => {
         continue;
       }
       
-      // ====================================================================
-      // 🆕 SUB-STEP 5.4: CONSECUTIVE TRIP VALIDATION WITH TRAVEL TIME
-      // ====================================================================
-      console.log(`   ⏰ Checking consecutive trip feasibility...`);
-      
-      // Sort existing trips by time
-      const sortedExistingTrips = existingAssignments.sort((a, b) => {
-        const aTime = parseTime(a.startTime || a.estimatedPickupTime || '00:00');
-        const bTime = parseTime(b.startTime || b.estimatedPickupTime || '00:00');
-        return aTime - bTime;
-      });
-      
-      // Get the latest existing trip (last office drop-off)
-      const latestTrip = sortedExistingTrips[sortedExistingTrips.length - 1];
-      const latestTripEndTime = parseTime(latestTrip.endTime || latestTrip.startTime || '00:00');
-      
-      // Get office location of latest trip
-      const latestTripOfficeCoords = latestTrip.dropLocation?.coordinates || null;
-      
-      console.log(`   📍 Latest existing trip ends at: ${Math.floor(latestTripEndTime / 60)}:${String(latestTripEndTime % 60).padStart(2, '0')}`);
-      console.log(`   📍 Latest trip office: ${latestTrip.dropLocation?.address || 'Unknown'}`);
-      
-      // Calculate new trip start time (earliest pickup)
-      const newTripStartMinutes = parseTime(newTripStartTime);
-      
-      console.log(`   📍 New trip needs to start at: ${Math.floor(newTripStartMinutes / 60)}:${String(newTripStartMinutes % 60).padStart(2, '0')}`);
-      
-      // ====================================================================
-      // 🔥 CRITICAL CHECK: Can vehicle reach new trip's first pickup on time?
-      // ====================================================================
-      
-      // Find first pickup location of new trip
-      const firstPickupLocation = newTripLocations[0];
-      const firstPickupCoords = firstPickupLocation?.pickupCoords;
-      
-      console.log(`   📍 New trip first pickup: ${firstPickupLocation?.pickup || 'Unknown'}`);
-      
-      // Calculate distance from latest trip office → new trip first pickup
-      let travelDistance = null;
-      let travelTimeMinutes = 30; // Default 30 minutes if we can't calculate
-      
-      if (latestTripOfficeCoords && firstPickupCoords) {
-        travelDistance = calculateDistance(latestTripOfficeCoords, firstPickupCoords);
-        if (travelDistance !== null) {
-          // Calculate travel time: assume 20 km/h average in city traffic
-          travelTimeMinutes = Math.ceil((travelDistance / 20) * 60);
-          console.log(`   🚗 Calculated distance: ${travelDistance.toFixed(2)} km`);
-          console.log(`   ⏱️  Calculated travel time: ${travelTimeMinutes} mins`);
-        }
-      } else {
-        console.log(`   ⚠️  No coordinates available - using default 30 min buffer`);
-      }
-      
-      // Add 30-minute buffer (driver break, parking, etc.)
-      const bufferMinutes = 30;
-      const totalBufferNeeded = travelTimeMinutes + bufferMinutes;
-      
-      console.log(`   ⏱️  Travel time needed: ${travelTimeMinutes} mins`);
-      console.log(`   ⏱️  Buffer time: ${bufferMinutes} mins`);
-      console.log(`   ⏱️  Total time needed: ${totalBufferNeeded} mins`);
-      
-      // Calculate required free time
-      const requiredFreeTimeStart = latestTripEndTime;
-      const requiredFreeTimeEnd = newTripStartMinutes;
-      const actualFreeTime = requiredFreeTimeEnd - requiredFreeTimeStart;
-      
-      console.log(`   ⏰ Time available between trips: ${actualFreeTime} mins`);
-      console.log(`   ⏰ Time needed (travel + buffer): ${totalBufferNeeded} mins`);
-      
-      // ====================================================================
-      // 🔥 VERDICT: Is this schedule physically possible?
-      // ====================================================================
-      if (actualFreeTime < totalBufferNeeded) {
-        const shortfall = totalBufferNeeded - actualFreeTime;
-        console.log(`   ❌ INCOMPATIBLE - Insufficient time between trips`);
-        console.log(`   ❌ Shortfall: ${shortfall} minutes`);
-        
-        const latestEndTimeStr = `${Math.floor(latestTripEndTime / 60)}:${String(latestTripEndTime % 60).padStart(2, '0')}`;
-        const newStartTimeStr = `${Math.floor(newTripStartMinutes / 60)}:${String(newTripStartMinutes % 60).padStart(2, '0')}`;
-        
-        incompatibleVehicles.push({
-          ...vehicle,
-          assignedCustomers: existingAssignments.map(r => r._id.toString()),
-          compatibilityReason: `Impossible schedule: Vehicle finishes previous trip at ${latestEndTimeStr}, ` +
-                             `needs ${totalBufferNeeded} mins (${travelTimeMinutes} mins travel + ${bufferMinutes} mins buffer) ` +
-                             `to reach new trip by ${newStartTimeStr}. Short by ${shortfall} minutes.`,
-          isCompatible: false,
-          timeConflict: {
-            existingTripEnd: latestEndTimeStr,
-            newTripStart: newStartTimeStr,
-            travelTimeNeeded: travelTimeMinutes,
-            bufferNeeded: bufferMinutes,
-            totalTimeNeeded: totalBufferNeeded,
-            actualTimeAvailable: actualFreeTime,
-            shortfall: shortfall,
-            distance: travelDistance ? `${travelDistance.toFixed(2)} km` : 'Unknown'
-          }
-        });
-        continue;
-      }
-      
-      // ====================================================================
-      // ✅ ALL CHECKS PASSED - Vehicle is compatible
-      // ====================================================================
-      console.log(`   ✅ COMPATIBLE - All checks passed including consecutive trip validation`);
+      console.log(`   ✅ COMPATIBLE - same company, seats and driver time checks passed`);
       compatibleVehicles.push({
         ...vehicle,
         assignedCustomers: existingAssignments.map(r => r._id.toString()),
-        compatibilityReason: `Same company, ${availableSeats} seats available, sufficient time between trips (${actualFreeTime} mins available, ${totalBufferNeeded} mins needed)`,
-        isCompatible: true,
-        consecutiveTripInfo: {
-          existingTripEnd: `${Math.floor(latestTripEndTime / 60)}:${String(latestTripEndTime % 60).padStart(2, '0')}`,
-          newTripStart: `${Math.floor(newTripStartMinutes / 60)}:${String(newTripStartMinutes % 60).padStart(2, '0')}`,
-          travelTime: travelTimeMinutes,
-          buffer: bufferMinutes,
-          totalTimeNeeded: totalBufferNeeded,
-          timeAvailable: actualFreeTime,
-          margin: actualFreeTime - totalBufferNeeded,
-          distance: travelDistance ? `${travelDistance.toFixed(2)} km` : 'Unknown'
-        }
+        compatibilityReason: `Same company, ${availableSeats} seat(s) free, driver has enough time between trips (buffer ${bufferMinutes} min)`,
+        isCompatible: true
       });
     }
     
@@ -839,8 +1043,8 @@ router.post('/compatible-vehicles', verifyToken, async (req, res) => {
     const customersCount = rosters.length;
     
     compatibleVehicles.sort((a, b) => {
-      const aCapacity = a.capacity?.passengers || a.seatCapacity || a.seatingCapacity || 4;
-      const bCapacity = b.capacity?.passengers || b.seatCapacity || b.seatingCapacity || 4;
+      const aCapacity = vehicleTotalSeats(a);
+      const bCapacity = vehicleTotalSeats(b);
       
       const aAvailable = aCapacity - 1;
       const bAvailable = bCapacity - 1;
@@ -863,7 +1067,7 @@ router.post('/compatible-vehicles', verifyToken, async (req, res) => {
     if (compatibleVehicles.length > 0) {
       console.log('   Top 3 best-fit vehicles:');
       compatibleVehicles.slice(0, 3).forEach((v, i) => {
-        const capacity = v.capacity?.passengers || v.seatCapacity || v.seatingCapacity || 4;
+        const capacity = vehicleTotalSeats(v);
         const available = capacity - 1;
         const waste = available - customersCount;
         console.log(`   ${i + 1}. ${v.name || v.vehicleNumber}: ${capacity} seats (${waste} unused after assignment)`);
@@ -951,17 +1155,47 @@ router.post('/assign-optimized-route', verifyToken, async (req, res) => {
     }
     
     // ✅ NEW: Date range validation and calculation
-    const assignStartDate = startDate || new Date().toISOString().split('T')[0];
-    const assignEndDate = endDate || assignStartDate;
-    
-    // ✅ NEW: Generate list of dates
-    const dateList = [];
-    const currentDate = new Date(assignStartDate);
-    const endDateObj = new Date(assignEndDate);
-    
-    while (currentDate <= endDateObj) {
-      dateList.push(currentDate.toISOString().split('T')[0]);
-      currentDate.setDate(currentDate.getDate() + 1);
+    // Dates are normalised to YYYY-MM-DD (the app sends full ISO strings)
+    const todayStr = new Date().toISOString().split('T')[0];
+    let assignStartDate = toDayString(startDate) || todayStr;
+    let assignEndDate = toDayString(endDate) || assignStartDate;
+    let dateList = datesBetween(assignStartDate, assignEndDate);
+
+    // The ROSTERS decide the dates: one date range and one set of weekdays for everyone on the vehicle,
+    // and no trips on days a roster does not travel (weekends etc.)
+    const routeRosterIds = route.map(r => r && r.rosterId).filter(id => id && ObjectId.isValid(id)).map(id => new ObjectId(id));
+    const routeRosterDocs = routeRosterIds.length ? await req.db.collection('rosters').find({ _id: { $in: routeRosterIds } }).toArray() : [];
+    if (routeRosterDocs.length > 0) {
+      const ranges = new Set(routeRosterDocs.map(r => toDayString(r.startDate) + ' to ' + toDayString(r.endDate)));
+      if (ranges.size > 1) {
+        return res.status(400).json({
+          success: false,
+          error: 'DIFFERENT_DATE_RANGES',
+          message: 'These customers have different date ranges (' + Array.from(ranges).join('; ') + '). Assign customers with the same date range together.'
+        });
+      }
+      const dayKeys = new Set(routeRosterDocs.map(r => { const s = rosterWeekdaySet(r); return s ? Array.from(s).sort().join(',') : 'all'; }));
+      if (dayKeys.size > 1) {
+        return res.status(400).json({
+          success: false,
+          error: 'DIFFERENT_WEEKDAYS',
+          message: 'These customers travel on different weekdays. Assign customers with the same weekdays together.'
+        });
+      }
+      const rosterStart = toDayString(routeRosterDocs[0].startDate);
+      const rosterEnd = toDayString(routeRosterDocs[0].endDate);
+      if (rosterStart && rosterEnd) dateList = dateList.filter(d => d >= rosterStart && d <= rosterEnd);
+      const allowedDays = rosterWeekdaySet(routeRosterDocs[0]);
+      if (allowedDays) dateList = dateList.filter(d => allowedDays.has(weekdayKeyOf(d)));
+      if (dateList.length === 0) {
+        return res.status(400).json({
+          success: false,
+          error: 'NO_TRIP_DATES',
+          message: "No trip dates remain: the requested dates do not fall on the roster's own dates and weekdays."
+        });
+      }
+      assignStartDate = dateList[0];
+      assignEndDate = dateList[dateList.length - 1];
     }
     
     console.log(`📋 Processing ${route.length} customer assignments`);
@@ -1005,9 +1239,11 @@ router.post('/assign-optimized-route', verifyToken, async (req, res) => {
     console.log('   assignedDriverId:', vehicle.assignedDriverId);
 
     // ✅ Extract driver identifiers from vehicle
-    const driverEmail = vehicle.assignedDriverEmail || vehicle.driverEmail;
-    const driverCustomId = vehicle.assignedDriver || vehicle.driverId || vehicle.assignedDriverId;
-    const driverName = vehicle.assignedDriverName || vehicle.driverName;
+    // assignedDriver can be an object ({ _id, driverId, name, email, phone }) when the link was made from the admin "assign vehicle" screen
+    const assignedDriverObj = (vehicle.assignedDriver && typeof vehicle.assignedDriver === 'object' && !(vehicle.assignedDriver instanceof ObjectId)) ? vehicle.assignedDriver : null;
+    const driverEmail = vehicle.assignedDriverEmail || vehicle.driverEmail || assignedDriverObj?.email;
+    const driverCustomId = (assignedDriverObj ? (assignedDriverObj.driverId || (assignedDriverObj._id && String(assignedDriverObj._id))) : vehicle.assignedDriver) || vehicle.driverId || vehicle.assignedDriverId;
+    const driverName = vehicle.assignedDriverName || vehicle.driverName || assignedDriverObj?.name;
 
     // ========================================================================
     // LOOKUP DRIVER BY EMAIL (Primary method - handles nested structure)
@@ -1157,25 +1393,22 @@ router.post('/assign-optimized-route', verifyToken, async (req, res) => {
     const existingTrips = await req.db.collection('roster-assigned-trips').find({
       vehicleId: new ObjectId(vehicleId),
       status: { $in: ['assigned', 'started', 'in_progress'] },
-      scheduledDate: today
+      scheduledDate: { $in: dateList }
     }).toArray();
     
-    const totalSeats = vehicle.capacity?.passengers || 
-                       vehicle.seatCapacity || 
-                       vehicle.seatingCapacity || 
-                       4;
+    const totalSeats = vehicleTotalSeats(vehicle);
     
     // ✅ FIX: Extract unique customer emails from trips
-    const uniqueCustomers = new Set();
+    // seats in use = the busiest date/trip type of this vehicle; customers being re-assigned do not count twice
+    const reassignedRosterIds = new Set(route.map(r => String(r.rosterId)));
+    const seatsByDateAndType = {};
     existingTrips.forEach(trip => {
-      trip.stops?.forEach(stop => {
-        if (stop.type === 'pickup' && stop.customer?.email) {
-          uniqueCustomers.add(stop.customer.email);
-        }
-      });
+      if ((trip.rosterIds || []).some(id => reassignedRosterIds.has(String(id)))) return;
+      const key = trip.scheduledDate + '|' + trip.tripType;
+      seatsByDateAndType[key] = seatsByDateAndType[key] || new Set();
+      tripCustomerEmails(trip).forEach(e => seatsByDateAndType[key].add(e));
     });
-    
-    const currentAssignedCount = uniqueCustomers.size; // ✅ FIXED: Count unique customers
+    const currentAssignedCount = Math.max(0, ...Object.values(seatsByDateAndType).map(set => set.size));
     const newCustomersCount = route.length;
     const availableSeats = totalSeats - 1 - currentAssignedCount; // -1 for driver
     
@@ -1222,7 +1455,6 @@ router.post('/assign-optimized-route', verifyToken, async (req, res) => {
     // STEP 4: Check TIME SLOT conflicts for consecutive trip validation
     // ========================================================================
     console.log('\n⏰ CHECKING TIME SLOT CONFLICTS (CONSECUTIVE TRIPS SUPPORT)...');
-    const scheduledDate = new Date().toISOString().split('T')[0];
     
     // Helper to parse time in 24-hour format
     const parseTime = (timeStr) => {
@@ -1241,42 +1473,12 @@ router.post('/assign-optimized-route', verifyToken, async (req, res) => {
       return 0;
     };
     
-    for (const stop of route) {
-      const stopStartMinutes = parseTime(stop.pickupTime || '00:00');
-      const stopEndMinutes = parseTime(stop.estimatedTime || stop.pickupTime || '00:00');
-      
-      const conflicts = await req.db.collection('roster-assigned-trips').find({
-        vehicleId: new ObjectId(vehicleId),
-        scheduledDate: scheduledDate,
-        status: { $in: ['assigned', 'started', 'in_progress'] }
-      }).toArray();
-      
-      for (const existingTrip of conflicts) {
-        const existingStartMinutes = parseTime(existingTrip.startTime);
-        const existingEndMinutes = parseTime(existingTrip.endTime);
-        
-        const hasOverlap = (stopStartMinutes < existingEndMinutes) && (stopEndMinutes > existingStartMinutes);
-        
-        if (hasOverlap) {
-          await session.abortTransaction();
-          console.log(`\n❌ TIME SLOT CONFLICT DETECTED`);
-          console.log(`   Stop #${stop.sequence}: ${stop.customerName}`);
-          console.log(`   Conflicting with: ${existingTrip.tripNumber}`);
-          return res.status(409).json({
-            success: false,
-            message: `Time slot conflict detected for ${stop.customerName}`,
-            error: 'TIME_SLOT_CONFLICT',
-            conflictingTrip: existingTrip
-          });
-        }
-      }
-    }
-    
-    console.log(`   ✅ No time slot conflicts found - consecutive trips allowed`);
+    // (the old "today only" time-slot check was removed: the day-by-day driver/vehicle check above covers every assigned date)
     
     const results = [];
     const errors = [];
     const rosterIds = [];
+    const rosterTypeByRosterId = {}; // roster type as stored on the roster document
     const notificationResults = {
       customers: 0,
       driver: 0,
@@ -1406,6 +1608,7 @@ router.post('/assign-optimized-route', verifyToken, async (req, res) => {
         // ====================================================================
         console.log(`   ✅ Adding roster ${rosterId} to rosterIds array for update`);
         rosterIds.push(new ObjectId(rosterId));
+        rosterTypeByRosterId[String(rosterId)] = existingRoster.rosterType;
         console.log(`   📊 rosterIds array now has ${rosterIds.length} roster(s)`);
         
         const roster = existingRoster; // Use the existing roster
@@ -1509,7 +1712,7 @@ router.post('/assign-optimized-route', verifyToken, async (req, res) => {
         type: 'drop',
         location: {
           address: firstRoster?.officeLocation || 'Office',
-          coordinates: firstRoster?.officeLocationCoordinates || null
+          coordinates: toLngLat(firstRoster?.officeLocationCoordinates || firstRoster?.locations?.office?.coordinates)
         },
         estimatedTime: lastStop.estimatedTime,
         passengers: stops.map(s => s.customer.name),
@@ -1534,6 +1737,43 @@ router.post('/assign-optimized-route', verifyToken, async (req, res) => {
     const allCreatedTripNumbers = [];
     let totalTripsCreated = 0;
     let totalTripsFailed = 0;
+
+    // ✅ Driver/vehicle time feasibility: existing trips of this vehicle AND this driver in the date range (re-assigning the same rosters is not a conflict)
+    const bufferMinutes = await getDriverBufferMinutes(req.db);
+    const newRosterIdSet = new Set(rosterIds.map(id => String(id)));
+    const existingTripsInRange = (await req.db.collection('roster-assigned-trips').find({
+      $or: [{ vehicleId: new ObjectId(vehicleId) }, { driverId: new ObjectId(driverIdString) }],
+      status: { $in: ['assigned', 'started', 'in_progress'] },
+      scheduledDate: { $in: dateList }
+    }, { session }).toArray()).filter(t => !(t.rosterIds || []).some(id => newRosterIdSet.has(String(id))));
+    const timeConflictsFound = [];
+
+    // ✅ One vehicle carries ONE company: the new customers must share a company and match what the vehicle already carries
+    const companyOfEmail = (email) => (email && String(email).includes('@')) ? String(email).split('@')[1].toLowerCase().split('.')[0] : null;
+    const newCompanies = new Set(route.map(r => companyOfEmail(r.customerEmail)).filter(Boolean));
+    if (newCompanies.size > 1) {
+      await session.abortTransaction();
+      return res.status(400).json({
+        success: false,
+        error: 'MIXED_COMPANIES',
+        message: `Customers from different companies cannot share a vehicle (${Array.from(newCompanies).join(', ')})`
+      });
+    }
+    const vehicleCompanies = new Set();
+    existingTripsInRange
+      .filter(t => String(t.vehicleId) === String(vehicleId))
+      .forEach(t => tripCustomerEmails(t).forEach(e => { const c = companyOfEmail(e); if (c) vehicleCompanies.add(c); }));
+    if (vehicleCompanies.size > 0 && newCompanies.size > 0 && !Array.from(newCompanies).every(c => vehicleCompanies.has(c))) {
+      await session.abortTransaction();
+      return res.status(409).json({
+        success: false,
+        error: 'COMPANY_MISMATCH',
+        message: `This vehicle already carries ${Array.from(vehicleCompanies).join(', ')}; it cannot also take ${Array.from(newCompanies).join(', ')}`
+      });
+    }
+
+    // the first roster is read once here instead of once per trip
+    const firstRosterDoc = await req.db.collection('rosters').findOne({ _id: rosterIds[0] });
     
     // ✅ NEW: Loop through each date
 for (let dateIndex = 0; dateIndex < dateList.length; dateIndex++) {
@@ -1550,7 +1790,7 @@ for (let dateIndex = 0; dateIndex < dateList.length; dateIndex++) {
   // Extract all unique roster types from the route
   const rosterTypes = new Set();
   for (const stop of route) {
-    const stopRosterType = stop.rosterType || 'both';
+    const stopRosterType = rosterTypeByRosterId[String(stop.rosterId)] || stop.rosterType || 'both';
     rosterTypes.add(stopRosterType);
     console.log(`   - ${stop.customerName}: ${stopRosterType}`);
   }
@@ -1636,6 +1876,7 @@ for (let dateIndex = 0; dateIndex < dateList.length; dateIndex++) {
     
     // ✅ NEW: Build stops array based on trip type
     let tripStops = [];
+    let officeArrivalTime = null; // morning trips: the time the group has to be at the office
     
     if (isMorningTrip) {
       // ========================================
@@ -1654,9 +1895,9 @@ for (let dateIndex = 0; dateIndex < dateList.length; dateIndex++) {
       }
       
       // Add office drop as final stop
-      const firstRoster = await req.db.collection('rosters').findOne(
-        { _id: rosterIds[0] }
-      );
+      const firstRoster = firstRosterDoc;
+      const officeTimeMatch = String(firstRoster?.startTime || '').match(/^(\d{1,2}):(\d{2})/);
+      if (officeTimeMatch) officeArrivalTime = officeTimeMatch[1].padStart(2, '0') + ':' + officeTimeMatch[2];
       
       tripStops.push({
         stopId: `office-drop-${vehicleId}`,
@@ -1664,9 +1905,9 @@ for (let dateIndex = 0; dateIndex < dateList.length; dateIndex++) {
         type: 'drop',
         location: {
           address: firstRoster?.officeLocation || 'Office',
-          coordinates: firstRoster?.officeLocationCoordinates || null
+          coordinates: toLngLat(firstRoster?.officeLocationCoordinates || firstRoster?.locations?.office?.coordinates)
         },
-        estimatedTime: stops[stops.length - 1]?.estimatedTime || startTime,
+        estimatedTime: officeArrivalTime || stops[stops.length - 1]?.estimatedTime || startTime,
         passengers: tripStops.map(s => s.customer.name),
         status: 'pending'
       });
@@ -1678,9 +1919,7 @@ for (let dateIndex = 0; dateIndex < dateList.length; dateIndex++) {
       console.log('   📍 Route: Office → Home (Evening Drop)');
       
       // Add office pickup as first stop
-      const firstRoster = await req.db.collection('rosters').findOne(
-        { _id: rosterIds[0] }
-      );
+      const firstRoster = firstRosterDoc;
       
       const logoutTime = firstRoster?.endTime || firstRoster?.logoutTime || '18:00';
       
@@ -1690,7 +1929,7 @@ for (let dateIndex = 0; dateIndex < dateList.length; dateIndex++) {
         type: 'pickup',
         location: {
           address: firstRoster?.officeLocation || 'Office',
-          coordinates: firstRoster?.officeLocationCoordinates || null
+          coordinates: toLngLat(firstRoster?.officeLocationCoordinates || firstRoster?.locations?.office?.coordinates)
         },
         estimatedTime: logoutTime,
         passengers: stops.filter(s => s.type === 'pickup').map(s => s.customer.name),
@@ -1701,14 +1940,17 @@ for (let dateIndex = 0; dateIndex < dateList.length; dateIndex++) {
       const pickupStops = stops.filter(s => s.type === 'pickup');
       
       // Reverse the order: Drop nearest customer first, farthest last
+      let eveningClock = parseTime(logoutTime); // running clock: every drop adds the leg from the previous stop
       for (let i = pickupStops.length - 1; i >= 0; i--) {
         const originalStop = pickupStops[i];
         
         // Calculate evening drop time (add travel time progressively)
-        const baseTime = parseTime(logoutTime);
-        const travelTimeFromOffice = Math.round(originalStop.distanceToOffice * 3); // 3 min per km
-        const dropTimeMinutes = baseTime + travelTimeFromOffice;
-        const dropTime = `${String(Math.floor(dropTimeMinutes / 60)).padStart(2, '0')}:${String(dropTimeMinutes % 60).padStart(2, '0')}`;
+        const legKm = (i === pickupStops.length - 1)
+          ? (originalStop.distanceToOffice || 0)                 // office -> nearest customer
+          : (pickupStops[i + 1].distanceFromPrevious || 0);      // previous customer -> this customer
+        eveningClock += Math.round(legKm * 3); // 3 min per km
+        const dropTimeMinutes = eveningClock;
+        const dropTime = `${String(Math.floor(dropTimeMinutes / 60) % 24).padStart(2, '0')}:${String(dropTimeMinutes % 60).padStart(2, '0')}`;
         
         tripStops.push({
           stopId: new ObjectId().toString(),
@@ -1775,9 +2017,7 @@ for (let dateIndex = 0; dateIndex < dateList.length; dateIndex++) {
       
     } else {
       // Evening trip: Start at office logout time, end late
-      const firstRoster = await req.db.collection('rosters').findOne(
-        { _id: rosterIds[0] }
-      );
+      const firstRoster = firstRosterDoc;
       
       tripStartTime = extractSafeTime(firstRoster?.endTime || firstRoster?.logoutTime || '18:00', '18:00');
       tripEndTime = extractSafeTime(tripStops[tripStops.length - 1]?.estimatedTime, '20:00');
@@ -1791,7 +2031,7 @@ for (let dateIndex = 0; dateIndex < dateList.length; dateIndex++) {
     const tripData = {
       // Trip Identification
       tripNumber: tripNumber,
-      tripGroupId: tripGroupId,
+      tripGroupId: existingTripsInRange.some(t => t.tripGroupId === tripGroupId) ? tripGroupId + '-' + String(tripStartTime).replace(':', '') : tripGroupId,
       tripType: tripType,
       tripTime: tripTime, // ✅ NEW: 'morning' or 'evening'
       isReturnTrip: !isMorningTrip, // ✅ NEW: true for evening trips
@@ -1807,6 +2047,7 @@ for (let dateIndex = 0; dateIndex < dateList.length; dateIndex++) {
       
       // Schedule
       scheduledDate: scheduledDateForTrip,
+      endsAtOffice: isMorningTrip && !!officeArrivalTime, // endTime = arrival at the office (new trips)
       startTime: tripStartTime,
       endTime: tripEndTime,
       
@@ -1843,6 +2084,21 @@ for (let dateIndex = 0; dateIndex < dateList.length; dateIndex++) {
       updatedAt: new Date()
     };
     
+    // ====================================================================
+    // ⏱️ TIME CHECK: can this driver/vehicle make it, given its other trips that day?
+    // ====================================================================
+    const conflictsForTrip = findTimeConflicts(
+      tripWindow(tripData),
+      existingTripsInRange.filter(t => t.scheduledDate === scheduledDateForTrip),
+      bufferMinutes
+    );
+    if (conflictsForTrip.length > 0) {
+      conflictsForTrip.forEach(c => timeConflictsFound.push({ ...c, date: scheduledDateForTrip, tripType }));
+      console.log(`   ❌ Time conflict on ${scheduledDateForTrip} (${tripType}): ${conflictsForTrip[0].message}`);
+      continue;
+    }
+
+
     // ====================================================================
     // INSERT TRIP FOR THIS DATE
     // ====================================================================
@@ -1907,6 +2163,19 @@ for (let dateIndex = 0; dateIndex < dateList.length; dateIndex++) {
   
 } // ✅ END OF DATE LOOP
     
+    if (timeConflictsFound.length > 0) {
+      await session.abortTransaction();
+      console.log(`❌ ASSIGNMENT REFUSED - ${timeConflictsFound.length} driver/vehicle time conflict(s)`);
+      return res.status(409).json({
+        success: false,
+        error: 'DRIVER_TIME_CONFLICT',
+        message: `Driver/vehicle is not available in time: ${timeConflictsFound[0].date}: ${timeConflictsFound[0].message}`,
+        bufferMinutes,
+        conflictCount: timeConflictsFound.length,
+        conflicts: timeConflictsFound.slice(0, 20)
+      });
+    }
+
     console.log('\n' + '='.repeat(80));
     console.log('📊 TRIP CREATION SUMMARY FOR DATE RANGE');
     console.log('='.repeat(80));
@@ -1963,7 +2232,7 @@ const updateResult = await req.db.collection('rosters').updateOne(
       
       morningTripIds: morningTripIds, // ✅ NEW
       eveningTripIds: eveningTripIds, // ✅ NEW
-      hasBothTrips: needsBothTrips,   // ✅ NEW
+      hasBothTrips: route.every((r) => (r.rosterType || 'both') === 'both'), // mixed types are rejected earlier, so this equals commonRosterType === 'both'
       
       assignedDateRange: {
         startDate: assignStartDate,
@@ -2004,12 +2273,91 @@ const updateResult = await req.db.collection('rosters').updateOne(
     
     console.log(`   ✅ Updated ${rosterIds.length} roster(s) with trip information`);
     
+    // ========================================================================
+    // STEP 12: COMMIT TRANSACTION (nobody is notified until the data is saved)
+    // ========================================================================
+    await session.commitTransaction();
+    
+    try {
+    // ========================================================================
+    // STEP 11 (runs AFTER the commit so it sees the new trips): Update vehicle's assigned customers list - ✅ FIXED VERSION
+    // ========================================================================
+    
+    // ✅ FIX: Get current unique customer emails from trips
+    const updatedExistingTrips = await req.db.collection('roster-assigned-trips').find({
+      vehicleId: new ObjectId(vehicleId),
+      status: { $in: ['assigned', 'started', 'in_progress'] },
+      scheduledDate: { $in: dateList }
+    }).toArray();
+    
+    const updatedUniqueCustomers = new Set();
+    updatedExistingTrips.forEach(trip => {
+      trip.stops?.forEach(stop => {
+        if (stop.customer?.email) {
+          updatedUniqueCustomers.add(stop.customer.email);
+        }
+      });
+    });
+    
+    // ✅ Build assignedCustomers array with unique emails
+    const assignedCustomersArray = Array.from(updatedUniqueCustomers).map(email => {
+      // Find corresponding stop data
+      const stopData = route.find(r => r.customerEmail === email);
+      return {
+        email: email,
+        tripId: firstTripId,
+        tripIds: allCreatedTripIds,
+        tripNumber: firstTripNumber,
+        tripNumbers: allCreatedTripNumbers,
+        dateRange: {
+          startDate: assignStartDate,
+          endDate: assignEndDate,
+          totalDays: dateList.length
+        },
+        customerId: stopData?.customerId,
+        customerName: stopData?.customerName,
+        sequence: stopData?.sequence,
+        pickupTime: stopData?.pickupTime,
+        readyByTime: stopData?.readyByTime,
+        distanceToOffice: stopData?.distanceToOffice,
+        assignedAt: new Date()
+      };
+    });
+    
+    await req.db.collection('vehicles').updateOne(
+      { _id: new ObjectId(vehicleId) },
+      {
+        $set: {
+          assignedCustomers: assignedCustomersArray, // ✅ FIXED: Unique customers with full data
+          lastRouteAssignment: new Date(),
+          currentRouteDistance: totalDistance,
+          currentRouteTime: totalTime,
+          currentTripId: firstTripId,
+          currentTripIds: allCreatedTripIds,
+          currentTripNumber: firstTripNumber,
+          currentTripNumbers: allCreatedTripNumbers,
+          assignedDateRange: {
+            startDate: assignStartDate,
+            endDate: assignEndDate,
+            totalDays: dateList.length
+          },
+          updatedAt: new Date()
+        }
+      },
+    );
+    
+    } catch (vehicleUpdateError) {
+      console.error('⚠️  Vehicle summary update failed (trips are already saved):', vehicleUpdateError.message);
+    }
+
     // ====================================================================
 // 🆕 STEP 8: SEND CUSTOMER NOTIFICATIONS (ENHANCED FOR ALL TRIP TYPES)
 // ====================================================================
 console.log('\n' + '='.repeat(80));
 console.log('📧 SENDING CUSTOMER NOTIFICATIONS');
 console.log('='.repeat(80));
+
+const logoutTimeText = (String(firstRosterDoc?.endTime || firstRosterDoc?.logoutTime || '').match(/^(\d{1,2}):(\d{2})/) || []).slice(1).map((x, i) => i === 0 ? x.padStart(2, '0') : x).join(':') || 'Check your roster';
 
 for (const stop of stops) {
   if (stop.type !== 'pickup') continue; // Skip office drop
@@ -2068,7 +2416,7 @@ for (const stop of stops) {
             `   BE READY BY: ${stop.readyByTime}\n` +
             `   Sequence: #${stop.sequence}\n\n` +
             `🌆 EVENING TRIP (Drop):\n` +
-            `   Office Logout Time: Check your roster\n` +
+            `   Office Logout Time: ${logoutTimeText}\n` +
             `   Same vehicle will drop you home\n\n` +
             `Distance to office: ${(stop.distanceToOffice || 0).toFixed(1)} km\n\n` +
             `✅ Same driver & vehicle for both trips!\n` +
@@ -2100,7 +2448,7 @@ for (const stop of stops) {
             `Trip: ${firstTripNumber}\n` +
             `Date Range: ${assignStartDate} to ${assignEndDate} (${dateList.length} day${dateList.length > 1 ? 's' : ''})\n\n` +
             `🌆 EVENING DROP:\n` +
-            `   Office Logout Time: Check your roster\n` +
+            `   Office Logout Time: ${logoutTimeText}\n` +
             `   Driver will pick you from office\n` +
             `   Estimated drop time: ${stop.pickupTime || 'TBD'}\n` +
             `   Sequence: #${stop.sequence}\n\n` +
@@ -2210,17 +2558,26 @@ for (const stop of stops) {
           });
           
           const firstStop = stops[0];
-          const officeTime = stops[stops.length - 1]?.estimatedTime || startTime || '09:00';
+          // Real office time from the roster (the last stop only carries the last PICKUP time).
+          // Morning trips: arrival at the office. Evening-only rosters: the office departure (logout) time.
+          const hhmmOf = (v) => { const m = String(v || '').match(/^(\d{1,2}):(\d{2})/); return m ? m[1].padStart(2, '0') + ':' + m[2] : null; };
+          const driverRosterType = rosterTypeByRosterId[String(rosterIds[0])] || 'both';
+          const isEveningOnlyRoute = ['logout', 'drop'].includes(driverRosterType);
+          const officeTime = isEveningOnlyRoute
+            ? (hhmmOf(firstRosterDoc?.endTime || firstRosterDoc?.logoutTime) || '18:00')
+            : (hhmmOf(firstRosterDoc?.startTime) || stops[stops.length - 1]?.estimatedTime || startTime || '09:00');
+          const officeTimeLabel = isEveningOnlyRoute ? 'Office Departure' : 'Office Arrival';
+          const startByTime = isEveningOnlyRoute ? officeTime : (firstStop?.readyByTime || firstStop?.pickupTime);
           
           const notificationTitle = `New Route - ${route.length} Pickups Assigned`;
           const notificationBody = `You have ${route.length} customers on your route.\n\n` +
                 `Trip: ${firstTripNumber}\n` +
                 `Date Range: ${assignStartDate} to ${assignEndDate} (${dateList.length} day${dateList.length > 1 ? 's' : ''})\n` +
                 `Vehicle: ${vehicle?.registrationNumber || vehicle?.name || 'Vehicle'}\n\n` +
-                `START BY: ${firstStop?.readyByTime || firstStop?.pickupTime}\n\n` +
+                `START BY: ${startByTime}\n\n` +
                 `PICKUP SEQUENCE:\n${routeDetails}\n` +
-                `Office Arrival: ${officeTime}\n` +
-                `Total Distance: ${totalDistance} km\n` +
+                `${officeTimeLabel}: ${officeTime}\n` +
+                `Total Distance: ${Number(totalDistance || 0).toFixed(1)} km\n` +
                 `Total Time: ${totalTime} mins\n\n` +
                 `Check the app for detailed route information.`;
           
@@ -2240,8 +2597,9 @@ for (const stop of stops) {
               totalDays: dateList.length
             },
             trackingRequired: true,
-            startByTime: firstStop.readyByTime,
-            officeArrivalTime: officeTime,
+            startByTime: startByTime,
+            officeArrivalTime: isEveningOnlyRoute ? null : officeTime,
+            officeDepartureTime: isEveningOnlyRoute ? officeTime : null,
             collection: 'roster-assigned-trips',
             type: 'driver_route_assignment'
           };
@@ -2282,7 +2640,7 @@ for (const stop of stops) {
               `Driver: ${driver?.name || 'Unknown'}\n` +
               `Vehicle: ${vehicle?.registrationNumber || vehicle?.vehicleNumber || 'Unknown'}\n` +
               `Total Customers: ${route.length}\n` +
-              `Total Distance: ${totalDistance} km\n` +
+              `Total Distance: ${Number(totalDistance || 0).toFixed(1)} km\n` +
               `Total Time: ${totalTime} mins\n` +
               `First Pickup: ${route[0]?.pickupTime}\n` +
               `Total Trips Created: ${totalTripsCreated}\n\n` +
@@ -2389,79 +2747,6 @@ for (const stop of stops) {
         notificationResults.admin = 0;
       }
     }
-    
-    // ========================================================================
-    // STEP 11: Update vehicle's assigned customers list - ✅ FIXED VERSION
-    // ========================================================================
-    
-    // ✅ FIX: Get current unique customer emails from trips
-    const updatedExistingTrips = await req.db.collection('roster-assigned-trips').find({
-      vehicleId: new ObjectId(vehicleId),
-      status: { $in: ['assigned', 'started', 'in_progress'] },
-      scheduledDate: today
-    }).toArray();
-    
-    const updatedUniqueCustomers = new Set();
-    updatedExistingTrips.forEach(trip => {
-      trip.stops?.forEach(stop => {
-        if (stop.type === 'pickup' && stop.customer?.email) {
-          updatedUniqueCustomers.add(stop.customer.email);
-        }
-      });
-    });
-    
-    // ✅ Build assignedCustomers array with unique emails
-    const assignedCustomersArray = Array.from(updatedUniqueCustomers).map(email => {
-      // Find corresponding stop data
-      const stopData = route.find(r => r.customerEmail === email);
-      return {
-        email: email,
-        tripId: firstTripId,
-        tripIds: allCreatedTripIds,
-        tripNumber: firstTripNumber,
-        tripNumbers: allCreatedTripNumbers,
-        dateRange: {
-          startDate: assignStartDate,
-          endDate: assignEndDate,
-          totalDays: dateList.length
-        },
-        customerId: stopData?.customerId,
-        customerName: stopData?.customerName,
-        sequence: stopData?.sequence,
-        pickupTime: stopData?.pickupTime,
-        readyByTime: stopData?.readyByTime,
-        distanceToOffice: stopData?.distanceToOffice,
-        assignedAt: new Date()
-      };
-    });
-    
-    await req.db.collection('vehicles').updateOne(
-      { _id: new ObjectId(vehicleId) },
-      {
-        $set: {
-          assignedCustomers: assignedCustomersArray, // ✅ FIXED: Unique customers with full data
-          lastRouteAssignment: new Date(),
-          currentRouteDistance: totalDistance,
-          currentRouteTime: totalTime,
-          currentTripId: firstTripId,
-          currentTripIds: allCreatedTripIds,
-          currentTripNumber: firstTripNumber,
-          currentTripNumbers: allCreatedTripNumbers,
-          assignedDateRange: {
-            startDate: assignStartDate,
-            endDate: assignEndDate,
-            totalDays: dateList.length
-          },
-          updatedAt: new Date()
-        }
-      },
-      { session }
-    );
-    
-    // ========================================================================
-    // STEP 12: COMMIT TRANSACTION
-    // ========================================================================
-    await session.commitTransaction();
     
     // ========================================================================
     // STEP 13: VERIFICATION
@@ -2580,7 +2865,7 @@ for (const stop of stops) {
     });
     
   } catch (error) {
-    await session.abortTransaction();
+    try { if (session.inTransaction()) await session.abortTransaction(); } catch (abortError) { /* already finished */ }
     console.error('\n' + '❌'.repeat(40));
     console.error('GROUPED ROUTE ASSIGNMENT WITH RECURRING TRIPS FAILED');
     console.error('❌'.repeat(40));

@@ -65,6 +65,8 @@ class PermissionService {
     'tt_tour_packages': 'tt_tour_packages',
     'tt_custom_quotes': 'tt_custom_quotes',
     'tt_sales_leads': 'tt_sales_leads',
+    'tt_wa_leads': 'tt_wa_leads',
+    'tt_wa_agent': 'tt_wa_agent',
     'tt_manual_leads': 'tt_manual_leads',
     'tt_careers': 'tt_careers',
     'customer_analytics': 'customer_analytics_al',

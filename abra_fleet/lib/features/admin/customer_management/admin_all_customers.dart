@@ -59,6 +59,10 @@ class _AdminAllCustomersPageState extends State<AdminAllCustomersPage> {
   Map<String, dynamic> _activeFilters = {};
   List<CustomerEntity> _allCustomers = [];
 
+  // Pagination state
+  int _currentPage = 1;
+  final int _rowsPerPage = 10;
+
   final List<String> _departments = [
     'All Departments',
     'Engineering',
@@ -232,6 +236,7 @@ class _AdminAllCustomersPageState extends State<AdminAllCustomersPage> {
                             if (filterData['localArea'] != null && filterData['localArea'].toString().isNotEmpty) {
                               _activeFilters['area'] = filterData['localArea'];
                             }
+                            _currentPage = 1;
                           });
                           _refreshCustomers();
                         },
@@ -381,6 +386,7 @@ class _AdminAllCustomersPageState extends State<AdminAllCustomersPage> {
     setState(() {
       _activeFilters = filters;
       _showFilterOverlay = false;
+      _currentPage = 1;
     });
   }
 
@@ -388,6 +394,7 @@ class _AdminAllCustomersPageState extends State<AdminAllCustomersPage> {
     setState(() {
       _activeFilters = {};
       _showFilterOverlay = false;
+      _currentPage = 1;
     });
   }
 
@@ -936,6 +943,7 @@ class _AdminAllCustomersPageState extends State<AdminAllCustomersPage> {
                     selectedStatus = 'All';
                     selectedDepartment = 'All Departments';
                     searchController.clear();
+                    _currentPage = 1;
                   });
                 },
                 icon: const Icon(Icons.refresh, size: 18),
@@ -1004,7 +1012,10 @@ class _AdminAllCustomersPageState extends State<AdminAllCustomersPage> {
                     );
                   }).toList(),
                   onChanged: (value) {
-                    setState(() => selectedOrganization = value);
+                    setState(() {
+                      selectedOrganization = value;
+                      _currentPage = 1;
+                    });
                   },
                 ),
               ),
@@ -1187,7 +1198,10 @@ class _AdminAllCustomersPageState extends State<AdminAllCustomersPage> {
             ),
           ],
           onChanged: (value) {
-            setState(() => selectedStatus = value);
+            setState(() {
+              selectedStatus = value;
+              _currentPage = 1;
+            });
           },
         ),
       ],
@@ -1231,7 +1245,10 @@ class _AdminAllCustomersPageState extends State<AdminAllCustomersPage> {
             );
           }).toList(),
           onChanged: (value) {
-            setState(() => selectedDepartment = value);
+            setState(() {
+              selectedDepartment = value;
+              _currentPage = 1;
+            });
           },
         ),
       ],
@@ -1267,18 +1284,31 @@ class _AdminAllCustomersPageState extends State<AdminAllCustomersPage> {
               ? IconButton(
                   icon: const Icon(Icons.clear),
                   onPressed: () {
-                    setState(() => searchController.clear());
+                    setState(() {
+                      searchController.clear();
+                      _currentPage = 1;
+                    });
                   },
                 )
               : null,
           ),
-          onChanged: (value) => setState(() {}),
+          onChanged: (value) => setState(() {
+            _currentPage = 1;
+          }),
         ),
       ],
     );
   }
 
   Widget _buildCustomerDirectory(List<CustomerEntity> customers) {
+    final totalItems = customers.length;
+    final totalPages = totalItems == 0 ? 1 : ((totalItems - 1) ~/ _rowsPerPage) + 1;
+    if (_currentPage > totalPages) _currentPage = totalPages;
+    if (_currentPage < 1) _currentPage = 1;
+    final startIndex = (_currentPage - 1) * _rowsPerPage;
+    final endIndex = (startIndex + _rowsPerPage) > totalItems ? totalItems : startIndex + _rowsPerPage;
+    final pagedCustomers = totalItems == 0 ? <CustomerEntity>[] : customers.sublist(startIndex, endIndex);
+
     return Container(
       decoration: BoxDecoration(
         color: Colors.white,
@@ -1731,7 +1761,7 @@ class _AdminAllCustomersPageState extends State<AdminAllCustomersPage> {
                             DataColumn(label: SizedBox(width: 100, child: Padding(padding: EdgeInsets.symmetric(horizontal: 6), child: Text('STATUS')))),
                             DataColumn(label: SizedBox(width: 120, child: Padding(padding: EdgeInsets.symmetric(horizontal: 6), child: Text('ACTIONS')))),
                           ],
-                          rows: customers.map((customer) {
+                          rows: pagedCustomers.map((customer) {
                             final hasEmpId = customer.employeeId != null && 
                                              customer.employeeId!.trim().isNotEmpty && 
                                              customer.employeeId!.trim().toUpperCase() != 'N/A';
@@ -2044,9 +2074,92 @@ class _AdminAllCustomersPageState extends State<AdminAllCustomersPage> {
                 ),                  // RawScrollbar (horizontal)
               ),                    // ScrollConfiguration
             ),                      // Container
+
+          if (totalItems > 0)
+            _buildPaginationBar(
+              startIndex: startIndex,
+              endIndex: endIndex,
+              totalItems: totalItems,
+              totalPages: totalPages,
+            ),
           ],                      // Column children
         ),                        // Column
       );                          // outer Container
+  }
+
+  Widget _buildPaginationBar({
+    required int startIndex,
+    required int endIndex,
+    required int totalItems,
+    required int totalPages,
+  }) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 14),
+      decoration: const BoxDecoration(
+        border: Border(
+          top: BorderSide(color: Color(0xFFE2E8F0), width: 1.5),
+        ),
+        borderRadius: BorderRadius.only(
+          bottomLeft: Radius.circular(10),
+          bottomRight: Radius.circular(10),
+        ),
+      ),
+      child: Wrap(
+        alignment: WrapAlignment.spaceBetween,
+        crossAxisAlignment: WrapCrossAlignment.center,
+        spacing: 12,
+        runSpacing: 8,
+        children: [
+          Text(
+            'Showing ${startIndex + 1}-$endIndex of $totalItems',
+            style: const TextStyle(
+              fontSize: 13,
+              color: Color(0xFF64748B),
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              IconButton.filledTonal(
+                onPressed: _currentPage > 1
+                    ? () => setState(() => _currentPage--)
+                    : null,
+                icon: const Icon(Icons.chevron_left, size: 18),
+                tooltip: 'Previous Page',
+                style: IconButton.styleFrom(
+                  backgroundColor: const Color(0xFFEFF6FF),
+                  foregroundColor: const Color(0xFF1A3FC4),
+                  padding: const EdgeInsets.all(6),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Text(
+                'Page $_currentPage of $totalPages',
+                style: const TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
+                  color: Color(0xFF0F2557),
+                ),
+              ),
+              const SizedBox(width: 10),
+              IconButton.filledTonal(
+                onPressed: _currentPage < totalPages
+                    ? () => setState(() => _currentPage++)
+                    : null,
+                icon: const Icon(Icons.chevron_right, size: 18),
+                tooltip: 'Next Page',
+                style: IconButton.styleFrom(
+                  backgroundColor: const Color(0xFFEFF6FF),
+                  foregroundColor: const Color(0xFF1A3FC4),
+                  padding: const EdgeInsets.all(6),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
   }
 
   Widget _buildStatusBadge(String status) {
@@ -2232,6 +2345,7 @@ class _AdminAllCustomersPageState extends State<AdminAllCustomersPage> {
                       selectedOrganization = 'All Organizations';
                       selectedStatus = 'All';
                       selectedDepartment = 'All Departments';
+                      _currentPage = 1;
                     });
                   },
                 ),

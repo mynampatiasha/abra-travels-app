@@ -293,7 +293,7 @@ async function generateChallanPDF(challan) {
       doc.fontSize(9)
          .fillColor('#555555')
          .font('Helvetica')
-         .text('ABRA Travels', 40, 100)
+         .text('Corporate Travels', 40, 100)
          .text('Bangalore, Karnataka, India', 40, 113)
          .text('GST: 29AABCT1332L1ZM', 40, 126)
          .text('Contact: +91 88672 88076', 40, 139);
@@ -529,7 +529,7 @@ async function generateChallanPDF(challan) {
       doc.fontSize(6)
          .fillColor('#888888')
          .font('Helvetica')
-         .text('ABRA Travels | YOUR JOURNEY, OUR COMMITMENT', 40, footerY + 20, { align: 'center', width: 515 });
+         .text('Corporate Travels | YOUR JOURNEY, OUR COMMITMENT', 40, footerY + 20, { align: 'center', width: 515 });
       
       doc.end();
       
@@ -587,7 +587,7 @@ async function sendChallanEmail(challan, pdfPath) {
           <!-- Header -->
           <tr>
             <td style="background: linear-gradient(135deg, #3498db 0%, #2980b9 100%); color: white; padding: 35px; text-align: left;">
-              <h1 style="color: #ffffff; margin: 0 0 5px 0; font-size: 28px;">ABRA Travels</h1>
+              <h1 style="color: #ffffff; margin: 0 0 5px 0; font-size: 28px;">Corporate Travels</h1>
               <p style="color: #ffffff; margin: 0; letter-spacing: 1px; font-size: 13px;">YOUR JOURNEY, OUR COMMITMENT</p>
               <h2 style="margin: 20px 0 0 0; font-size: 24px; color: #ffffff;">📦 Delivery Challan</h2>
             </td>
@@ -677,7 +677,7 @@ async function sendChallanEmail(challan, pdfPath) {
               </p>
               
               <p style="font-size: 16px; font-weight: bold; color: #3498DB; text-align: center; margin: 25px 0;">
-                Thank you for choosing ABRA Travels! 🙏
+                Thank you for choosing Corporate Travels! 🙏
               </p>
               
             </td>
@@ -686,12 +686,12 @@ async function sendChallanEmail(challan, pdfPath) {
           <!-- Footer -->
           <tr>
             <td style="background-color: #2C3E50; color: #ffffff; padding: 30px 40px; text-align: center;">
-              <p style="margin: 0; font-weight: bold; font-size: 16px; color: #ffffff;">ABRA Travels</p>
+              <p style="margin: 0; font-weight: bold; font-size: 16px; color: #ffffff;">Corporate Travels</p>
               <p style="margin: 8px 0; font-style: italic; color: #ECF0F1; letter-spacing: 1px; font-size: 12px;">YOUR JOURNEY, OUR COMMITMENT</p>
               <p style="margin: 8px 0; color: #95A5A6; font-size: 12px;">📍 Bangalore, Karnataka, India</p>
               <p style="margin: 8px 0; color: #95A5A6; font-size: 12px;">📧 info@abratravels.com | 📱 +91 88672 88076</p>
               <p style="margin: 8px 0; color: #95A5A6; font-size: 12px;">🔖 GST: 29AABCT1332L1ZM</p>
-              <p style="margin-top: 25px; color: #7F8C8D; font-size: 11px;">© ${new Date().getFullYear()} ABRA Travels. All rights reserved.</p>
+              <p style="margin-top: 25px; color: #7F8C8D; font-size: 11px;">© ${new Date().getFullYear()} Corporate Travels. All rights reserved.</p>
             </td>
           </tr>
           
@@ -703,9 +703,9 @@ async function sendChallanEmail(challan, pdfPath) {
 </html>`;
   
   const mailOptions = {
-    from: `"ABRA Travels - Dispatch" <${process.env.SMTP_USER}>`,
+    from: `"Corporate Travels - Dispatch" <${process.env.SMTP_USER}>`,
     to: challan.customerEmail,
-    subject: `📦 Delivery Challan ${challan.challanNumber} - ABRA Travels`,
+    subject: `📦 Delivery Challan ${challan.challanNumber} - Corporate Travels`,
     html: emailHtml,
     attachments: [
       {

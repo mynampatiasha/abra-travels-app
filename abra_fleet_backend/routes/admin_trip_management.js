@@ -235,7 +235,7 @@ router.get('/dashboard', verifyToken, async (req, res) => {
 // @desc    Get filtered trips for CLIENT (auto-filtered by domain)
 // @access  Private (Client only)
 // ============================================================================
-router.get('/list', verifyToken, async (req, res) => {
+router.get('/client-domain/list', verifyToken, async (req, res) => {
   try {
     console.log('\n' + '='.repeat(80));
     console.log('📋 CLIENT TRIP LIST - FETCHING FILTERED TRIPS');
@@ -486,7 +486,7 @@ router.get('/list', verifyToken, async (req, res) => {
 // @desc    Get dashboard summary for CLIENT (auto-filtered by domain)
 // @access  Private (Client only)
 // ============================================================================
-router.get('/dashboard', verifyToken, async (req, res) => {
+router.get('/client-domain/dashboard', verifyToken, async (req, res) => {
   try {
     console.log('\n' + '='.repeat(80));
     console.log('📊 CLIENT TRIP DASHBOARD - FETCHING SUMMARY');
@@ -677,7 +677,7 @@ router.get('/client/:tripId/details', verifyToken, async (req, res) => {
 // @desc    Generate bulk report for CLIENT (auto-filtered by domain)
 // @access  Private (Client only)
 // ============================================================================
-router.get('/bulk-report', verifyToken, async (req, res) => {
+router.get('/client-domain/bulk-report', verifyToken, async (req, res) => {
   try {
     console.log('\n' + '='.repeat(70));
     console.log('📊 GENERATING CLIENT BULK TRIP REPORT');

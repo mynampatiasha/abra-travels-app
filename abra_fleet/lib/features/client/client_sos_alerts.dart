@@ -1565,7 +1565,7 @@ void _setupActiveSOSListener() {
                     ),
                     const SizedBox(height: 8),
                     const Text(
-                      'Your employee is in SAFE HANDS! 🤝 Abra Travels Management has immediately activated our emergency response protocol. Our dedicated team is actively coordinating with local authorities and emergency services to ensure your employee\'s safety and well-being. Rest assured, we are treating this with the highest priority and will keep you updated every step of the way.',
+                      'Your employee is in SAFE HANDS! 🤝 Corporate Travels has immediately activated our emergency response protocol. Our dedicated team is actively coordinating with local authorities and emergency services to ensure your employee\'s safety and well-being. Rest assured, we are treating this with the highest priority and will keep you updated every step of the way.',
                       style: TextStyle(
                         fontSize: 14,
                         color: Color(0xFF475569),

@@ -114,7 +114,6 @@ class _CustomerDashboardState extends State<CustomerDashboard> {
     super.initState();
     _initializeApp();
     _loadQuickStats();
-    _listenForSOSHistory();
     
     _setupNotificationListener();
     _loadUnreadCount();
@@ -522,8 +521,14 @@ class _CustomerDashboardState extends State<CustomerDashboard> {
         }
       }
       debugPrint('👤 User initialized: $_userName ($_userId)');
+      _listenForSOSHistory();
     } catch (e) {
       debugPrint('❌ Error initializing app: $e');
+      if (mounted) {
+        setState(() {
+          _sosHistoryLoading = false;
+        });
+      }
     }
   }
 
@@ -724,10 +729,18 @@ class _CustomerDashboardState extends State<CustomerDashboard> {
   }
 
   void _listenForSOSHistory() async {
-    if (token == null || token!.isEmpty || _userId == null) return;
+    if (token == null || token!.isEmpty || _userId == null) {
+      if (mounted) {
+        setState(() {
+          _sosHistoryLoading = false;
+        });
+      }
+      return;
+    }
 
     await _fetchSOSHistory();
 
+    _sosHistorySubscription?.cancel();
     _sosHistorySubscription = Stream.periodic(const Duration(seconds: 10))
         .asyncMap((_) => _fetchSOSHistory())
         .listen((_) {}, onError: (error) {
@@ -741,6 +754,11 @@ class _CustomerDashboardState extends State<CustomerDashboard> {
   Future<void> _fetchSOSHistory() async {
     if (!mounted || token == null || _userId == null) {
       debugPrint('❌ Cannot fetch SOS history: Missing required parameters');
+      if (mounted) {
+        setState(() {
+          _sosHistoryLoading = false;
+        });
+      }
       return;
     }
 
@@ -1212,7 +1230,7 @@ class _CustomerDashboardState extends State<CustomerDashboard> {
   Future<void> _launchEmail(BuildContext context) async {
     final String email = 'support@fleet.abra-travels.com';
     final String subject = 'Support Request';
-    final String body = 'Hello Abra Travels Support Team,\n\n';
+    final String body = 'Hello Corporate Travels Support Team,\n\n';
     
     try {
       final Uri emailUri = Uri(
@@ -1650,7 +1668,7 @@ void _showSOSSentConfirmation(List<Map<String, dynamic>> nearbyStations, {bool i
           '👤 Driver: *$driverName*\n\n'
           '📍 Track my ride in real time:\n'
           '$liveTrackingUrl\n\n'
-          'Powered by Abra Travels';
+          'Powered by Corporate Travels';
 
       // Open WhatsApp with message
       await _openWhatsAppWithMessage(message);
@@ -2898,7 +2916,7 @@ String _formatResolvedAt(DateTime dt) {
           const SizedBox(width: 12),
           Expanded(
             child: Text(
-              'Abra Travels',
+              'Corporate Travels',
               style: TextStyle(
                 fontWeight: FontWeight.bold,
                 fontSize: isSmallMobile ? 16 : isMobile ? 18 : 20,

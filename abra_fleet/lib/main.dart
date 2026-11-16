@@ -559,7 +559,7 @@ class _AbraFleetAppState extends State<AbraFleetApp> {
           child: Focus(
             autofocus: true,
             child: MaterialApp(
-              title: 'Abra Travels Management',
+              title: 'Corporate Travels',
               theme: AppTheme.lightTheme,
               navigatorKey: navigatorKey,  // ✅ Global navigator for FCM
               home: AuthWrapperWithFCM(

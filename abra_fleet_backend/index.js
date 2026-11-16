@@ -291,6 +291,7 @@ const adminClientsUnifiedRoutes = require('./routes/admin-clients-unified-test')
 const adminCustomersUnifiedRoutes = require('./routes/admin-customers-unified');
 const unifiedRegistrationRoutes = require('./routes/unified_registration');
 const rosterRoutes = require('./routes/roster_router');
+const placesRoutes = require('./routes/places_router'); // Google Places search proxy (key stays on server)
 const routeOptimizationRoutes = require('./routes/route_optimization_router');
 const { router: trackingRoutes } = require('./routes/tracking');
 const sosRoutes = require('./routes/sos_router');
@@ -729,6 +730,7 @@ console.log('✅ Trip verification routes mounted at /api/admin');
 const clientTripRoutes = require('./routes/client_trip_routes');
 
 // ✅ ROSTER ROUTES WITH SMART PERMISSION CHECKING
+app.use('/api/places', verifyJWT, placesRoutes);
 app.use('/api/roster', verifyJWT, rosterRoutes);
 
 app.use('/api/admin/vendors', verifyJWT, adminVendorRoutes);

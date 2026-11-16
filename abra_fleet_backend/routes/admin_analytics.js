@@ -289,7 +289,7 @@ router.get('/manpower-stats', async (req, res) => {
       db.collection('users').distinct('companyName', { role: 'customer' }).then(orgs => orgs.filter(org => org && org.trim()).length),
       
       // Count pending rosters
-      db.collection('rosters').countDocuments({ status: 'pending_assignment' }),
+      db.collection('rosters').countDocuments({ status: { $in: ['pending_assignment', 'pending', 'created'] }, $and: ['vehicleId', 'driverId', 'assignedVehicleId', 'assignedDriverId', 'tripId'].map(f => ({ $or: [{ [f]: { $exists: false } }, { [f]: null }, { [f]: '' }, { [f]: 'null' }] })) }), // same rule as the Pending Rosters screen
       
       // Count ongoing rosters
       db.collection('rosters').countDocuments({ status: { $in: ['approved', 'in_progress'] } }),

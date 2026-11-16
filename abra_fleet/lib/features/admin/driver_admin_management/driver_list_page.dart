@@ -68,6 +68,10 @@ class _DriverListPageState extends State<DriverListPage> with SingleTickerProvid
   Map<String, dynamic> _activeFilters = {};
   int _totalDrivers = 0;
 
+  // 📄 PAGINATION STATE
+  int _currentPage = 1;
+  final int _rowsPerPage = 10;
+
   // ✅ ADVANCED FILTERS STATE
   bool _showAdvancedFilters = false;
   late AnimationController _filterAnimationController;
@@ -148,6 +152,7 @@ class _DriverListPageState extends State<DriverListPage> with SingleTickerProvid
           _allDrivers = driversList;
           _drivers = _applyLocalFilters(driversList);
           _totalDrivers = driversList.length;
+          _currentPage = 1;
         });
       } else {
         throw Exception(response['message'] ?? 'Failed to fetch drivers');
@@ -240,6 +245,33 @@ class _DriverListPageState extends State<DriverListPage> with SingleTickerProvid
     return filtered;
   }
 
+  // 📄 PAGINATION HELPERS
+  int get _totalPages {
+    final total = _filteredDrivers.length;
+    return total == 0 ? 1 : ((total - 1) ~/ _rowsPerPage) + 1;
+  }
+
+  int get _clampedCurrentPage {
+    final totalPages = _totalPages;
+    if (_currentPage > totalPages) return totalPages;
+    if (_currentPage < 1) return 1;
+    return _currentPage;
+  }
+
+  int get _pageStartIndex => (_clampedCurrentPage - 1) * _rowsPerPage;
+
+  int get _pageEndIndex {
+    final total = _filteredDrivers.length;
+    final end = _pageStartIndex + _rowsPerPage;
+    return end > total ? total : end;
+  }
+
+  List<Map<String, dynamic>> get _pagedDrivers {
+    final filtered = _filteredDrivers;
+    if (filtered.isEmpty) return [];
+    return filtered.sublist(_pageStartIndex, _pageEndIndex);
+  }
+
   bool _hasDocuments(Map<String, dynamic> driver) {
     final documentsData = driver['documents'];
     if (documentsData == null) return false;
@@ -327,6 +359,7 @@ class _DriverListPageState extends State<DriverListPage> with SingleTickerProvid
       _selectedState = null;
       _selectedCity = null;
       _activeFilters = {};
+      _currentPage = 1;
     });
     _fetchDrivers();
   }
@@ -381,6 +414,7 @@ class _DriverListPageState extends State<DriverListPage> with SingleTickerProvid
     setState(() {
       _activeFilters = filters;
       _drivers = _applyLocalFilters(_allDrivers);
+      _currentPage = 1;
     });
   }
 
@@ -388,6 +422,7 @@ class _DriverListPageState extends State<DriverListPage> with SingleTickerProvid
     setState(() {
       _activeFilters = {};
       _drivers = List.from(_allDrivers);
+      _currentPage = 1;
     });
   }
 
@@ -1354,6 +1389,135 @@ class _DriverListPageState extends State<DriverListPage> with SingleTickerProvid
   }
 
   // 📧 SEND PASSWORD RESET EMAIL
+  // ── Driver login credentials ────────────────────────────────────────────
+
+  String _loginStatusOf(Map<String, dynamic> driver) =>
+      driver['loginStatus']?.toString() ?? 'NONE';
+
+  Widget _buildLoginStateChip(Map<String, dynamic> driver) {
+    final status = _loginStatusOf(driver);
+    late Color color;
+    late String label;
+    switch (status) {
+      case 'ACTIVE':
+        color = Colors.green;
+        label = 'Active';
+        break;
+      case 'DISABLED':
+        color = Colors.red;
+        label = 'Disabled';
+        break;
+      default:
+        color = Colors.grey;
+        label = 'No login';
+    }
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(color: color.withOpacity(0.4)),
+      ),
+      child: Text(label, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: color.withOpacity(0.9))),
+    );
+  }
+
+  Future<void> _createDriverLogin(Map<String, dynamic> driver) async {
+    final canEdit = await PermissionRestrictedDialog.checkAndWarn(
+      context,
+      permissionKey: 'drivers',
+      moduleName: 'driver logins',
+    );
+    if (!canEdit) return;
+
+    final driverId = driver['driverId']?.toString();
+    if (driverId == null) return;
+
+    try {
+      final response = await widget.driverService.createDriverLogin(driverId);
+      if (response['success'] == true) {
+        await _fetchDrivers();
+        if (!mounted) return;
+        await showDriverLoginCredentialsDialog(
+          context,
+          name: driver['name'] ?? _getNestedValue(driver, 'personalInfo.name', 'Driver'),
+          username: response['data']?['username'] ?? '',
+          temporaryPassword: response['data']?['temporaryPassword'] ?? '',
+          phone: driver['phone'] ?? _getNestedValue(driver, 'personalInfo.phone', ''),
+        );
+      } else {
+        _showSnack(response['message'] ?? 'Failed to create driver login', Colors.red);
+      }
+    } catch (e) {
+      _showSnack('Failed to create driver login: $e', Colors.red);
+    }
+  }
+
+  Future<void> _resetDriverLogin(Map<String, dynamic> driver) async {
+    final canEdit = await PermissionRestrictedDialog.checkAndWarn(
+      context,
+      permissionKey: 'drivers',
+      moduleName: 'driver logins',
+    );
+    if (!canEdit) return;
+
+    final driverId = driver['driverId']?.toString();
+    if (driverId == null) return;
+
+    try {
+      final response = await widget.driverService.resetDriverLoginPassword(driverId);
+      if (response['success'] == true) {
+        await _fetchDrivers();
+        if (!mounted) return;
+        await showDriverLoginCredentialsDialog(
+          context,
+          name: driver['name'] ?? _getNestedValue(driver, 'personalInfo.name', 'Driver'),
+          username: response['data']?['username'] ?? '',
+          temporaryPassword: response['data']?['temporaryPassword'] ?? '',
+          phone: driver['phone'] ?? _getNestedValue(driver, 'personalInfo.phone', ''),
+        );
+      } else {
+        _showSnack(response['message'] ?? 'Failed to reset driver login', Colors.red);
+      }
+    } catch (e) {
+      _showSnack('Failed to reset driver login: $e', Colors.red);
+    }
+  }
+
+  Future<void> _toggleDriverLoginEnabled(Map<String, dynamic> driver) async {
+    final canEdit = await PermissionRestrictedDialog.checkAndWarn(
+      context,
+      permissionKey: 'drivers',
+      moduleName: 'driver logins',
+    );
+    if (!canEdit) return;
+
+    final driverId = driver['driverId']?.toString();
+    if (driverId == null) return;
+    final isActive = _loginStatusOf(driver) == 'ACTIVE';
+
+    try {
+      final response = isActive
+          ? await widget.driverService.disableDriverLogin(driverId)
+          : await widget.driverService.enableDriverLogin(driverId);
+      if (response['success'] == true) {
+        await _fetchDrivers();
+        _showSnack(isActive ? 'Driver login disabled' : 'Driver login enabled', Colors.green);
+      } else {
+        _showSnack(response['message'] ?? 'Failed to update driver login', Colors.red);
+      }
+    } catch (e) {
+      _showSnack('Failed to update driver login: $e', Colors.red);
+    }
+  }
+
+  void _showSnack(String message, Color color) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message), backgroundColor: color),
+    );
+  }
+
   Future<void> _sendPasswordResetEmail(Map<String, dynamic> driver) async {
     final email = driver['email'] ?? _getNestedValue(driver, 'personalInfo.email', '');
     final name = driver['name'] ?? _getNestedValue(driver, 'personalInfo.name', 'Unknown');
@@ -2400,6 +2564,10 @@ class _DriverListPageState extends State<DriverListPage> with SingleTickerProvid
               child: _buildStatusBadge(driver['status'] ?? 'inactive'),
             ),
             SizedBox(
+              width: 100,
+              child: _buildLoginStateChip(driver),
+            ),
+            SizedBox(
               width: 140,
               child: Text(
                 _getNestedValue(driver, 'license.licenseNumber'),
@@ -2458,7 +2626,7 @@ class _DriverListPageState extends State<DriverListPage> with SingleTickerProvid
               child: Center(child: _buildDocumentStatusIndicator(driver)),
             ),
             SizedBox(
-              width: 220,
+              width: 250,
               child: Wrap(
                 spacing: 4,
                 runSpacing: 4,
@@ -2525,11 +2693,48 @@ class _DriverListPageState extends State<DriverListPage> with SingleTickerProvid
                       constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
                     ),
                   ),
+                  _buildLoginActionButton(driver),
                 ],
               ),
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildLoginActionButton(Map<String, dynamic> driver) {
+    final status = _loginStatusOf(driver);
+
+    if (driver['legacyLogin'] == true) {
+      // This driver already signs in via an older admin account on the
+      // same email — nothing here for this app to create/reset/disable.
+      return Tooltip(
+        message: 'Already has a login via an existing account — managed separately',
+        child: Icon(Icons.vpn_key, size: 18, color: Colors.grey.shade400),
+      );
+    }
+
+    return Tooltip(
+      message: 'Driver login',
+      child: PopupMenuButton<String>(
+        icon: const Icon(Icons.vpn_key, size: 18, color: Color(0xFF0D47A1)),
+        padding: EdgeInsets.zero,
+        constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+        onSelected: (value) {
+          if (value == 'create') _createDriverLogin(driver);
+          if (value == 'reset') _resetDriverLogin(driver);
+          if (value == 'toggle') _toggleDriverLoginEnabled(driver);
+        },
+        itemBuilder: (context) {
+          if (status == 'NONE') {
+            return [const PopupMenuItem(value: 'create', child: Text('Create login'))];
+          }
+          return [
+            const PopupMenuItem(value: 'reset', child: Text('Reset password')),
+            PopupMenuItem(value: 'toggle', child: Text(status == 'ACTIVE' ? 'Disable login' : 'Enable login')),
+          ];
+        },
       ),
     );
   }
@@ -2665,7 +2870,10 @@ class _DriverListPageState extends State<DriverListPage> with SingleTickerProvid
                           DropdownMenuItem(value: 'unassigned', child: Text('No Vehicle')),
                         ],
                         onChanged: (value) {
-                          setState(() => _selectedVehicleFilter = value ?? '');
+                          setState(() {
+                            _selectedVehicleFilter = value ?? '';
+                            _currentPage = 1;
+                          });
                         },
                       ),
                     ),
@@ -2689,7 +2897,10 @@ class _DriverListPageState extends State<DriverListPage> with SingleTickerProvid
                           DropdownMenuItem(value: 'no_documents', child: Text('No Documents')),
                         ],
                         onChanged: (value) {
-                          setState(() => _selectedDocumentFilter = value ?? '');
+                          setState(() {
+                            _selectedDocumentFilter = value ?? '';
+                            _currentPage = 1;
+                          });
                         },
                       ),
                     ),
@@ -2945,12 +3156,13 @@ class _DriverListPageState extends State<DriverListPage> with SingleTickerProvid
                                                 SizedBox(width: 220, child: _buildHeaderCellFixed('EMAIL')),
                                                 SizedBox(width: 130, child: _buildHeaderCellFixed('PHONE')),
                                                 SizedBox(width: 120, child: _buildHeaderCellFixed('STATUS')),
+                                                SizedBox(width: 100, child: _buildHeaderCellFixed('LOGIN')),
                                                 SizedBox(width: 140, child: _buildHeaderCellFixed('LICENSE NO.')),
                                                 SizedBox(width: 130, child: _buildHeaderCellFixed('LICENSE EXPIRY')),
                                                 SizedBox(width: 200, child: _buildHeaderCellFixed('VEHICLE')),
                                                 // ❌ REMOVED: Trips and Rating columns
                                                 SizedBox(width: 70, child: _buildHeaderCellFixed('DOCS')),
-                                                SizedBox(width: 220, child: _buildHeaderCellFixed('ACTIONS')),
+                                                SizedBox(width: 250, child: _buildHeaderCellFixed('ACTIONS')),
                                               ],
                                             ),
                                           ),
@@ -2958,13 +3170,13 @@ class _DriverListPageState extends State<DriverListPage> with SingleTickerProvid
                                           // DATA ROWS
                                           Expanded(
                                             child: ListView.separated(
-                                              itemCount: _filteredDrivers.length,
+                                              itemCount: _pagedDrivers.length,
                                               separatorBuilder: (context, index) => Divider(
                                                 height: 1,
                                                 color: Colors.grey[200],
                                               ),
                                               itemBuilder: (context, index) {
-                                                return _buildDriverRowFixed(_filteredDrivers[index]);
+                                                return _buildDriverRowFixed(_pagedDrivers[index]);
                                               },
                                             ),
                                           ),
@@ -2987,12 +3199,42 @@ class _DriverListPageState extends State<DriverListPage> with SingleTickerProvid
               color: cardBackgroundColor,
               border: Border(top: BorderSide(color: borderColor)),
             ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            child: Wrap(
+              alignment: WrapAlignment.spaceBetween,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              spacing: 12,
+              runSpacing: 8,
               children: [
                 Text(
-                  'Showing ${_filteredDrivers.length} drivers',
+                  _filteredDrivers.isEmpty
+                      ? 'Showing 0 of $_totalDrivers drivers'
+                      : 'Showing ${_pageStartIndex + 1}-$_pageEndIndex of ${_filteredDrivers.length} drivers',
                   style: const TextStyle(fontSize: 14, color: textSecondaryColor, fontWeight: FontWeight.w600),
+                ),
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    IconButton(
+                      onPressed: _clampedCurrentPage > 1
+                          ? () => setState(() => _currentPage = _clampedCurrentPage - 1)
+                          : null,
+                      icon: const Icon(Icons.chevron_left, size: 20),
+                      color: primaryColor,
+                      tooltip: 'Previous Page',
+                    ),
+                    Text(
+                      'Page $_clampedCurrentPage of $_totalPages',
+                      style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: textPrimaryColor),
+                    ),
+                    IconButton(
+                      onPressed: _clampedCurrentPage < _totalPages
+                          ? () => setState(() => _currentPage = _clampedCurrentPage + 1)
+                          : null,
+                      icon: const Icon(Icons.chevron_right, size: 20),
+                      color: primaryColor,
+                      tooltip: 'Next Page',
+                    ),
+                  ],
                 ),
                 Text(
                   'Total: $_totalDrivers drivers',

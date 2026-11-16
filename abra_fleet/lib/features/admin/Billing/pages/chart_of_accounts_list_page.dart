@@ -77,6 +77,17 @@ class _ChartOfAccountsListPageState extends State<ChartOfAccountsListPage> {
   // ── Selected account (detail panel) ──────────────────────────────────────
   ChartOfAccount? _selected;
 
+  // ── Pagination ───────────────────────────────────────────────────────────
+  int _currentPage = 1;
+  final int _itemsPerPage = 20;
+  int get _totalPages => (_accounts.length / _itemsPerPage).ceil().clamp(1, 999);
+  List<ChartOfAccount> get _currentPageAccounts {
+    final start = (_currentPage - 1) * _itemsPerPage;
+    if (start >= _accounts.length) return [];
+    final end = (start + _itemsPerPage).clamp(0, _accounts.length);
+    return _accounts.sublist(start, end);
+  }
+
   // ── Scroll ────────────────────────────────────────────────────────────────
   final _listScrollCtrl = ScrollController();
   final _hScrollCtrl    = ScrollController();
@@ -112,6 +123,7 @@ class _ChartOfAccountsListPageState extends State<ChartOfAccountsListPage> {
       setState(() {
         _accounts = result.accounts;
         _isLoading = false;
+        if (_currentPage > _totalPages) _currentPage = _totalPages;
         // keep selection valid
         if (_selected != null) {
           final found = _accounts.where((a) => a.id == _selected!.id);
@@ -505,7 +517,7 @@ class _ChartOfAccountsListPageState extends State<ChartOfAccountsListPage> {
         items: ['Active', 'Inactive', 'All'].map((s) =>
             DropdownMenuItem(value: s, child: Text('$s Accounts',
                 style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600)))).toList(),
-        onChanged: (v) { if (v != null) { setState(() => _statusFilter = v); _load(); } },
+        onChanged: (v) { if (v != null) { setState(() { _statusFilter = v; _currentPage = 1; }); _load(); } },
       ),
     ),
   );
@@ -520,7 +532,7 @@ class _ChartOfAccountsListPageState extends State<ChartOfAccountsListPage> {
         hint: const Text('All Types', style: TextStyle(fontSize: 13)),
         items: _kAllTypes.map((t) =>
             DropdownMenuItem(value: t, child: Text(t, style: const TextStyle(fontSize: 13)))).toList(),
-        onChanged: (v) { if (v != null) { setState(() => _typeFilter = v); _load(); } },
+        onChanged: (v) { if (v != null) { setState(() { _typeFilter = v; _currentPage = 1; }); _load(); } },
       ),
     ),
   );
@@ -533,14 +545,14 @@ class _ChartOfAccountsListPageState extends State<ChartOfAccountsListPage> {
       prefixIcon: const Icon(Icons.search, size: 18),
       suffixIcon: _searchQuery.isNotEmpty
           ? IconButton(icon: const Icon(Icons.clear, size: 16),
-              onPressed: () { _searchCtrl.clear(); setState(() { _searchQuery = ''; }); _load(); })
+              onPressed: () { _searchCtrl.clear(); setState(() { _searchQuery = ''; _currentPage = 1; }); _load(); })
           : null,
       contentPadding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
       border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
       isDense: true,
     ),
     onChanged: (v) {
-      setState(() => _searchQuery = v);
+      setState(() { _searchQuery = v; _currentPage = 1; });
       Future.delayed(const Duration(milliseconds: 500), () { if (_searchQuery == v) _load(); });
     },
   );
@@ -593,57 +605,122 @@ class _ChartOfAccountsListPageState extends State<ChartOfAccountsListPage> {
       ]));
     }
 
-    // Group by account type
+    // Group by account type (current page only)
+    final pageAccounts = _currentPageAccounts;
     final grouped = <String, List<ChartOfAccount>>{};
-    for (final acc in _accounts) {
+    for (final acc in pageAccounts) {
       grouped.putIfAbsent(acc.accountType, () => []).add(acc);
     }
 
-    return Container(
-      color: Colors.white,
-      child: Scrollbar(
-        controller: _listScrollCtrl,
-        thumbVisibility: true,
-        child: ScrollConfiguration(
-          behavior: ScrollConfiguration.of(context).copyWith(
-            dragDevices: {PointerDeviceKind.touch, PointerDeviceKind.mouse, PointerDeviceKind.trackpad},
-          ),
-          child: ListView(
-            controller: _listScrollCtrl,
-            children: [
-              // Header row
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                decoration: BoxDecoration(
-                  gradient: const LinearGradient(colors: [_kNavyDark, _kNavy]),
-                  boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.1), blurRadius: 4)],
+    return Column(
+      children: [
+        Expanded(
+          child: Container(
+            color: Colors.white,
+            child: Scrollbar(
+              controller: _listScrollCtrl,
+              thumbVisibility: true,
+              child: ScrollConfiguration(
+                behavior: ScrollConfiguration.of(context).copyWith(
+                  dragDevices: {PointerDeviceKind.touch, PointerDeviceKind.mouse, PointerDeviceKind.trackpad},
                 ),
-                child: Row(children: [
-                  const Expanded(child: Text('ACCOUNT NAME',
-                      style: TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold, letterSpacing: 0.5))),
-                  const SizedBox(width: 8),
-                  SizedBox(width: 130, child: Text('TYPE',
-                      style: const TextStyle(color: Colors.white70, fontSize: 13, fontWeight: FontWeight.bold, letterSpacing: 0.5),
-                      textAlign: TextAlign.right)),
-                ]),
+                child: ListView(
+                  controller: _listScrollCtrl,
+                  children: [
+                    // Header row
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                      decoration: BoxDecoration(
+                        gradient: const LinearGradient(colors: [_kNavyDark, _kNavy]),
+                        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.1), blurRadius: 4)],
+                      ),
+                      child: Row(children: [
+                        const Expanded(child: Text('ACCOUNT NAME',
+                            style: TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold, letterSpacing: 0.5))),
+                        const SizedBox(width: 8),
+                        SizedBox(width: 130, child: Text('TYPE',
+                            style: const TextStyle(color: Colors.white70, fontSize: 13, fontWeight: FontWeight.bold, letterSpacing: 0.5),
+                            textAlign: TextAlign.right)),
+                      ]),
+                    ),
+                    // Grouped list
+                    ...grouped.entries.expand((entry) => [
+                      // Group header
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                        color: const Color(0xFFF1F5F9),
+                        child: Text(entry.key.toUpperCase(),
+                            style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold,
+                                color: Colors.grey.shade600, letterSpacing: 0.8)),
+                      ),
+                      // Accounts in group
+                      ...entry.value.map((acc) => _buildAccountRow(acc)),
+                    ]),
+                    const SizedBox(height: 24),
+                  ],
+                ),
               ),
-              // Grouped list
-              ...grouped.entries.expand((entry) => [
-                // Group header
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                  color: const Color(0xFFF1F5F9),
-                  child: Text(entry.key.toUpperCase(),
-                      style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold,
-                          color: Colors.grey.shade600, letterSpacing: 0.8)),
-                ),
-                // Accounts in group
-                ...entry.value.map((acc) => _buildAccountRow(acc)),
-              ]),
-              const SizedBox(height: 24),
-            ],
+            ),
           ),
         ),
+        _buildPagination(),
+      ],
+    );
+  }
+
+  // ── Pagination bar ────────────────────────────────────────────────────────
+
+  Widget _buildPagination() {
+    final total = _accounts.length;
+    final start = total == 0 ? 0 : (_currentPage - 1) * _itemsPerPage + 1;
+    final end = (_currentPage * _itemsPerPage).clamp(0, total);
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+      decoration: const BoxDecoration(color: Colors.white, border: Border(top: BorderSide(color: Color(0xFFE2E8F0)))),
+      child: Wrap(
+        alignment: WrapAlignment.spaceBetween,
+        crossAxisAlignment: WrapCrossAlignment.center,
+        spacing: 12,
+        runSpacing: 8,
+        children: [
+          Text(
+            'Showing $start–$end of $total',
+            style: TextStyle(fontSize: 13, color: Colors.grey.shade600, fontWeight: FontWeight.w500),
+          ),
+          Row(mainAxisSize: MainAxisSize.min, children: [
+            _pageNavBtn(
+              icon: Icons.chevron_left,
+              enabled: _currentPage > 1,
+              onTap: () => setState(() => _currentPage--),
+            ),
+            const SizedBox(width: 10),
+            Text('Page $_currentPage of $_totalPages',
+                style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: _kNavyDark)),
+            const SizedBox(width: 10),
+            _pageNavBtn(
+              icon: Icons.chevron_right,
+              enabled: _currentPage < _totalPages,
+              onTap: () => setState(() => _currentPage++),
+            ),
+          ]),
+        ],
+      ),
+    );
+  }
+
+  Widget _pageNavBtn({required IconData icon, required bool enabled, required VoidCallback onTap}) {
+    return GestureDetector(
+      onTap: enabled ? onTap : null,
+      child: Container(
+        width: 34,
+        height: 34,
+        decoration: BoxDecoration(
+          color: enabled ? Colors.white : Colors.grey.shade50,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: Colors.grey.shade300),
+        ),
+        child: Icon(icon, size: 18, color: enabled ? _kAccent : Colors.grey.shade300),
       ),
     );
   }

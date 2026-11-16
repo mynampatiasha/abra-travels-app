@@ -958,7 +958,7 @@ class _CustomerProfileScreenState extends State<CustomerProfileScreen> {
                             Navigator.push(
                               context,
                               MaterialPageRoute(
-                                builder: (_) => HRMFeedbackScreen(),
+                                builder: (_) => HRMFeedbackScreen(showAppBar: true),
                               ),
                             );
                           },

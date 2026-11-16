@@ -230,7 +230,7 @@ class DriverReportsService {
                   pw.Column(
                     crossAxisAlignment: pw.CrossAxisAlignment.start,
                     children: [
-                      pw.Text('ABRA FLEET MANAGEMENT',
+                      pw.Text('CORPORATE TRAVELS',
                           style: pw.TextStyle(fontSize: 24, fontWeight: pw.FontWeight.bold, color: PdfColors.blue)),
                       pw.SizedBox(height: 5),
                       pw.Text('Driver Performance Report',
@@ -360,7 +360,7 @@ class DriverReportsService {
                 border: pw.Border(top: pw.BorderSide(width: 1, color: PdfColors.grey300)),
               ),
               child: pw.Center(
-                child: pw.Text('© 2024 ABRA Fleet Management System',
+                child: pw.Text('© 2024 Corporate Travels',
                     style: const pw.TextStyle(fontSize: 10, color: PdfColors.grey600)),
               ),
             ),

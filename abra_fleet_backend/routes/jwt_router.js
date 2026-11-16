@@ -33,6 +33,12 @@ const generateToken = (user) => {
     collectionName: user.collectionName
   };
 
+  // Drivers carry a tokenVersion so an admin reset/disable can invalidate
+  // their existing tokens immediately (JWTs are otherwise stateless).
+  if (user.role === 'driver') {
+    payload.tokenVersion = user.tokenVersion || 0;
+  }
+
   // Add role-specific IDs to token payload
   if (user.role === 'driver' && user.driverId) {
     payload.driverId = user.driverId;
@@ -259,7 +265,35 @@ try {
             code: 'ACCOUNT_INACTIVE'
           });
         }
-        
+
+        // Drivers: a disabled login, or a reset/disable issued after this
+        // token was signed (tokenVersion mismatch), ends the session now.
+        if (foundIn === 'drivers') {
+          if (user.loginStatus === 'DISABLED') {
+            console.log('   ❌ Driver login is disabled');
+            console.log('─'.repeat(80) + '\n');
+            return res.status(403).json({
+              success: false,
+              error: 'Login disabled',
+              message: 'Your driver app login has been disabled. Please contact administrator.',
+              code: 'LOGIN_DISABLED'
+            });
+          }
+          const currentTokenVersion = user.tokenVersion || 0;
+          if ((decoded.tokenVersion || 0) !== currentTokenVersion) {
+            console.log('   ❌ Token version mismatch - session invalidated');
+            console.log('─'.repeat(80) + '\n');
+            return res.status(401).json({
+              success: false,
+              error: 'Session invalidated',
+              message: 'Your session is no longer valid. Please login again.',
+              code: 'TOKEN_INVALIDATED'
+            });
+          }
+          req.user.mustChangePassword = !!user.mustChangePassword;
+          req.user.loginStatus = user.loginStatus || null;
+        }
+
        // Update last active timestamp
 await req.db.collection(foundIn).updateOne(
   { _id: user._id },
@@ -427,10 +461,15 @@ router.post('/login', async (req, res) => {
     let userRole = null;
     
     for (const collection of collections) {
-      user = await req.db.collection(collection.name).findOne({ 
-        email: email.toLowerCase() 
-      });
-      
+      // Drivers may only have an email under personalInfo.email (older
+      // records, or ones created before the top-level email fix) — match
+      // either. Other collections keep the plain top-level lookup.
+      const query = collection.name === 'drivers'
+        ? { $or: [{ email: email.toLowerCase() }, { 'personalInfo.email': email.toLowerCase() }] }
+        : { email: email.toLowerCase() };
+
+      user = await req.db.collection(collection.name).findOne(query);
+
       if (user) {
         userCollection = collection.name;
         userRole = user.role || collection.role;
@@ -460,7 +499,18 @@ router.post('/login', async (req, res) => {
         message: 'Your account is currently inactive. Please contact administrator.'
       });
     }
-    
+
+    // Driver logins can be individually disabled by an admin, independent
+    // of the generic status/isActive check above.
+    if (userRole === 'driver' && user.loginStatus === 'DISABLED') {
+      console.log('❌ Driver login is disabled');
+      return res.status(403).json({
+        success: false,
+        error: 'Login disabled',
+        message: 'Your driver app login has been disabled. Please contact administrator.'
+      });
+    }
+
     // Verify password
 console.log('   Verifying password...');
 console.log('   📝 Password from DB:', user.password ? `${user.password.substring(0, 10)}...` : 'NULL');
@@ -525,9 +575,10 @@ if (!passwordValid) {
       organizationId: user.organizationId || 'default_org',
       modules: user.modules || [],
       permissions: user.permissions || {},
-      collectionName: userCollection
+      collectionName: userCollection,
+      tokenVersion: user.tokenVersion || 0
     };
-    
+
     // Add role-specific IDs to token payload
     if (userRole === 'driver' && user.driverId) {
       userData.driverId = user.driverId;
@@ -581,11 +632,14 @@ if (!passwordValid) {
           driverId: user.driverId || null,
           customerId: user.customerId || null,
           clientId: user.clientId || null,
-          employeeId: user.employeeId || null
+          employeeId: user.employeeId || null,
+          // Driver app login state (harmless no-op for other roles)
+          mustChangePassword: userRole === 'driver' ? !!user.mustChangePassword : false,
+          loginStatus: userRole === 'driver' ? (user.loginStatus || null) : null
         }
       }
     });
-    
+
   } catch (error) {
     console.error('❌ LOGIN ERROR:', error.message);
     console.error('─'.repeat(80) + '\n');
@@ -770,7 +824,23 @@ router.post('/change-password', verifyJWT, async (req, res) => {
         message: 'Current password and new password are required'
       });
     }
-    
+
+    if (newPassword.length < 10) {
+      return res.status(400).json({
+        success: false,
+        error: 'Weak password',
+        message: 'New password must be at least 10 characters long'
+      });
+    }
+
+    if (currentPassword === newPassword) {
+      return res.status(400).json({
+        success: false,
+        error: 'Password unchanged',
+        message: 'New password must be different from the current password'
+      });
+    }
+
     if (!userEmail) {
       return res.status(401).json({
         success: false,
@@ -819,21 +889,38 @@ router.post('/change-password', verifyJWT, async (req, res) => {
     
     // Hash new password
     const hashedNewPassword = await hashPassword(newPassword);
-    
+
     // Update password
     await req.db.collection(userCollection).updateOne(
       { _id: user._id },
-      { 
-        $set: { 
+      {
+        $set: {
           password: hashedNewPassword,
+          mustChangePassword: false,
+          passwordChangedAt: new Date(),
           updatedAt: new Date()
-        } 
+        }
       }
     );
-    
+
+    if (userCollection === 'drivers') {
+      try {
+        const { recordDriverLoginAudit } = require('../services/driver_login_credentials');
+        await recordDriverLoginAudit(req.db, {
+          action: 'SELF_CHANGE_PASSWORD',
+          driverId: user.driverId,
+          driverObjectId: user._id,
+          performedBy: { userId: req.user.userId, email: req.user.email, role: req.user.role },
+          details: {}
+        });
+      } catch (auditError) {
+        console.error('⚠️ Failed to record password-change audit entry:', auditError.message);
+      }
+    }
+
     console.log('✅ Password changed successfully');
     console.log('─'.repeat(80) + '\n');
-    
+
     res.json({
       success: true,
       message: 'Password changed successfully'

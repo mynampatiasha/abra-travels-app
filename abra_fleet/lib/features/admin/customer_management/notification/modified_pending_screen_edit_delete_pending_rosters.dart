@@ -9,6 +9,7 @@ import 'package:abra_fleet/features/admin/customer_management/widgets/vehicle_co
 import 'package:abra_fleet/features/admin/customer_management/widgets/route_optimization_dialog.dart';
 import 'package:abra_fleet/features/admin/customer_management/widgets/route_optimization_input_dialog.dart';
 import 'package:abra_fleet/features/admin/customer_management/widgets/detailed_error_dialog.dart';
+import 'package:abra_fleet/features/admin/customer_management/widgets/driver_buffer_dialog.dart';
 import 'package:abra_fleet/core/utils/export_helper.dart';
 import 'package:country_state_city/country_state_city.dart' as csc;
 import 'package:intl/intl.dart';
@@ -916,6 +917,65 @@ List<Map<String, dynamic>> _groupRostersLocally(List<Map<String, dynamic>> roste
     });
   }
 
+  // MANUAL assignment of ONE customer (per-row Assign button): same flow as Manual Mode with count = 1
+  Future<void> _assignSingleManual(Map<String, dynamic> roster) async {
+    final originalFiltered = _filteredRosters;
+    setState(() {
+      _filteredRosters = [roster];
+    });
+    await _performManualRouteSelection(1);
+    setState(() {
+      _filteredRosters = originalFiltered;
+    });
+  }
+
+  // Company of a roster = first part of the e-mail domain (the same rule the server uses)
+  String? _companyOfRoster(Map<String, dynamic> roster) {
+    final email = _safeStringExtract(roster['customerEmail'] ?? roster['email'] ?? _safeNestedAccess(roster, 'employeeDetails', 'email'));
+    if (!email.contains('@')) return null;
+    return email.split('@')[1].split('.')[0].toLowerCase();
+  }
+
+  // MANUAL assignment of the TICKED customers: one company only, then the same flow as Manual Mode
+  Future<void> _assignMultipleManual(List<Map<String, dynamic>> selectedRosters) async {
+    if (selectedRosters.isEmpty) {
+      _showSnackBar('No customers selected for assignment', backgroundColor: Colors.orange);
+      return;
+    }
+    final companies = selectedRosters.map(_companyOfRoster).whereType<String>().toSet();
+    if (companies.length > 1) {
+      showDialog(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: Row(
+            children: [
+              Icon(Icons.business, color: Colors.orange[700], size: 28),
+              const SizedBox(width: 12),
+              const Expanded(child: Text('Different companies selected', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold))),
+            ],
+          ),
+          content: Text(
+            'Customers from different companies cannot share a vehicle (${companies.join(', ')}).\n\nPlease select customers from ONE company only.',
+            style: const TextStyle(fontSize: 14, height: 1.5),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(context), child: const Text('OK, I Understand')),
+          ],
+        ),
+      );
+      return;
+    }
+    final originalFiltered = _filteredRosters;
+    setState(() {
+      _filteredRosters = selectedRosters;
+    });
+    await _performManualRouteSelection(selectedRosters.length);
+    setState(() {
+      _filteredRosters = originalFiltered;
+    });
+  }
+
+
   // NEW: Assign Multiple Customers using same flow as grouping
   Future<void> _assignMultipleCustomers(List<Map<String, dynamic>> selectedRosters) async {
     // debugPrint('\n' + '🎯'*40);
@@ -971,7 +1031,15 @@ List<Map<String, dynamic>> _groupRostersLocally(List<Map<String, dynamic>> roste
           if (mode == 'auto') {
             _performAdvancedRouteOptimization(count);
           } else {
-            _performManualRouteSelection(count);
+            if (_selectedRosterIds.isNotEmpty) {
+              // the ticked customers are used (not the closest cluster of N from the list)
+              final selectedForManual = _filteredRosters
+                  .where((r) => _selectedRosterIds.contains(r['id'] ?? r['_id']))
+                  .toList();
+              _assignMultipleManual(selectedForManual);
+            } else {
+              _performManualRouteSelection(count);
+            }
           }
         },
       ),
@@ -1251,13 +1319,16 @@ Future<void> _performAdvancedRouteOptimization(int count) async {
         final reason = _safeStringExtract(v['compatibilityReason']) != '' ? _safeStringExtract(v['compatibilityReason']) : 'Unknown reason';
         
         // 🆕 CHECK FOR CONSECUTIVE TRIP ERRORS
-        if (reason.contains('Impossible schedule') || 
-            reason.contains('insufficient time') || 
-            reason.contains('Short by')) {
+        final lowerReason = reason.toLowerCase();
+        if (lowerReason.contains('impossible schedule') ||
+            lowerReason.contains('insufficient time') ||
+            lowerReason.contains('short by') ||
+            lowerReason.contains('not available in time') ||
+            lowerReason.contains('driver/vehicle is')) {
           reasons.add('time_conflict');
         } else if (reason.contains('full') || reason.contains('capacity')) {
           reasons.add('full');
-        } else if (reason.contains('Company') || reason.contains('company')) {
+        } else if (lowerReason.contains('compan')) {
           reasons.add('company_mismatch');
         } else if (reason.contains('driver') || reason.contains('Driver')) {
           reasons.add('no_driver');
@@ -1293,6 +1364,14 @@ Future<void> _performAdvancedRouteOptimization(int count) async {
         errorMessage += '✅ Solution: Use vehicles that match customer email domains\n\n';
       }
       
+      final shownReasons = incompatibleVehicles
+          .map((v) => '• ${_safeStringExtract(v['registrationNumber'] ?? v['vehicleNumber'])}: ${_safeStringExtract(v['compatibilityReason'])}')
+          .take(4)
+          .toList();
+      if (shownReasons.isNotEmpty) {
+        errorMessage += 'Details:\n' + shownReasons.join('\n') + '\n\n';
+      }
+
       errorMessage += '📋 What to do now:\n';
       errorMessage += '1. Go to Vehicle Management\n';
       errorMessage += '2. Check vehicle status and assignments\n';
@@ -2146,15 +2225,19 @@ String _getCustomerOrganization(Map<String, dynamic> customer) {
     int noDriverVehicles = 0;
     int companyMismatch = 0;
     int otherReasons = 0;
+    int timeConflicts = 0;
     
     for (final v in incompatibleVehicles) {
       final reason = _safeStringExtract(v['compatibilityReason']) != '' ? _safeStringExtract(v['compatibilityReason']) : 'Unknown reason';
-      if (reason.contains('full') || reason.contains('capacity') || reason.contains('seats')) {
+      final lowerReason = reason.toLowerCase();
+      if (lowerReason.contains('not available in time') || lowerReason.contains('driver/vehicle is')) {
+        timeConflicts++;
+      } else if (lowerReason.contains('full') || lowerReason.contains('capacity') || lowerReason.contains('seats')) {
         fullVehicles++;
-      } else if (reason.contains('driver') || reason.contains('Driver')) {
-        noDriverVehicles++;
-      } else if (reason.contains('Company') || reason.contains('company') || reason.contains('domain')) {
+      } else if (lowerReason.contains('compan') || lowerReason.contains('domain')) {
         companyMismatch++;
+      } else if (lowerReason.contains('driver')) {
+        noDriverVehicles++;
       } else {
         otherReasons++;
       }
@@ -2196,6 +2279,16 @@ String _getCustomerOrganization(Map<String, dynamic> customer) {
               ),
               const SizedBox(height: 12),
               
+              if (timeConflicts > 0) ...[
+                _buildProblemItem(
+                  Icons.schedule,
+                  Colors.deepPurple,
+                  'Driver Not Available in Time',
+                  '$timeConflicts vehicles have a driver who cannot reach the pickup in time (travel time + buffer) or is already on a trip',
+                ),
+                const SizedBox(height: 8),
+              ],
+
               if (fullVehicles > 0) ...[
                 _buildProblemItem(
                   Icons.event_seat,
@@ -2235,6 +2328,20 @@ String _getCustomerOrganization(Map<String, dynamic> customer) {
                 ),
               ],
               
+              const SizedBox(height: 12),
+              const Text('Vehicle details:', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+              ...incompatibleVehicles.take(6).map((v) => Padding(
+                    padding: const EdgeInsets.only(top: 6),
+                    child: Text(
+                      '• ${_safeStringExtract(v['registrationNumber'] ?? v['vehicleNumber'])}: ${_safeStringExtract(v['compatibilityReason'])}',
+                      style: TextStyle(fontSize: 12, color: Colors.grey[800], height: 1.3),
+                    ),
+                  )),
+              if (incompatibleVehicles.length > 6)
+                Padding(
+                  padding: const EdgeInsets.only(top: 6),
+                  child: Text('... and ${incompatibleVehicles.length - 6} more vehicles', style: TextStyle(fontSize: 12, color: Colors.grey[600])),
+                ),
               const SizedBox(height: 16),
               const Divider(),
               const SizedBox(height: 16),
@@ -2274,6 +2381,22 @@ String _getCustomerOrganization(Map<String, dynamic> customer) {
                       const SizedBox(height: 8),
                     ],
                     
+                    if (timeConflicts > 0) ...[
+                      const Text(
+                        '⏱️ Choose Another Time or Vehicle',
+                        style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+                      ),
+                      Text(
+                        '   • The driver needs travel time plus the buffer between two trips',
+                        style: TextStyle(fontSize: 12, color: Colors.grey[700]),
+                      ),
+                      Text(
+                        '   • Operations can change the buffer with the timer icon at the top of this screen',
+                        style: TextStyle(fontSize: 12, color: Colors.grey[700]),
+                      ),
+                      const SizedBox(height: 8),
+                    ],
+
                     if (noDriverVehicles > 0) ...[
                       const Text(
                         '2️⃣ Assign Drivers to Vehicles',
@@ -3027,11 +3150,16 @@ setState(() => _isOptimizing = false);
         final reasons = <String>{};
         for (final v in incompatibleVehicles) {
           final reason = _safeStringExtract(v['compatibilityReason']) != '' ? _safeStringExtract(v['compatibilityReason']) : 'Unknown reason';
-          if (reason.contains('full') || reason.contains('capacity')) {
+          final lowerReason = reason.toLowerCase();
+          if (lowerReason.contains('not available in time') ||
+              lowerReason.contains('short by') ||
+              lowerReason.contains('driver/vehicle is')) {
+            reasons.add('time_conflict');
+          } else if (lowerReason.contains('full') || lowerReason.contains('capacity')) {
             reasons.add('full');
-          } else if (reason.contains('Company') || reason.contains('company')) {
+          } else if (lowerReason.contains('compan')) {
             reasons.add('company_mismatch');
-          } else if (reason.contains('driver') || reason.contains('Driver')) {
+          } else if (lowerReason.contains('driver')) {
             reasons.add('no_driver');
           }
         }
@@ -3040,6 +3168,15 @@ setState(() => _isOptimizing = false);
         String errorTitle = '🚗 All Vehicles Are Unavailable';
         String errorMessage = 'Cannot assign customers because all vehicles are currently unavailable.\n\n';
         
+        if (reasons.contains('time_conflict')) {
+          errorTitle = '⏰ Driver Not Available in Time';
+          errorMessage = 'The drivers of all available vehicles cannot reach this pickup in time (travel time + buffer) or are already on a trip.\n\n';
+          errorMessage += '✅ Solutions:\n';
+          errorMessage += '   • Choose another pickup time or date\n';
+          errorMessage += '   • Operations can reduce the driver buffer (timer icon on this screen)\n';
+          errorMessage += '   • Add a vehicle with a free driver\n\n';
+        }
+
         if (reasons.contains('full')) {
           errorMessage += '💺 Problem: All vehicles are full\n';
           errorMessage += '✅ Solution: Wait for current trips to complete, or add more vehicles\n\n';
@@ -3053,6 +3190,14 @@ setState(() => _isOptimizing = false);
           errorMessage += '✅ Solution: Use vehicles that match customer email domains\n\n';
         }
         
+        final shownReasons = incompatibleVehicles
+            .map((v) => '• ${_safeStringExtract(v['registrationNumber'] ?? v['vehicleNumber'])}: ${_safeStringExtract(v['compatibilityReason'])}')
+            .take(4)
+            .toList();
+        if (shownReasons.isNotEmpty) {
+          errorMessage += 'Details:\n' + shownReasons.join('\n') + '\n\n';
+        }
+
         errorMessage += '📋 What to do now:\n';
         errorMessage += '1. Go to Vehicle Management\n';
         errorMessage += '2. Check vehicle status and assignments\n';
@@ -3103,7 +3248,15 @@ setState(() => _isOptimizing = false);
         // debugPrint('👤'*40);
         // debugPrint('MANUAL MODE PREPARATION COMPLETED');
         // debugPrint('👤'*40 + '\n');
-        _showManualVehicleSelectionDialog(optimalCustomers, allVehicles);
+        _showManualVehicleSelectionDialog(optimalCustomers, <Map<String, dynamic>>[
+          ...allVehicles,
+          ...incompatibleVehicles.map((v) => <String, dynamic>{
+                ...v,
+                '_unavailableReason': _safeStringExtract(v['compatibilityReason']) != ''
+                    ? _safeStringExtract(v['compatibilityReason'])
+                    : 'Not available',
+              }),
+        ]);
       } else {
         // debugPrint('⚠️ Widget not mounted - Cannot show dialog');
       }
@@ -3289,7 +3442,7 @@ setState(() => _isOptimizing = false);
                                   ),
                                 ),
                                 Text(
-                                  'Only showing vehicles compatible with selected customers',
+                                  'Unavailable vehicles are greyed out with the reason',
                                   style: TextStyle(
                                     color: Colors.white70,
                                     fontSize: 13,
@@ -3392,7 +3545,8 @@ setState(() => _isOptimizing = false);
                                     borderRadius: BorderRadius.circular(12),
                                   ),
                                   child: Text(
-                                    '${vehicles.length} found',
+                                    '${vehicles.where((v) => v['_unavailableReason'] == null).length} available'
+                                    '${vehicles.any((v) => v['_unavailableReason'] != null) ? ' · ${vehicles.where((v) => v['_unavailableReason'] != null).length} unavailable' : ''}',
                                     style: TextStyle(
                                       fontSize: 12,
                                       color: Colors.grey.shade700,
@@ -3555,7 +3709,8 @@ setState(() => _isOptimizing = false);
                                         // 🔥 ENHANCED VEHICLE STATUS
                                         final vehicleStatus = vehicle['status']?.toString().toUpperCase() ?? 'UNKNOWN';
                                         final isActive = vehicleStatus == 'ACTIVE';
-                                        final canSelect = canFit && isActive;
+                                        final unavailableReason = vehicle['_unavailableReason']?.toString();
+                                        final canSelect = canFit && isActive && unavailableReason == null;
                                         
                                         // debugPrint('🚗 Vehicle $index: $vehicleName');
                                         // debugPrint('   - License: $licensePlate');
@@ -3702,7 +3857,9 @@ setState(() => _isOptimizing = false);
                                                         const SizedBox(width: 6),
                                                         Expanded(
                                                           child: Text(
-                                                            !isActive 
+                                                            unavailableReason != null
+                                                                ? unavailableReason
+                                                                : !isActive
                                                                 ? 'Vehicle not active'
                                                                 : driverName == 'No Driver'
                                                                     ? 'No driver assigned'
@@ -4901,8 +5058,11 @@ Future<void> _confirmManualAssignment(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          Wrap(
+            alignment: WrapAlignment.spaceBetween,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            spacing: 12,
+            runSpacing: 8,
             children: [
               const Text(
                 'Pending Roster Overview',
@@ -4912,7 +5072,10 @@ Future<void> _confirmManualAssignment(
                   color: Color(0xFF1E293B),
                 ),
               ),
-              Row(
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                crossAxisAlignment: WrapCrossAlignment.center,
                 children: [
                   // Refresh Button
                   IconButton(
@@ -4922,7 +5085,12 @@ Future<void> _confirmManualAssignment(
                     icon: Icon(Icons.refresh, color: _themeColor),
                     tooltip: 'Refresh',
                   ),
-                  const SizedBox(width: 8),
+                  // Driver buffer between trips (operations setting)
+                  IconButton(
+                    onPressed: () => showDriverBufferDialog(context, widget.rosterService),
+                    icon: Icon(Icons.timer_outlined, color: _themeColor),
+                    tooltip: 'Driver buffer between trips',
+                  ),
                   // Export to Excel Button
                   ElevatedButton.icon(
                     onPressed: _isExporting ? null : _exportToExcel,
@@ -4941,7 +5109,6 @@ Future<void> _confirmManualAssignment(
                       elevation: 2,
                     ),
                   ),
-                  const SizedBox(width: 8),
                   // Toggle Filter Button
                   OutlinedButton.icon(
                     onPressed: () {
@@ -4958,7 +5125,6 @@ Future<void> _confirmManualAssignment(
                       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
                     ),
                   ),
-                  const SizedBox(width: 8),
                   // Smart Grouping Button (NEW)
                   ElevatedButton.icon(
                     onPressed: _showSmartGroupingDialog,
@@ -4971,7 +5137,6 @@ Future<void> _confirmManualAssignment(
                       elevation: 2,
                     ),
                   ),
-                  const SizedBox(width: 8),
                   // Route Optimization Button (NEW)
                   ElevatedButton.icon(
                     onPressed: _showRouteOptimizationDialog,
@@ -4989,18 +5154,23 @@ Future<void> _confirmManualAssignment(
             ],
           ),
           const SizedBox(height: 16),
-          Row(
-            children: [
-              _buildStatCard('Total', '$total', Icons.folder_open, const Color(0xFF475569)),
-              const SizedBox(width: 12),
-              _buildStatCard('🔥 Urgent', '$urgentCount', Icons.warning, const Color(0xFFEF4444)),
-              const SizedBox(width: 12),
-              _buildStatCard('Login', '$loginCount', Icons.arrow_forward, _themeColor),
-              const SizedBox(width: 12),
-              _buildStatCard('Logout', '$logoutCount', Icons.arrow_back, const Color(0xFF3B82F6)),
-              const SizedBox(width: 12),
-              _buildStatCard('Both', '$bothCount', Icons.swap_horiz, const Color(0xFF8B5CF6)),
-            ],
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final cols = constraints.maxWidth < 560 ? 3 : 5;
+              final cardWidth = (constraints.maxWidth - 12 * (cols - 1)) / cols;
+              Widget card(Widget c) => SizedBox(width: cardWidth, child: Row(children: [c]));
+              return Wrap(
+                spacing: 12,
+                runSpacing: 12,
+                children: [
+                  card(_buildStatCard('Total', '$total', Icons.folder_open, const Color(0xFF475569))),
+                  card(_buildStatCard('🔥 Urgent', '$urgentCount', Icons.warning, const Color(0xFFEF4444))),
+                  card(_buildStatCard('Login', '$loginCount', Icons.arrow_forward, _themeColor)),
+                  card(_buildStatCard('Logout', '$logoutCount', Icons.arrow_back, const Color(0xFF3B82F6))),
+                  card(_buildStatCard('Both', '$bothCount', Icons.swap_horiz, const Color(0xFF8B5CF6))),
+                ],
+              );
+            },
           ),
         ],
       ),
@@ -5701,11 +5871,15 @@ Future<void> _confirmManualAssignment(
                 const SizedBox(height: 16),
                 
                 // Action Buttons Row (Edit, Delete, Auto, Assign)
-                Row(
+                Wrap(
+                  alignment: WrapAlignment.spaceBetween,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  spacing: 12,
+                  runSpacing: 10,
                   children: [
-                    Expanded(
-                      child: Row(
-                        children: [
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
                           Icon(Icons.calendar_today_outlined, size: 16, color: const Color(0xFF94A3B8)),
                           const SizedBox(width: 8),
                           Text(
@@ -5721,8 +5895,10 @@ Future<void> _confirmManualAssignment(
                           ),
                         ],
                       ),
-                    ),
 
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
                     // ✅ Edit Button
                     SizedBox(
                       height: 36,
@@ -5791,6 +5967,8 @@ Future<void> _confirmManualAssignment(
                           elevation: 0,
                         ),
                       ),
+                    ),
+                      ],
                     ),
                   ],
                 ),
@@ -6386,24 +6564,8 @@ Future<void> _confirmManualAssignment(
   }
 
   void _showAssignmentModal(Map<String, dynamic> roster) {
-    showDialog(
-      context: context,
-      builder: (context) {
-        return AlertDialog(
-          title: const Text('Manual Assignment'),
-          content: const Text('This will open the driver selection modal list.'),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(context), child: const Text('Close')),
-            ElevatedButton(
-              onPressed: () {
-                Navigator.pop(context);
-              },
-              child: const Text('Assign'),
-            ),
-          ],
-        );
-      },
-    );
+    // Manual assignment of this one customer (same flow as the "Auto" button next to it, but you choose the vehicle)
+    _assignSingleManual(roster);
   }
 
   void _showBulkAssignmentModal() {
@@ -6451,7 +6613,10 @@ Future<void> _confirmManualAssignment(
                 subtitle: const Text('Assign all selected to one driver'),
                 onTap: () {
                    Navigator.pop(context);
-                   // Logic for manual single assignment
+                   final selectedForManual = _filteredRosters
+                       .where((r) => _selectedRosterIds.contains(r['id'] ?? r['_id']))
+                       .toList();
+                   _assignMultipleManual(selectedForManual);
                 },
               ),
               const Divider(),

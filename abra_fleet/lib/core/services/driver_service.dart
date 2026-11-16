@@ -57,6 +57,11 @@ class DriverService {
   Future<Map<String, dynamic>> getDriverStats() async {
     try {
       final response = await _apiService.get('/api/admin/drivers/stats');
+      // Backend returns { success, data: { total, active, onLeave, inactive } } —
+      // unwrap `data` so callers can read ['total'] directly, same as customer/client stats.
+      if (response['data'] is Map<String, dynamic>) {
+        return response['data'] as Map<String, dynamic>;
+      }
       return response;
     } catch (e) {
       print('❌ Error getting driver stats: $e');
@@ -122,6 +127,66 @@ class DriverService {
     } catch (e) {
       print('❌ Error sending password reset email: $e');
       throw Exception('Error sending password reset email: $e');
+    }
+  }
+
+  // ============================================================================
+  // DRIVER LOGIN CREDENTIALS
+  // ============================================================================
+
+  /// Create a driver app login. Returns { username, temporaryPassword } once.
+  Future<Map<String, dynamic>> createDriverLogin(String driverId) async {
+    try {
+      final response = await _apiService.post(
+        '/api/admin/drivers/$driverId/login',
+        body: {},
+      );
+      return response;
+    } catch (e) {
+      print('❌ Error creating driver login: $e');
+      throw Exception('Error creating driver login: $e');
+    }
+  }
+
+  /// Force-reset a driver's password. Returns a new temporary password once.
+  Future<Map<String, dynamic>> resetDriverLoginPassword(String driverId) async {
+    try {
+      final response = await _apiService.post(
+        '/api/admin/drivers/$driverId/login/reset',
+        body: {},
+      );
+      return response;
+    } catch (e) {
+      print('❌ Error resetting driver login: $e');
+      throw Exception('Error resetting driver login: $e');
+    }
+  }
+
+  /// Disable a driver's app login (also invalidates any active session).
+  Future<Map<String, dynamic>> disableDriverLogin(String driverId) async {
+    try {
+      final response = await _apiService.post(
+        '/api/admin/drivers/$driverId/login/disable',
+        body: {},
+      );
+      return response;
+    } catch (e) {
+      print('❌ Error disabling driver login: $e');
+      throw Exception('Error disabling driver login: $e');
+    }
+  }
+
+  /// Re-enable a previously disabled driver login.
+  Future<Map<String, dynamic>> enableDriverLogin(String driverId) async {
+    try {
+      final response = await _apiService.post(
+        '/api/admin/drivers/$driverId/login/enable',
+        body: {},
+      );
+      return response;
+    } catch (e) {
+      print('❌ Error enabling driver login: $e');
+      throw Exception('Error enabling driver login: $e');
     }
   }
 

@@ -144,7 +144,7 @@ class AdminSettingsScreen extends StatelessWidget {
           _buildSettingsOptionTile(
               context,
               icon: Icons.info_outline_rounded,
-              title: 'About Abra Travels',
+              title: 'About Corporate Travels',
               subtitle: 'Version, licenses, and terms',
               onTap: () { /* TODO: Navigate to About Screen */ }
           ),

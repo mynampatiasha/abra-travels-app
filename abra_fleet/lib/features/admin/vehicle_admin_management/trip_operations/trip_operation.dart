@@ -1066,7 +1066,7 @@ class _TripOperationScreenState extends State<TripOperationScreen> {
         'Vehicle: *$vehicleNum*\n\n'
         '📍 Track your ride in real time:\n'
         '$liveUrl\n\n'
-        'Thank you for choosing Abra Fleet!';
+        'Thank you for choosing Corporate Travels!';
 
     final customerPhone =
         trip['customerPhone'] ?? trip['customer']?['phone'] ?? '';

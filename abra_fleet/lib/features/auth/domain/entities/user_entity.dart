@@ -11,6 +11,7 @@ class UserEntity {
   final String? photoUrl; // 🔥 ADDED: Photo URL field
   final String? profileImageUrl;
   final String? organizationId;
+  final bool mustChangePassword;
 
   const UserEntity({
     required this.id,
@@ -22,6 +23,7 @@ class UserEntity {
     this.photoUrl, // 🔥 ADDED
     this.profileImageUrl,
     this.organizationId,
+    this.mustChangePassword = false,
   });
 
   // Empty user constant for unauthenticated state
@@ -80,6 +82,7 @@ class UserEntity {
     String? photoUrl,
     String? profileImageUrl,
     String? organizationId,
+    bool? mustChangePassword,
   }) {
     return UserEntity(
       id: id ?? this.id,
@@ -91,6 +94,7 @@ class UserEntity {
       photoUrl: photoUrl ?? this.photoUrl,
       profileImageUrl: profileImageUrl ?? this.profileImageUrl,
       organizationId: organizationId ?? this.organizationId,
+      mustChangePassword: mustChangePassword ?? this.mustChangePassword,
     );
   }
 
@@ -106,6 +110,7 @@ class UserEntity {
       photoUrl: json['photoUrl'] ?? json['profileImageUrl'],
       profileImageUrl: json['profileImageUrl'] ?? json['photoUrl'],
       organizationId: json['organizationId'],
+      mustChangePassword: json['mustChangePassword'] == true,
     );
   }
 

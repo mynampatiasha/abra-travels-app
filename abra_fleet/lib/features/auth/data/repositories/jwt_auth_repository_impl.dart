@@ -126,6 +126,7 @@ class JwtAuthRepositoryImpl implements AuthRepository {
           role: RoleMapper.normalizeRole(userData['role']?.toString()),
           phoneNumber: userData['phone']?.toString(),
           photoUrl: userData['photoUrl']?.toString(),
+          mustChangePassword: userData['mustChangePassword'] == true,
         );
         
         print('[JwtAuth] ✅ User retrieved successfully');
@@ -346,8 +347,9 @@ print('[JwtAuth] Response[data]: ${response['data']}');
         name: userData['name']?.toString() ?? '',
         role: RoleMapper.normalizeRole(userData['role']?.toString()),
         phoneNumber: userData['phone']?.toString(),
+        mustChangePassword: userData['mustChangePassword'] == true,
       );
-      
+
       _cachedUser = userEntity;
       _lastFetch = DateTime.now();
       _lastToken = token;
@@ -458,6 +460,32 @@ print('[JwtAuth] Response[data]: ${response['data']}');
       print('[JwtAuth] Password reset email sent to: $email');
     } catch (e) {
       print('[JwtAuth] Error sending password reset email: $e');
+      rethrow;
+    }
+  }
+
+  @override
+  Future<void> changePassword({
+    required String currentPassword,
+    required String newPassword,
+  }) async {
+    try {
+      final response = await _apiService.post('/api/auth/change-password', body: {
+        'currentPassword': currentPassword,
+        'newPassword': newPassword,
+      });
+
+      if (response['success'] != true) {
+        throw Exception(response['message'] ?? 'Failed to change password');
+      }
+
+      // Clear the cached "must change password" flag so the UI won't ask again
+      if (_cachedUser != null) {
+        _cachedUser = _cachedUser!.copyWith(mustChangePassword: false);
+        await _storeUserData(_cachedUser!);
+      }
+    } catch (e) {
+      print('[JwtAuth] Error changing password: $e');
       rethrow;
     }
   }
@@ -609,6 +637,7 @@ print('[JwtAuth] Response[data]: ${response['data']}');
         'role': user.role,
         'phoneNumber': user.phoneNumber,
         'photoUrl': user.photoUrl,
+        'mustChangePassword': user.mustChangePassword,
       };
       await prefs.setString(_userDataKey, jsonEncode(userData));
       
@@ -643,6 +672,7 @@ print('[JwtAuth] Response[data]: ${response['data']}');
           role: userData['role'] ?? 'customer',
           phoneNumber: userData['phoneNumber'],
           photoUrl: userData['photoUrl'],
+          mustChangePassword: userData['mustChangePassword'] == true,
         );
       }
     } catch (e) {

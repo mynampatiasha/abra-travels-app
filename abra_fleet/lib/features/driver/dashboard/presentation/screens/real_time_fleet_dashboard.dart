@@ -303,7 +303,7 @@ class _RealTimeFleetDashboardState extends State<RealTimeFleetDashboard>
         children: [
           CircularProgressIndicator(),
           SizedBox(height: 16),
-          Text('Initializing Real-time Fleet Management...'),
+          Text('Initializing Real-time Tracking...'),
         ],
       ),
     );
@@ -1926,10 +1926,10 @@ class _RealTimeFleetDashboardState extends State<RealTimeFleetDashboard>
       String message;
       switch (status) {
         case CustomerStatus.pickedUp:
-          message = 'Hi ${customer.customerName}, you have been successfully picked up. Thank you for choosing Abra Travels!';
+          message = 'Hi ${customer.customerName}, you have been successfully picked up. Thank you for choosing Corporate Travels!';
           break;
         case CustomerStatus.dropped:
-          message = 'Hi ${customer.customerName}, you have been safely dropped at your destination. Thank you for traveling with Abra Travels!';
+          message = 'Hi ${customer.customerName}, you have been safely dropped at your destination. Thank you for traveling with Corporate Travels!';
           break;
         case CustomerStatus.noShow:
           message = 'Hi ${customer.customerName}, our driver waited at the pickup location but you were not available. Please contact us to reschedule. Reason: ${data['reason']}';
@@ -1961,7 +1961,7 @@ class _RealTimeFleetDashboardState extends State<RealTimeFleetDashboard>
   Future<void> _openWhatsApp(String phoneNumber) async {
     // Remove any non-digit characters and ensure proper format
     final cleanNumber = phoneNumber.replaceAll(RegExp(r'[^\d+]'), '');
-    final whatsappUrl = 'https://wa.me/$cleanNumber?text=Hi, this is your driver from Abra Travels. I will be arriving shortly for your pickup.';
+    final whatsappUrl = 'https://wa.me/$cleanNumber?text=Hi, this is your driver from Corporate Travels. I will be arriving shortly for your pickup.';
     
     final uri = Uri.parse(whatsappUrl);
     if (await canLaunchUrl(uri)) {

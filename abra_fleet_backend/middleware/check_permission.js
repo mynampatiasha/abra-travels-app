@@ -71,6 +71,18 @@ const checkPermission = (requiredPermission) => {
     console.log('Available permissions:', Object.keys(permissions).join(', '));
     console.log('─'.repeat(80) + '\n');
     
+    // ✅ For read-only GET requests (e.g. background list polling in frontend shell),
+    // return 200 OK with empty dataset instead of 403 so restricted employees don't get error banners.
+    if (req.method === 'GET') {
+      return res.status(200).json({
+        success: true,
+        data: [],
+        count: 0,
+        pagination: { total: 0, page: 1, limit: 10, totalPages: 0 },
+        message: "No data available for this role"
+      });
+    }
+
     return res.status(403).json({
       success: false,
       error: 'Forbidden',
@@ -117,6 +129,18 @@ const checkAnyPermission = (...requiredPermissions) => {
     console.log('Available permissions:', Object.keys(permissions).join(', '));
     console.log('─'.repeat(80) + '\n');
     
+    // ✅ For read-only GET requests (e.g. background list polling in frontend shell),
+    // return 200 OK with empty dataset instead of 403 so restricted employees don't get error banners.
+    if (req.method === 'GET') {
+      return res.status(200).json({
+        success: true,
+        data: [],
+        count: 0,
+        pagination: { total: 0, page: 1, limit: 10, totalPages: 0 },
+        message: "No data available for this role"
+      });
+    }
+
     return res.status(403).json({
       success: false,
       error: 'Forbidden',
@@ -125,7 +149,36 @@ const checkAnyPermission = (...requiredPermissions) => {
   };
 };
 
+/**
+ * Check if user has edit/delete access for a specific permission key.
+ * Used for sensitive actions (e.g. driver login credential management)
+ * that require more than plain view/can_access rights.
+ * Permission shape in Mongo: { can_access: bool, edit_delete: bool }
+ */
+const checkEditDeletePermission = (requiredPermission) => {
+  return (req, res, next) => {
+    if (req.user.role === 'admin' || req.user.role === 'super_admin') {
+      return next();
+    }
+
+    const permissions = req.user.permissions || {};
+    const perm = permissions[requiredPermission];
+    const hasEditDelete = !!(perm && perm.edit_delete === true);
+
+    if (hasEditDelete) {
+      return next();
+    }
+
+    return res.status(403).json({
+      success: false,
+      error: 'Forbidden',
+      message: "You don't have edit/delete permission for this resource"
+    });
+  };
+};
+
 module.exports = {
   checkPermission,
-  checkAnyPermission
+  checkAnyPermission,
+  checkEditDeletePermission
 };

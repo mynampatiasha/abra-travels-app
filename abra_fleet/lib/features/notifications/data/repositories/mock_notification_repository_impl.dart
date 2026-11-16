@@ -39,7 +39,7 @@ class MockNotificationRepositoryImpl implements NotificationRepository {
     ),
     NotificationEntity(
       id: 'notif004',
-      title: 'Welcome to Abra Travels!',
+      title: 'Welcome to Corporate Travels!',
       body: 'Thank you for joining our platform. Explore the features and get started.',
       timestamp: DateTime.now().subtract(const Duration(days: 3)),
       type: NotificationType.info,

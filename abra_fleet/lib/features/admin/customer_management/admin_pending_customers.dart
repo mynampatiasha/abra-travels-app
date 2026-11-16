@@ -52,6 +52,10 @@ class _AdminPendingCustomersPageState extends State<AdminPendingCustomersPage> {
   Map<String, dynamic> _activeFilters = {};
   List<Map<String, dynamic>> _allPendingCustomers = [];
 
+  // Pagination state
+  int _currentPage = 1;
+  final int _rowsPerPage = 10;
+
   // Helper method to get auth token
   Future<String?> _getAuthToken() async {
     final prefs = await SharedPreferences.getInstance();
@@ -818,6 +822,7 @@ class _AdminPendingCustomersPageState extends State<AdminPendingCustomersPage> {
                         if (filterData['localArea'] != null && filterData['localArea'].toString().isNotEmpty) {
                           _activeFilters['area'] = filterData['localArea'];
                         }
+                        _currentPage = 1;
                       });
                     },
                   ),
@@ -1029,7 +1034,9 @@ class _AdminPendingCustomersPageState extends State<AdminPendingCustomersPage> {
                   ),
                   child: TextField(
                     controller: _searchController,
-                    onChanged: (value) => setState(() {}),
+                    onChanged: (value) => setState(() {
+                      _currentPage = 1;
+                    }),
                     decoration: InputDecoration(
                       hintText: 'Search by Name, Email, Phone, Company, Department, Employee ID...',
                       hintStyle: const TextStyle(
@@ -1042,7 +1049,9 @@ class _AdminPendingCustomersPageState extends State<AdminPendingCustomersPage> {
                             icon: const Icon(Icons.clear, size: 18, color: Color(0xFF94A3B8)),
                             onPressed: () {
                               _searchController.clear();
-                              setState(() {});
+                              setState(() {
+                                _currentPage = 1;
+                              });
                             },
                           )
                         : null,
@@ -1069,7 +1078,9 @@ class _AdminPendingCustomersPageState extends State<AdminPendingCustomersPage> {
                   ],
                 ),
                 child: ElevatedButton.icon(
-                  onPressed: () => setState(() {}),
+                  onPressed: () => setState(() {
+                    _currentPage = 1;
+                  }),
                   icon: const Icon(Icons.search, size: 18),
                   label: const Text(
                     'Apply Filter',
@@ -1092,6 +1103,7 @@ class _AdminPendingCustomersPageState extends State<AdminPendingCustomersPage> {
                   setState(() {
                     _searchController.clear();
                     _activeFilters = {};
+                    _currentPage = 1;
                   });
                 },
                 icon: const Icon(Icons.refresh, size: 18),
@@ -1121,6 +1133,16 @@ class _AdminPendingCustomersPageState extends State<AdminPendingCustomersPage> {
 
   Widget _buildPendingCustomerDirectory() {
     final filteredCustomers = _getFilteredCustomers();
+
+    final totalItems = filteredCustomers.length;
+    final totalPages = totalItems == 0 ? 1 : ((totalItems - 1) ~/ _rowsPerPage) + 1;
+    if (_currentPage > totalPages) _currentPage = totalPages;
+    if (_currentPage < 1) _currentPage = 1;
+    final startIndex = (_currentPage - 1) * _rowsPerPage;
+    final endIndex = (startIndex + _rowsPerPage) > totalItems ? totalItems : startIndex + _rowsPerPage;
+    final pagedCustomers = totalItems == 0
+        ? <Map<String, dynamic>>[]
+        : filteredCustomers.sublist(startIndex, endIndex);
 
     return Container(
       decoration: BoxDecoration(
@@ -1477,7 +1499,7 @@ class _AdminPendingCustomersPageState extends State<AdminPendingCustomersPage> {
                                   DataColumn(label: SizedBox(width: 140, child: Padding(padding: EdgeInsets.symmetric(horizontal: 6), child: Text('REGISTRATION DATE')))),
                                   DataColumn(label: SizedBox(width: 180, child: Padding(padding: EdgeInsets.symmetric(horizontal: 6), child: Text('ACTIONS')))),
                                 ],
-                                rows: filteredCustomers.map<DataRow>((customer) {
+                                rows: pagedCustomers.map<DataRow>((customer) {
                                   final customerId = customer['_id'] ?? customer['id'] ?? '';
                                   final name = customer['name'] ?? '—';
                                   final email = customer['email'] ?? '—';
@@ -1764,6 +1786,89 @@ class _AdminPendingCustomersPageState extends State<AdminPendingCustomersPage> {
                   ),
                 ),
               ),
+
+          if (totalItems > 0)
+            _buildPaginationBar(
+              startIndex: startIndex,
+              endIndex: endIndex,
+              totalItems: totalItems,
+              totalPages: totalPages,
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPaginationBar({
+    required int startIndex,
+    required int endIndex,
+    required int totalItems,
+    required int totalPages,
+  }) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 14),
+      decoration: const BoxDecoration(
+        border: Border(
+          top: BorderSide(color: Color(0xFFE2E8F0), width: 1.5),
+        ),
+        borderRadius: BorderRadius.only(
+          bottomLeft: Radius.circular(10),
+          bottomRight: Radius.circular(10),
+        ),
+      ),
+      child: Wrap(
+        alignment: WrapAlignment.spaceBetween,
+        crossAxisAlignment: WrapCrossAlignment.center,
+        spacing: 12,
+        runSpacing: 8,
+        children: [
+          Text(
+            'Showing ${startIndex + 1}-$endIndex of $totalItems',
+            style: const TextStyle(
+              fontSize: 13,
+              color: Color(0xFF64748B),
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              IconButton.filledTonal(
+                onPressed: _currentPage > 1
+                    ? () => setState(() => _currentPage--)
+                    : null,
+                icon: const Icon(Icons.chevron_left, size: 18),
+                tooltip: 'Previous Page',
+                style: IconButton.styleFrom(
+                  backgroundColor: const Color(0xFFEFF6FF),
+                  foregroundColor: const Color(0xFF1A3FC4),
+                  padding: const EdgeInsets.all(6),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Text(
+                'Page $_currentPage of $totalPages',
+                style: const TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
+                  color: Color(0xFF0F2557),
+                ),
+              ),
+              const SizedBox(width: 10),
+              IconButton.filledTonal(
+                onPressed: _currentPage < totalPages
+                    ? () => setState(() => _currentPage++)
+                    : null,
+                icon: const Icon(Icons.chevron_right, size: 18),
+                tooltip: 'Next Page',
+                style: IconButton.styleFrom(
+                  backgroundColor: const Color(0xFFEFF6FF),
+                  foregroundColor: const Color(0xFF1A3FC4),
+                  padding: const EdgeInsets.all(6),
+                ),
+              ),
+            ],
+          ),
         ],
       ),
     );

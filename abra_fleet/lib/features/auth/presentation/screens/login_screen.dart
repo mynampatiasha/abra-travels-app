@@ -21,6 +21,8 @@ import 'package:abra_fleet/features/auth/domain/entities/user_entity.dart';
 import 'registration_screen.dart';
 import 'forgot_password_screen.dart';
 import 'post_login_splash_screen.dart';
+import 'package:abra_fleet/core/services/api_service.dart';
+import 'package:abra_fleet/core/widgets/app_error_dialog.dart';
 import 'package:abra_fleet/app/presentation/screens/main_app_shell.dart';
 import 'package:abra_fleet/features/client/client_main_shell.dart';
 
@@ -137,6 +139,12 @@ class _LoginScreenState extends State<LoginScreen> with TickerProviderStateMixin
 
       debugPrint('[LoginScreen] Login OK — role: ${user.role}, name: ${user.name}');
 
+      if (user.mustChangePassword) {
+        if (!mounted) return;
+        final changed = await _forcePasswordChange(currentPassword: _passCtrl.text.trim());
+        if (!changed) return;
+      }
+
       if (mounted) {
         final userName = (user.name?.isNotEmpty == true)
             ? user.name!
@@ -146,26 +154,177 @@ class _LoginScreenState extends State<LoginScreen> with TickerProviderStateMixin
     } catch (e) {
       debugPrint('Login error: $e');
       if (mounted) {
-        String msg = 'Login failed';
-        if (e.toString().contains('Invalid credentials') ||
-            e.toString().contains('Email or password is incorrect')) {
-          msg = 'Invalid email or password';
-        } else if (e.toString().contains('Account inactive')) {
-          msg = 'Your account is inactive. Contact administrator.';
-        } else if (e.toString().contains('User not found')) {
-          msg = 'No account found with this email';
-        } else {
-          msg = 'Login failed: ${e.toString()}';
+        final rawStr = e.toString().toLowerCase();
+
+        int? statusCode;
+        String? apiMessage;
+        if (e is ApiException) {
+          statusCode = e.statusCode;
+          apiMessage = e.message.toLowerCase();
         }
-        scaffoldMessenger.showSnackBar(SnackBar(
-          content: Text(msg),
-          backgroundColor: Colors.red,
-          duration: const Duration(seconds: 4),
-        ));
+
+        // 1. Invalid credentials / wrong password check FIRST
+        final isInvalidCreds = (statusCode == 401) ||
+            rawStr.contains('invalid credentials') ||
+            rawStr.contains('email or password is incorrect') ||
+            rawStr.contains('invalid password') ||
+            rawStr.contains('incorrect password') ||
+            (apiMessage != null && (apiMessage.contains('password') || apiMessage.contains('credential') || apiMessage.contains('incorrect')));
+
+        // 2. Inactive account or disabled login
+        final isAccountInactive = (statusCode == 403) ||
+            rawStr.contains('account inactive') ||
+            rawStr.contains('login disabled') ||
+            rawStr.contains('contact administrator') ||
+            rawStr.contains('deactivated') ||
+            (apiMessage != null && (apiMessage.contains('inactive') || apiMessage.contains('disabled')));
+
+        // 3. User not found
+        final isUserNotFound = (statusCode == 404) ||
+            rawStr.contains('user not found') ||
+            rawStr.contains('no account found') ||
+            (apiMessage != null && apiMessage.contains('not found'));
+
+        // 4. Genuine Network drop / Server offline (no HTTP response received or 502/503/504)
+        final isNetwork = (statusCode == null && (rawStr.contains('network error') ||
+                rawStr.contains('socketexception') ||
+                rawStr.contains('timeout') ||
+                rawStr.contains('connection refused') ||
+                rawStr.contains('failed host lookup') ||
+                rawStr.contains('backend may be unreachable') ||
+                rawStr.contains('unreachable'))) ||
+            (statusCode != null && (statusCode == 502 || statusCode == 503 || statusCode == 504));
+
+        if (isInvalidCreds) {
+          AppErrorDialog.showBanner(
+            context,
+            message: 'Invalid email or password. Please verify your credentials.',
+            isError: true,
+          );
+        } else if (isAccountInactive) {
+          AppErrorDialog.showBanner(
+            context,
+            message: 'Your account is inactive. Please contact your Fleet Administrator.',
+            isError: true,
+          );
+        } else if (isUserNotFound) {
+          AppErrorDialog.showBanner(
+            context,
+            message: 'No account registered with this email address.',
+            isError: true,
+          );
+        } else if (isNetwork) {
+          AppErrorDialog.showNetworkError(
+            context,
+            onRetry: () => _login(),
+          );
+        } else {
+          // If the backend sent a custom message, show that message cleanly
+          final displayMsg = (e is ApiException)
+              ? e.message
+              : (rawStr.contains('exception:') ? rawStr.split('exception:').last.trim() : 'Unable to sign in. Please try again.');
+
+          AppErrorDialog.showBanner(
+            context,
+            message: displayMsg,
+            isError: true,
+          );
+        }
       }
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
+  }
+
+  /// Blocking dialog shown right after a sign-in with a temporary password.
+  /// Returns true once the driver has saved their own password.
+  Future<bool> _forcePasswordChange({required String currentPassword}) async {
+    final firstCtrl = TextEditingController();
+    final secondCtrl = TextEditingController();
+    String? problem;
+    bool busy = false;
+
+    final saved = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (dialogContext, setDialogState) => AlertDialog(
+          title: const Text('Choose your own password'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'You signed in with a temporary password. Choose a new one that only '
+                'you know (at least 10 characters).',
+                style: TextStyle(fontSize: 13),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: firstCtrl,
+                obscureText: true,
+                decoration: const InputDecoration(labelText: 'New password'),
+              ),
+              const SizedBox(height: 8),
+              TextField(
+                controller: secondCtrl,
+                obscureText: true,
+                decoration: const InputDecoration(labelText: 'Confirm new password'),
+              ),
+              if (problem != null) ...[
+                const SizedBox(height: 8),
+                Text(problem!, style: const TextStyle(color: Colors.red, fontSize: 12)),
+              ],
+            ],
+          ),
+          actions: [
+            FilledButton(
+              onPressed: busy
+                  ? null
+                  : () async {
+                      if (firstCtrl.text.length < 10) {
+                        setDialogState(() => problem = 'The password must have at least 10 characters.');
+                        return;
+                      }
+                      if (firstCtrl.text != secondCtrl.text) {
+                        setDialogState(() => problem = 'The two passwords do not match.');
+                        return;
+                      }
+                      if (firstCtrl.text == currentPassword) {
+                        setDialogState(() => problem = 'Choose a password different from the temporary one.');
+                        return;
+                      }
+                      setDialogState(() {
+                        busy = true;
+                        problem = null;
+                      });
+                      try {
+                        final authRepository = Provider.of<AuthRepository>(context, listen: false);
+                        await authRepository.changePassword(
+                          currentPassword: currentPassword,
+                          newPassword: firstCtrl.text,
+                        );
+                        if (dialogContext.mounted) Navigator.pop(dialogContext, true);
+                      } catch (e) {
+                        setDialogState(() {
+                          busy = false;
+                          problem = 'Could not save the password: $e';
+                        });
+                      }
+                    },
+              child: busy
+                  ? const SizedBox(
+                      width: 18, height: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                    )
+                  : const Text('Save password'),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    return saved == true;
   }
 
   // ── BUILD ──────────────────────────────────────────────────────────────────
@@ -265,17 +424,12 @@ class _LoginScreenState extends State<LoginScreen> with TickerProviderStateMixin
           mainAxisSize: MainAxisSize.min,
           children: [
             Text(
-              'ABRA TRAVELS',
+              'CORPORATE TRAVELS',
               style: TextStyle(
                   color: Colors.white,
                   fontSize: 17,
                   fontWeight: FontWeight.w800,
                   letterSpacing: 2),
-            ),
-            Text(
-              'Fleet Management Platform',
-              style: TextStyle(
-                  color: Colors.white, fontSize: 10, letterSpacing: 0.8),
             ),
           ],
         ),

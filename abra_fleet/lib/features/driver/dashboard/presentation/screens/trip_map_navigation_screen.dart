@@ -24,35 +24,35 @@ class WhatsAppTemplates {
   static List<Map<String, String>> get templates => [
     {
       'label': '🕐 Running Late',
-      'message': 'Hello, I am your Abra Travels driver. I am running a bit late and will arrive at your pickup location shortly. Sorry for the inconvenience!',
+      'message': 'Hello, I am your Corporate Travels driver. I am running a bit late and will arrive at your pickup location shortly. Sorry for the inconvenience!',
     },
     {
       'label': '🚗 Arrived at Pickup',
-      'message': 'Hello! I am your Abra Travels driver. I have arrived at your pickup location. Please come down, I am waiting for you.',
+      'message': 'Hello! I am your Corporate Travels driver. I have arrived at your pickup location. Please come down, I am waiting for you.',
     },
     {
       'label': '⏱️ 5 Minutes Away',
-      'message': 'Hello, I am your Abra Travels driver. I will be reaching your pickup location in approximately 5 minutes. Please be ready!',
+      'message': 'Hello, I am your Corporate Travels driver. I will be reaching your pickup location in approximately 5 minutes. Please be ready!',
     },
     {
       'label': '⏱️ 10 Minutes Away',
-      'message': 'Hello, I am your Abra Travels driver. I will be reaching your pickup location in approximately 10 minutes. Please be ready!',
+      'message': 'Hello, I am your Corporate Travels driver. I will be reaching your pickup location in approximately 10 minutes. Please be ready!',
     },
     {
       'label': '🚦 Stuck in Traffic',
-      'message': 'Hello, I am your Abra Travels driver. I am currently stuck in traffic. I will reach your pickup location as soon as possible. Thank you for your patience!',
+      'message': 'Hello, I am your Corporate Travels driver. I am currently stuck in traffic. I will reach your pickup location as soon as possible. Thank you for your patience!',
     },
     {
       'label': '📍 On My Way',
-      'message': 'Hello! I am your Abra Travels driver. I am on the way to your pickup location. Please stay ready. Contact me if you need any help.',
+      'message': 'Hello! I am your Corporate Travels driver. I am on the way to your pickup location. Please stay ready. Contact me if you need any help.',
     },
     {
       'label': '✅ Trip Started',
-      'message': 'Hello! Your Abra Travels trip has started. I am on my way to pick you up. See you soon!',
+      'message': 'Hello! Your Corporate Travels trip has started. I am on my way to pick you up. See you soon!',
     },
     {
       'label': '🔁 Wrong Location?',
-      'message': 'Hello! I am your Abra Travels driver. I am at the pickup location mentioned in the app. If you are at a different spot, please let me know.',
+      'message': 'Hello! I am your Corporate Travels driver. I am at the pickup location mentioned in the app. If you are at a different spot, please let me know.',
     },
   ];
 }

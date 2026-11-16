@@ -1250,7 +1250,24 @@ static Future<Map<String, dynamic>> generateRoutePlan({
   debugPrint('\n🧩 STEP 3: SOLVING TSP FOR OPTIMAL PICKUP ORDER');
   debugPrint('-'*80);
   
-  final optimalOrder = await solveTSP(vehicleLat, vehicleLng, customers);
+  // Pickup order by ROAD distance to the office:
+  //   LOGIN  (morning): farthest customer first, nearest last
+  //   LOGOUT (evening): nearest customer first, farthest last
+  final officeLegs = <int, Map<String, dynamic>>{};
+  for (int i = 0; i < customers.length; i++) {
+    officeLegs[i] = await OSRMRoutingService.getRoute(
+      startLat: _getLatitude(customers[i]),
+      startLng: _getLongitude(customers[i]),
+      endLat: officeLat,
+      endLng: officeLng,
+    );
+  }
+  double legKmToOffice(int idx) => ((officeLegs[idx]?['distance']) as num?)?.toDouble() ?? 0.0;
+  final optimalOrder = List<int>.generate(customers.length, (i) => i)
+    ..sort((a, b) {
+      final cmp = legKmToOffice(a).compareTo(legKmToOffice(b));
+      return isLoginTrip ? -cmp : cmp;
+    });
   
   debugPrint('✅ TSP Solved: Optimal order = $optimalOrder');
   debugPrint('-'*80);
@@ -1293,8 +1310,8 @@ static Future<Map<String, dynamic>> generateRoutePlan({
   
   // First, calculate all distances and times using OSRM
   final routeSegments = <Map<String, dynamic>>[];
-  double currentLat = vehicleLat;
-  double currentLng = vehicleLng;
+  double currentLat = isLoginTrip ? vehicleLat : officeLat;
+  double currentLng = isLoginTrip ? vehicleLng : officeLng;
   
   for (int i = 0; i < optimalOrder.length; i++) {
     final customerIndex = optimalOrder[i];
@@ -1339,18 +1356,18 @@ static Future<Map<String, dynamic>> generateRoutePlan({
                         'Unknown';
     
     // Calculate distance from this pickup to office
-    final officeRouteData = await OSRMRoutingService.getRoute(
-      startLat: lat,
-      startLng: lng,
-      endLat: officeLat,
-      endLng: officeLng,
-    );
+    final officeRouteData = officeLegs[customerIndex]!;
     
     final distanceToOfficeValue = officeRouteData['distance'];
     final distanceToOffice = distanceToOfficeValue is double ? distanceToOfficeValue : 
                             (distanceToOfficeValue is int ? distanceToOfficeValue.toDouble() : 
                             (distanceToOfficeValue is String ? double.tryParse(distanceToOfficeValue) ?? 0.0 : 0.0));
     
+    final officeDurValue = officeRouteData['duration'];
+    final officeDurMin = officeDurValue is int ? officeDurValue :
+                         (officeDurValue is double ? officeDurValue.toInt() :
+                         (officeDurValue is String ? int.tryParse(officeDurValue) ?? 0 : 0));
+
     debugPrint('   ${i + 1}. $customerName');
     debugPrint('      📏 Distance from previous: ${distanceFromPrevious.toStringAsFixed(1)} km ${isFallback ? "(straight-line fallback)" : "(road distance)"}');
     debugPrint('      📍 Distance to office: ${distanceToOffice.toStringAsFixed(1)} km');
@@ -1430,6 +1447,7 @@ static Future<Map<String, dynamic>> generateRoutePlan({
       'pickupCoordinates': pickupCoordinates, // ✅ NEW: Coordinates object for backend
       'distanceFromPrevious': distanceFromPrevious,
       'distanceToOffice': distanceToOffice,
+      'durationToOfficeMin': officeDurMin,
       'estimatedTime': minutes,
       'cumulativeDistance': totalDistance,
       'cumulativeTime': totalMinutes,
@@ -1442,6 +1460,19 @@ static Future<Map<String, dynamic>> generateRoutePlan({
     currentLng = lng;
   }
   
+  if (isLoginTrip && routeSegments.isNotEmpty) {
+    totalDistance = 0;
+    totalMinutes = 0;
+    for (int k = 1; k < routeSegments.length; k++) {
+      totalDistance += (routeSegments[k]['distanceFromPrevious'] as double);
+      final m = routeSegments[k]['estimatedTime'];
+      totalMinutes += m is int ? m : (m is double ? m.toInt() : 0);
+    }
+    totalDistance += (routeSegments.last['distanceToOffice'] as double);
+    final lastToOffice = routeSegments.last['durationToOfficeMin'];
+    totalMinutes += lastToOffice is int ? lastToOffice : 0;
+  }
+
   debugPrint('✅ Route segments calculated: ${routeSegments.length} stops');
   debugPrint('-'*80);
   
@@ -1458,7 +1489,8 @@ static Future<Map<String, dynamic>> generateRoutePlan({
       final segment = routeSegments[i];
       
       // Safe parsing for travel minutes
-      final timeValue = segment['estimatedTime'];
+      // the ride AFTER this pickup: to the next pickup, or (last customer) straight to the office
+      final timeValue = i == routeSegments.length - 1 ? segment['durationToOfficeMin'] : routeSegments[i + 1]['estimatedTime'];
       final travelMinutes = timeValue is int ? timeValue : 
                            (timeValue is double ? timeValue.toInt() : 
                            (timeValue is String ? int.tryParse(timeValue) ?? 0 : 0));

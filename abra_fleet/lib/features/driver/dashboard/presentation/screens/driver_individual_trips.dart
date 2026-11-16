@@ -1094,7 +1094,7 @@ class _DriverIndividualTripsScreenState extends State<DriverIndividualTripsScree
                       'Vehicle: *$vehicleNum*\n\n'
                       '📍 Track your ride in real time:\n'
                       '$liveUrl\n\n'
-                      'Thank you for choosing Abra Fleet!';
+                      'Thank you for choosing Corporate Travels!';
                   
                   return Padding(
                     padding: const EdgeInsets.only(bottom: 10),

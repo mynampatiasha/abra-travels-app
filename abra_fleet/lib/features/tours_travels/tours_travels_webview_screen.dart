@@ -28,7 +28,7 @@ class _ToursTravelsWebViewScreenState extends State<ToursTravelsWebViewScreen> {
   late final WebViewController? _controller;
   bool _isLoading = true;
   String? _errorMessage;
-  late final String _iframeId;
+  late String _iframeId;
 
   @override
   void initState() {
@@ -38,6 +38,50 @@ class _ToursTravelsWebViewScreenState extends State<ToursTravelsWebViewScreen> {
       _initializeWebIframe();
     } else {
       _requestPermissions();
+    }
+  }
+
+  // ✅ Appends a throwaway timestamp param so the browser/WebView can never
+  // serve a cached copy of the PHP page on refresh -- without this, "Refresh"
+  // re-requests the exact same URL and a cached response (or, on web, the
+  // iframe just never reloading at all -- see _refresh()) can silently hide
+  // any server-side change until the app is fully restarted.
+  String _cacheBustedUrl() {
+    final separator = widget.url.contains('?') ? '&' : '?';
+    return '${widget.url}${separator}_cb=${DateTime.now().millisecondsSinceEpoch}';
+  }
+
+  // ✅ Shared by both the AppBar refresh button and the error screen's "Try
+  // Again" button. On web, the iframe's src is fixed at creation time by
+  // registerViewFactory -- re-registering the SAME viewId throws, and the
+  // previous code just toggled the loading spinner without touching the
+  // iframe at all, so edits to the PHP page never showed up no matter how
+  // many times you clicked Refresh. Generating a brand-new viewId each time
+  // forces Flutter to create a fresh iframe pointed at the cache-busted URL.
+  void _refresh() {
+    debugPrint('🌍 Refreshing page...');
+    if (kIsWeb) {
+      final freshUrl = _cacheBustedUrl();
+      final newIframeId = 'tours-travels-iframe-${DateTime.now().microsecondsSinceEpoch}';
+      registerWebView(newIframeId, freshUrl);
+      setState(() {
+        _iframeId = newIframeId;
+        _isLoading = true;
+        _errorMessage = null;
+      });
+      Future.delayed(const Duration(seconds: 2), () {
+        if (mounted) {
+          setState(() {
+            _isLoading = false;
+          });
+        }
+      });
+    } else {
+      setState(() {
+        _isLoading = true;
+        _errorMessage = null;
+      });
+      _controller?.loadRequest(Uri.parse(_cacheBustedUrl()));
     }
   }
 
@@ -106,7 +150,16 @@ class _ToursTravelsWebViewScreenState extends State<ToursTravelsWebViewScreen> {
       params = const PlatformWebViewControllerCreationParams();
     }
 
-    final WebViewController controller = WebViewController.fromPlatformCreationParams(params);
+    // ✅ Grant camera/microphone access when the page calls getUserMedia() (e.g. attendance
+    // photo capture). Without this, Android's WebView denies all media requests even though
+    // the app itself already has the OS-level CAMERA permission.
+    final WebViewController controller = WebViewController.fromPlatformCreationParams(
+      params,
+      onPermissionRequest: (WebViewPermissionRequest request) {
+        debugPrint('🔐 WebView permission requested: ${request.types}');
+        request.grant();
+      },
+    );
 
     controller
       ..setJavaScriptMode(JavaScriptMode.unrestricted)
@@ -161,10 +214,9 @@ class _ToursTravelsWebViewScreenState extends State<ToursTravelsWebViewScreen> {
         },
       );
 
-      // Enable camera, microphone, and other media permissions
-      // Note: setOnPermissionRequest is not available in webview_flutter_android 3.16.9
-      // Permissions are handled through Android manifest and system prompts
-      debugPrint('🔐 Android WebView configured - permissions handled by system');
+      // Camera/microphone media requests are granted via the cross-platform
+      // onPermissionRequest callback passed to WebViewController.fromPlatformCreationParams above.
+      debugPrint('🔐 Android WebView configured - media permissions granted via onPermissionRequest');
     }
 
     // ✅ iOS-SPECIFIC: Configure WKWebView for media permissions
@@ -199,24 +251,7 @@ class _ToursTravelsWebViewScreenState extends State<ToursTravelsWebViewScreen> {
           // Refresh button
           IconButton(
             icon: const Icon(Icons.refresh),
-            onPressed: () {
-              debugPrint('🌍 Refreshing page...');
-              if (kIsWeb) {
-                // Reload iframe by recreating the widget
-                setState(() {
-                  _isLoading = true;
-                });
-                Future.delayed(const Duration(milliseconds: 100), () {
-                  if (mounted) {
-                    setState(() {
-                      _isLoading = false;
-                    });
-                  }
-                });
-              } else {
-                _controller?.reload();
-              }
-            },
+            onPressed: _refresh,
             tooltip: 'Refresh',
           ),
         ],
@@ -289,23 +324,7 @@ class _ToursTravelsWebViewScreenState extends State<ToursTravelsWebViewScreen> {
                       ),
                       const SizedBox(height: 24),
                       ElevatedButton.icon(
-                        onPressed: () {
-                          setState(() {
-                            _errorMessage = null;
-                            _isLoading = true;
-                          });
-                          if (kIsWeb) {
-                            Future.delayed(const Duration(milliseconds: 100), () {
-                              if (mounted) {
-                                setState(() {
-                                  _isLoading = false;
-                                });
-                              }
-                            });
-                          } else {
-                            _controller?.reload();
-                          }
-                        },
+                        onPressed: _refresh,
                         icon: const Icon(Icons.refresh),
                         label: const Text('Try Again'),
                         style: ElevatedButton.styleFrom(

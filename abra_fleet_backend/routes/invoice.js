@@ -533,7 +533,7 @@ async function generateInvoicePDF(invoice) {
         doc.fontSize(22)
            .fillColor('#0066CC')
            .font('Helvetica-Bold')
-           .text('ABRA Travels', 40, 40);
+           .text('Corporate Travels', 40, 40);
         
         doc.fontSize(9)
            .fillColor('#666666')
@@ -880,12 +880,12 @@ async function generateInvoicePDF(invoice) {
       doc.fontSize(8)
          .fillColor('#2C3E50')
          .font('Helvetica-Bold')
-         .text('Thank you for choosing ABRA Travels!', 40, footerY + 8, { align: 'center', width: 515 });
+         .text('Thank you for choosing Corporate Travels!', 40, footerY + 8, { align: 'center', width: 515 });
       
       doc.fontSize(6)
          .fillColor('#888888')
          .font('Helvetica')
-         .text('ABRA Travels | YOUR JOURNEY, OUR COMMITMENT', 40, footerY + 20, { align: 'center', width: 515 });
+         .text('Corporate Travels | YOUR JOURNEY, OUR COMMITMENT', 40, footerY + 20, { align: 'center', width: 515 });
       
       doc.fontSize(6)
          .fillColor('#AAAAAA')
@@ -956,7 +956,7 @@ async function sendInvoiceEmail(invoice, pdfPath) {
       <tr>
         <td>
           <h4 style="margin: 0 0 12px 0; color: #0066CC; font-size: 15px;">🏦 Bank Transfer / NEFT / RTGS / IMPS</h4>
-          <p style="margin: 6px 0; font-size: 13px; color: #333;"><strong>Account Holder:</strong> ${paymentInfo.accountHolder || 'ABRA Travels'}</p>
+          <p style="margin: 6px 0; font-size: 13px; color: #333;"><strong>Account Holder:</strong> ${paymentInfo.accountHolder || 'Corporate Travels'}</p>
           <p style="margin: 6px 0; font-size: 13px; color: #333;"><strong>Account Number:</strong> ${paymentInfo.bankAccount}</p>
           <p style="margin: 6px 0; font-size: 13px; color: #333;"><strong>IFSC Code:</strong> ${paymentInfo.ifscCode}</p>
           <p style="margin: 6px 0; font-size: 13px; color: #333;"><strong>Bank Name:</strong> ${paymentInfo.bankName}</p>
@@ -1042,7 +1042,7 @@ async function sendInvoiceEmail(invoice, pdfPath) {
           <table width="100%" cellpadding="12" cellspacing="0" border="0" style="background: #E3F2FD; border-radius: 6px; border-left: 4px solid #2196F3; margin-top: 12px;">
             <tr>
               <td style="font-size: 13px; color: #333;">
-                💡 Cheques should be drawn in favor of "<strong>${paymentInfo.accountHolder || 'ABRA Travels'}</strong>"
+                💡 Cheques should be drawn in favor of "<strong>${paymentInfo.accountHolder || 'Corporate Travels'}</strong>"
               </td>
             </tr>
           </table>
@@ -1057,7 +1057,7 @@ async function sendInvoiceEmail(invoice, pdfPath) {
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Invoice ${invoice.invoiceNumber} - ABRA Travels</title>
+  <title>Invoice ${invoice.invoiceNumber} - Corporate Travels</title>
 </head>
 <body style="margin: 0; padding: 0; font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; background-color: #f4f4f4;">
   <table width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color: #f4f4f4; padding: 20px 0;">
@@ -1073,10 +1073,10 @@ async function sendInvoiceEmail(invoice, pdfPath) {
                 <tr>
                   <td width="60%" style="vertical-align: top;">
                     ${logoBase64 ? `
-                    <img src="${logoBase64}" alt="ABRA Travels" style="max-width: 200px; height: auto; display: block; margin-bottom: 10px;">
+                    <img src="${logoBase64}" alt="Corporate Travels" style="max-width: 200px; height: auto; display: block; margin-bottom: 10px;">
                     <p style="color: #ffffff; font-size: 13px; letter-spacing: 1.2px; margin: 8px 0 0 0; font-weight: 500;">YOUR JOURNEY, OUR COMMITMENT</p>
                     ` : `
-                    <h1 style="color: #ffffff; margin: 0; font-size: 32px;">ABRA Travels</h1>
+                    <h1 style="color: #ffffff; margin: 0; font-size: 32px;">Corporate Travels</h1>
                     <p style="color: #ffffff; font-size: 13px; letter-spacing: 1.2px; margin: 8px 0 0 0; font-weight: 500;">YOUR JOURNEY, OUR COMMITMENT</p>
                     `}
                   </td>
@@ -1097,14 +1097,14 @@ async function sendInvoiceEmail(invoice, pdfPath) {
               <h2 style="font-size: 18px; font-weight: bold; color: #2C3E50; margin: 0 0 10px 0;">Dear ${invoice.customerName},</h2>
               
               <p style="font-size: 14px; color: #555555; margin: 0 0 20px 0; line-height: 1.8;">
-                Thank you for choosing <strong>ABRA Travels</strong>. We're pleased to send you invoice <strong>${invoice.invoiceNumber}</strong> for your recent booking.
+                Thank you for choosing <strong>Corporate Travels</strong>. We're pleased to send you invoice <strong>${invoice.invoiceNumber}</strong> for your recent booking.
               </p>
 
               <!-- Trust Badge -->
               <table width="100%" cellpadding="15" cellspacing="0" border="0" style="background: #E8F5E9; border-left: 4px solid #27AE60; border-radius: 6px; margin: 20px 0;">
                 <tr>
                   <td style="color: #1B5E20; font-size: 13px;">
-                    ✅ <strong>Verified Invoice</strong> - This is an official invoice from ABRA Travels with GST registration 29AABCT1332L1ZM
+                    ✅ <strong>Verified Invoice</strong> - This is an official invoice from Corporate Travels with GST registration 29AABCT1332L1ZM
                   </td>
                 </tr>
               </table>
@@ -1260,7 +1260,7 @@ async function sendInvoiceEmail(invoice, pdfPath) {
               </p>
 
               <p style="font-size: 16px; font-weight: bold; color: #0066CC; text-align: center; margin: 25px 0;">
-                Thank you for trusting ABRA Travels! 🙏
+                Thank you for trusting Corporate Travels! 🙏
               </p>
               
             </td>
@@ -1269,7 +1269,7 @@ async function sendInvoiceEmail(invoice, pdfPath) {
           <!-- Footer -->
           <tr>
             <td style="background-color: #2C3E50; color: #ffffff; padding: 30px 40px; text-align: center;">
-              <p style="margin: 0; font-weight: bold; font-size: 16px; color: #ffffff;">ABRA Travels</p>
+              <p style="margin: 0; font-weight: bold; font-size: 16px; color: #ffffff;">Corporate Travels</p>
               <p style="margin: 8px 0; font-style: italic; color: #ECF0F1; letter-spacing: 1px; font-size: 12px;">YOUR JOURNEY, OUR COMMITMENT</p>
               
               <table width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-top: 15px;">
@@ -1285,7 +1285,7 @@ async function sendInvoiceEmail(invoice, pdfPath) {
               </table>
 
               <p style="margin-top: 25px; color: #7F8C8D; font-size: 11px;">
-                © ${new Date().getFullYear()} ABRA Travels. All rights reserved.
+                © ${new Date().getFullYear()} Corporate Travels. All rights reserved.
               </p>
             </td>
           </tr>
@@ -1298,9 +1298,9 @@ async function sendInvoiceEmail(invoice, pdfPath) {
 </html>`;
   
   const mailOptions = {
-    from: `"ABRA Travels - Billing" <${process.env.SMTP_USER}>`,
+    from: `"Corporate Travels - Billing" <${process.env.SMTP_USER}>`,
     to: invoice.customerEmail,
-    subject: `📄 Invoice ${invoice.invoiceNumber} from ABRA Travels - ₹${invoice.totalAmount.toFixed(2)}`,
+    subject: `📄 Invoice ${invoice.invoiceNumber} from Corporate Travels - ₹${invoice.totalAmount.toFixed(2)}`,
     html: emailHtml,
     attachments: [
       {
@@ -1343,9 +1343,9 @@ async function sendPaymentReceiptEmail(invoice, payment) {
           <tr>
             <td style="background: linear-gradient(135deg, #27ae60 0%, #229954 100%); color: white; padding: 35px; text-align: left;">
               ${logoBase64 ? `
-              <img src="${logoBase64}" alt="ABRA Travels" style="max-width: 180px; height: auto; display: block; margin-bottom: 10px; filter: brightness(0) invert(1);">
+              <img src="${logoBase64}" alt="Corporate Travels" style="max-width: 180px; height: auto; display: block; margin-bottom: 10px; filter: brightness(0) invert(1);">
               ` : `
-              <h1 style="color: #ffffff; margin: 0 0 5px 0; font-size: 28px;">ABRA Travels</h1>
+              <h1 style="color: #ffffff; margin: 0 0 5px 0; font-size: 28px;">Corporate Travels</h1>
               `}
               <p style="color: #ffffff; margin: 0; letter-spacing: 1px; font-size: 13px;">YOUR JOURNEY, OUR COMMITMENT</p>
               <h1 style="margin: 20px 0 0 0; font-size: 32px; color: #ffffff;">✅ Payment Received</h1>
@@ -1448,9 +1448,9 @@ async function sendPaymentReceiptEmail(invoice, payment) {
           <!-- Footer -->
           <tr>
             <td style="text-align: center; color: #95a5a6; font-size: 12px; padding: 35px 20px 20px 20px; border-top: 2px solid #27ae60;">
-              <p style="margin: 0 0 10px 0;"><strong>ABRA Travels</strong> | YOUR JOURNEY, OUR COMMITMENT</p>
+              <p style="margin: 0 0 10px 0;"><strong>Corporate Travels</strong> | YOUR JOURNEY, OUR COMMITMENT</p>
               <p style="margin: 0;">info@abratravels.com | +91 88672 88076 | GST: 29AABCT1332L1ZM</p>
-              <p style="margin: 15px 0 0 0; font-size: 11px;">© ${new Date().getFullYear()} ABRA Travels. All rights reserved.</p>
+              <p style="margin: 15px 0 0 0; font-size: 11px;">© ${new Date().getFullYear()} Corporate Travels. All rights reserved.</p>
             </td>
           </tr>
           
@@ -1463,7 +1463,7 @@ async function sendPaymentReceiptEmail(invoice, payment) {
   
   console.log('   📤 Sending payment receipt email...');
   const result = await emailTransporter.sendMail({
-    from: `"ABRA Travels - Billing" <${process.env.SMTP_USER}>`,
+    from: `"Corporate Travels - Billing" <${process.env.SMTP_USER}>`,
     to: invoice.customerEmail,
     subject: `✅ Payment Receipt - Invoice ${invoice.invoiceNumber}`,
     html: emailHtml

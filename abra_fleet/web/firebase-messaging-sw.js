@@ -20,7 +20,7 @@ const messaging = firebase.messaging();
 messaging.onBackgroundMessage((payload) => {
   console.log('[Service Worker] Background message received:', payload);
   
-  const notificationTitle = payload.notification?.title || 'Abra Fleet';
+  const notificationTitle = payload.notification?.title || 'Corporate Travels';
   const notificationOptions = {
     body: payload.notification?.body || 'New notification',
     icon: '/favicon.png',

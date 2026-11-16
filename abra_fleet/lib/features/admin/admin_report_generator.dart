@@ -117,7 +117,7 @@ class _AdminReportGeneratorState extends State<AdminReportGenerator> {
             pw.Container(
               padding: const pw.EdgeInsets.all(8),
               decoration: pw.BoxDecoration(color: headerBlue, borderRadius: pw.BorderRadius.all(pw.Radius.circular(4))),
-              child: pw.Text('ABRA FLEET',
+              child: pw.Text('CORPORATE TRAVELS',
                   style: pw.TextStyle(color: PdfColors.white, fontWeight: pw.FontWeight.bold, fontSize: 12)),
             ),
           ],
@@ -128,7 +128,7 @@ class _AdminReportGeneratorState extends State<AdminReportGenerator> {
       footer: (ctx) => pw.Row(
         mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
         children: [
-          pw.Text('Abra Fleet – Trip Report', style: pw.TextStyle(fontSize: 8, color: greyText)),
+          pw.Text('Corporate Travels – Trip Report', style: pw.TextStyle(fontSize: 8, color: greyText)),
           pw.Text('Page ${ctx.pageNumber} of ${ctx.pagesCount}', style: pw.TextStyle(fontSize: 8, color: greyText)),
         ],
       ),

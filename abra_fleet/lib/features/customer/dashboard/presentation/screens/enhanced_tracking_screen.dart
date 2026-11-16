@@ -207,7 +207,7 @@ class _EnhancedTrackingScreenState extends State<EnhancedTrackingScreen>
           '👤 Driver: *$driverName*\n\n'
           '📍 Track my ride in real time:\n'
           '$liveTrackingUrl\n\n'
-          'Powered by Abra Travels';
+          'Powered by Corporate Travels';
       final encodedMsg = Uri.encodeComponent(message);
       final uri = Uri.parse('https://wa.me/?text=$encodedMsg');
       if (await canLaunchUrl(uri)) {

@@ -343,7 +343,7 @@ class _PostLoginSplashScreenState extends State<PostLoginSplashScreen>
                                     Icon(Icons.directions_bus_rounded, color: _blueAccent, size: 14),
                                     const SizedBox(width: 8),
                                     Text(
-                                      'ABRA TRAVELS  ·  Your Journey, Our Priority',
+                                      'CORPORATE TRAVELS  ·  Your Journey, Our Priority',
                                       style: TextStyle(
                                         color: Colors.white.withOpacity(0.7),
                                         fontSize: 11,

@@ -559,8 +559,8 @@ async function sendExpenseGeneratedEmail(profile, expense) {
 <body>
   <div class="container">
     <div class="header">
-      ${logoBase64 ? `<img src="${logoBase64}" alt="ABRA Travels" class="logo" style="filter: brightness(0) invert(1);">` : `
-        <h1 style="color: #ffffff; margin: 0; font-size: 28px;">ABRA Travels</h1>
+      ${logoBase64 ? `<img src="${logoBase64}" alt="Corporate Travels" class="logo" style="filter: brightness(0) invert(1);">` : `
+        <h1 style="color: #ffffff; margin: 0; font-size: 28px;">Corporate Travels</h1>
       `}
       <p style="color: #ffffff; margin: 5px 0 0 0; letter-spacing: 1px;">YOUR JOURNEY, OUR COMMITMENT</p>
       <h1 style="margin: 20px 0 0 0; font-size: 28px;">💰 Expense Generated</h1>
@@ -638,9 +638,9 @@ async function sendExpenseGeneratedEmail(profile, expense) {
       </p>
     </div>
     <div class="footer">
-      <p><strong>ABRA Travels</strong> | YOUR JOURNEY, OUR COMMITMENT</p>
+      <p><strong>Corporate Travels</strong> | YOUR JOURNEY, OUR COMMITMENT</p>
       <p>info@abratravels.com | +91 88672 88076</p>
-      <p style="margin-top: 15px;">© ${new Date().getFullYear()} ABRA Travels. All rights reserved.</p>
+      <p style="margin-top: 15px;">© ${new Date().getFullYear()} Corporate Travels. All rights reserved.</p>
     </div>
   </div>
 </body>
@@ -648,7 +648,7 @@ async function sendExpenseGeneratedEmail(profile, expense) {
   `;
   
   return emailTransporter.sendMail({
-    from: `"ABRA Travels - Expense System" <${process.env.SMTP_USER}>`,
+    from: `"Corporate Travels - Expense System" <${process.env.SMTP_USER}>`,
     to: process.env.ADMIN_EMAIL || process.env.SMTP_USER,
     subject: `💰 Expense ${expense.expenseNumber} Generated - ${profile.profileName}`,
     html: emailHtml

@@ -238,7 +238,7 @@ async function generatePaymentPDF(payment) {
         } catch (_) {}
       }
       if (!logoLoaded) {
-        doc.fontSize(22).fillColor('#0066CC').font('Helvetica-Bold').text('ABRA Travels', 40, 40);
+        doc.fontSize(22).fillColor('#0066CC').font('Helvetica-Bold').text('Corporate Travels', 40, 40);
       }
 
       const cy = logoLoaded ? 105 : 85;
@@ -348,9 +348,9 @@ async function generatePaymentPDF(payment) {
       const footerY = 730;
       doc.moveTo(40, footerY).lineTo(555, footerY).lineWidth(1.5).strokeColor('#0066CC').stroke();
       doc.fontSize(8).fillColor('#2C3E50').font('Helvetica-Bold')
-        .text('Thank you — ABRA Travels', 40, footerY + 8, { align: 'center', width: 515 });
+        .text('Thank you — Corporate Travels', 40, footerY + 8, { align: 'center', width: 515 });
       doc.fontSize(6).fillColor('#888888').font('Helvetica')
-        .text('ABRA Travels | YOUR JOURNEY, OUR COMMITMENT', 40, footerY + 20, { align: 'center', width: 515 });
+        .text('Corporate Travels | YOUR JOURNEY, OUR COMMITMENT', 40, footerY + 20, { align: 'center', width: 515 });
       doc.fontSize(6).fillColor('#AAAAAA')
         .text('www.abratravels.com | info@abratravels.com | +91 88672 88076', 40, footerY + 30, { align: 'center', width: 515 });
 
@@ -390,10 +390,10 @@ async function sendPaymentEmail(payment) {
         ${payment.referenceNumber ? `<tr style="background:#f8f9fa;"><td style="padding:10px;font-weight:bold;">Reference</td><td style="padding:10px;">${payment.referenceNumber}</td></tr>` : ''}
       </table>
     </td></tr>
-    <tr><td style="background:#2C3E50;color:#95A5A6;padding:20px;text-align:center;font-size:12px;">ABRA Travels | info@abratravels.com | +91 88672 88076</td></tr>
+    <tr><td style="background:#2C3E50;color:#95A5A6;padding:20px;text-align:center;font-size:12px;">Corporate Travels | info@abratravels.com | +91 88672 88076</td></tr>
   </table></body></html>`;
   return emailTransporter.sendMail({
-    from: `"ABRA Travels" <${process.env.SMTP_USER}>`,
+    from: `"Corporate Travels" <${process.env.SMTP_USER}>`,
     to: payment.vendorEmail,
     subject: `✅ Payment Confirmation - ${payment.paymentNumber}`,
     html,

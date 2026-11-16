@@ -469,7 +469,7 @@ const generateQuotePDF = async (quote) => {
         doc.fontSize(22)
            .fillColor('#0066CC')
            .font('Helvetica-Bold')
-           .text('ABRA Travels', 40, 40);
+           .text('Corporate Travels', 40, 40);
         
         doc.fontSize(9)
            .fillColor('#666666')
@@ -612,7 +612,7 @@ const sendQuoteEmail = async (quote, pdfBuffer) => {
     const mailOptions = {
       from: process.env.SMTP_FROM || process.env.SMTP_USER,
       to: quote.customerEmail,
-      subject: `Quote ${quote.quoteNumber} from ${process.env.COMPANY_NAME || 'Abra Fleet'}`,
+      subject: `Quote ${quote.quoteNumber} from ${process.env.COMPANY_NAME || 'Corporate Travels'}`,
       html: `
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
           <h2>Quote ${quote.quoteNumber}</h2>
@@ -630,7 +630,7 @@ const sendQuoteEmail = async (quote, pdfBuffer) => {
           
           <p>If you have any questions, please don't hesitate to contact us.</p>
           
-          <p>Best regards,<br>${process.env.COMPANY_NAME || 'Abra Fleet'}</p>
+          <p>Best regards,<br>${process.env.COMPANY_NAME || 'Corporate Travels'}</p>
         </div>
       `,
       attachments: [
@@ -692,7 +692,7 @@ const sendAcceptanceEmail = async (quote) => {
             
             <p>If you have any questions, please feel free to contact us.</p>
             
-            <p>Best regards,<br>${process.env.COMPANY_NAME || 'Abra Fleet'}</p>
+            <p>Best regards,<br>${process.env.COMPANY_NAME || 'Corporate Travels'}</p>
           </div>
         </div>
       `,
@@ -748,7 +748,7 @@ const sendDeclineEmail = async (quote, reason) => {
             
             <p>We hope to work with you in the future.</p>
             
-            <p>Best regards,<br>${process.env.COMPANY_NAME || 'Abra Fleet'}</p>
+            <p>Best regards,<br>${process.env.COMPANY_NAME || 'Corporate Travels'}</p>
           </div>
         </div>
       `,

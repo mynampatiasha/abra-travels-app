@@ -430,7 +430,7 @@ class _AdminClientTripsPageState extends State<AdminClientTripsPage> {
         'Vehicle: *$vehicleNum*\n\n'
         '📍 Track your ride in real time:\n'
         '$liveUrl\n\n'
-        'Thank you for choosing Abra Fleet!';
+        'Thank you for choosing Corporate Travels!';
 
     final customerPhone = trip['clientPhone'] ?? trip['customer']?['phone'] ?? '';
     final driverPhone = trip['driverPhone']?.toString() ?? '';
