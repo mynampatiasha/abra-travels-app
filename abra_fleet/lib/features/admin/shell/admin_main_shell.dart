@@ -5548,28 +5548,28 @@ List<Widget> _buildRoleBasedNavigation(bool isMobile) {
                     if (showWlq)
                       buildSalesMarketingSubItem(
                         'WLQ (WhatsApp Lead Qualifier)',
-                        'https://abra-travels.com/fm-sales/db-wa-agent.php?entity=elogistics',
+                        'https://abra-travels.com/hrm/db-wa-agent.php',
                         Icons.chat,
                         'wa_lead_qualifier_al',
                         iconColor: const Color(0xFF34D399), // fa-comments
                       ),
                     // ✅ Abra Tours & Travels WhatsApp bot (own files, own tables — separate from the AL WLQ above)
-                    if (showWaLeads)
-                      buildSalesMarketingSubItem(
-                        'WhatsApp Leads (Travels)',
-                        'https://www.abra-travels.com/tv-wa-leads.php',
-                        Icons.forum,
-                        'tt_wa_leads',
-                        iconColor: const Color(0xFF25D366), // whatsapp green
-                      ),
-                    if (showWaAgent)
-                      buildSalesMarketingSubItem(
-                        'WhatsApp Bot Setup (Travels)',
-                        'https://www.abra-travels.com/tv-wa-agent.php',
-                        Icons.smart_toy,
-                        'tt_wa_agent',
-                        iconColor: const Color(0xFF60A5FA),
-                      ),
+                    // if (showWaLeads)
+                    //   buildSalesMarketingSubItem(
+                    //     'WhatsApp Leads (Travels)',
+                    //     'https://www.abra-travels.com/tv-wa-leads.php',
+                    //     Icons.forum,
+                    //     'tt_wa_leads',
+                    //     iconColor: const Color(0xFF25D366), // whatsapp green
+                    //   ),
+                    // if (showWaAgent)
+                    //   buildSalesMarketingSubItem(
+                    //     'WhatsApp Bot Setup (Travels)',
+                    //     'https://www.abra-travels.com/tv-wa-agent.php',
+                    //     Icons.smart_toy,
+                    //     'tt_wa_agent',
+                    //     iconColor: const Color(0xFF60A5FA),
+                    //   ),
                     if (showCustomerAnalytics)
                       buildSalesMarketingSubItem(
                         'Customer Analytics',
@@ -5650,7 +5650,7 @@ List<Widget> _buildRoleBasedNavigation(bool isMobile) {
                     if (showBudgetPlanning)
                       buildSalesMarketingSubItem(
                         'Budget Planning',
-                        'https://abra-travels.com/fm-sales/budget-digital-marketing.php?entity=elogistics',
+                        'https://abra-travels.com/hrm/budget-digital-marketing.php',
                         Icons.account_balance_wallet,
                         'budget_planning_al',
                         iconColor: const Color(0xFF4ADE80), // fa-money
@@ -5668,7 +5668,7 @@ List<Widget> _buildRoleBasedNavigation(bool isMobile) {
                     if (showSalesDashboard)
                       buildSalesMarketingSubItem(
                         'AL Sales Dashboard',
-                        'https://abra-travels.com/fm-sales/sales-admin-dashboard.php?b=',
+                        'https://abra-travels.com/hrm/sales-admin-dashboard.php',
                         Icons.dashboard,
                         'al_sales_dashboard',
                         iconColor: const Color(0xFF60A5FA), // header.php inline style="color:#60a5fa"
@@ -5685,7 +5685,7 @@ List<Widget> _buildRoleBasedNavigation(bool isMobile) {
                           if (showLeads)
                             buildSalesMarketingSubItem(
                               'Sale Leads',
-                              'https://abra-travels.com/fm-sales/tt-sale-leads.php?b=al',
+                              'https://abra-travels.com/hrm/tt-sale-leads.php',
                               Icons.gps_fixed,
                               'al_leads',
                               iconColor: const Color(0xFFF87171), // fa-bullseye
@@ -5693,7 +5693,7 @@ List<Widget> _buildRoleBasedNavigation(bool isMobile) {
                           if (showLeadsDatabase)
                             buildSalesMarketingSubItem(
                               'Customer Database',
-                              'https://abra-travels.com/fm-sales/tt-customer-database.php?b=al',
+                              'https://abra-travels.com/hrm/tt-customer-database.php',
                               Icons.storage,
                               'al_leads_database',
                               iconColor: const Color(0xFF38BDF8), // fa-database

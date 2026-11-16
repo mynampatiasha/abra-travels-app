@@ -278,8 +278,8 @@ class _WelcomeScreenState extends State<WelcomeScreen>
                       child: SlideTransition(
                         position: _heroSlide,
                         child: isWide
-                            ? _buildHeroWide()
-                            : _buildHeroMobile(),
+                            ? _buildHeroWide(constraints)
+                            : _buildHeroMobile(constraints),
                       ),
                     ),
             ],
@@ -291,151 +291,170 @@ class _WelcomeScreenState extends State<WelcomeScreen>
 
   // ── HERO ──────────────────────────────────────────────────────────────────
 
-  Widget _buildHeroWide() {
+  Widget _buildHeroWide(BoxConstraints c) {
+    // content scales down a little on narrower "wide" windows (800 - 1100 px)
+    final s = (c.maxWidth / 1100).clamp(0.75, 1.0).toDouble();
     return SafeArea(
-      child: Center(
-        child: Container(
-          constraints: const BoxConstraints(maxWidth: 1100),
-          padding: const EdgeInsets.symmetric(horizontal: 56, vertical: 32),
-          child: Row(
-            children: [
-              // Left — logo + branding
-              Expanded(
-                flex: 5,
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
+      child: LayoutBuilder(
+        // scrolls instead of overflowing when the window is short, and stays centred when it is tall
+        builder: (context, box) => SingleChildScrollView(
+          child: ConstrainedBox(
+            constraints: BoxConstraints(minHeight: box.maxHeight),
+            child: Center(
+              child: Container(
+                constraints: const BoxConstraints(maxWidth: 1100),
+                padding: EdgeInsets.symmetric(horizontal: 56 * s, vertical: 32),
+                child: Row(
                   children: [
-                    _buildLogoBlock(large: true),
-                    const SizedBox(height: 32),
-                    // Overline
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
-                      decoration: BoxDecoration(
-                        color: _goldAccent.withOpacity(0.12),
-                        borderRadius: BorderRadius.circular(50),
-                        border: Border.all(color: _goldAccent.withOpacity(0.35)),
-                      ),
-                      child: Row(
+                    // Left — logo + branding
+                    Expanded(
+                      flex: 5,
+                      child: Column(
                         mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Icon(Icons.star_rounded, color: _goldAccent, size: 13),
-                          const SizedBox(width: 6),
+                          _buildLogoBlock(large: true),
+                          const SizedBox(height: 32),
+                          // Overline
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+                            decoration: BoxDecoration(
+                              color: _goldAccent.withOpacity(0.12),
+                              borderRadius: BorderRadius.circular(50),
+                              border: Border.all(color: _goldAccent.withOpacity(0.35)),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(Icons.star_rounded, color: _goldAccent, size: 13),
+                                const SizedBox(width: 6),
+                                Flexible(
+                                  child: Text(
+                                    'ENTERPRISE FLEET MANAGEMENT',
+                                    style: TextStyle(color: _goldAccent, fontSize: 10, fontWeight: FontWeight.w700, letterSpacing: 1.5),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(height: 18),
                           Text(
-                            'ENTERPRISE FLEET MANAGEMENT',
-                            style: TextStyle(color: _goldAccent, fontSize: 10, fontWeight: FontWeight.w700, letterSpacing: 1.5),
+                            'Your Journey,\nOur Priority.',
+                            style: TextStyle(
+                              fontSize: 52 * s,
+                              fontWeight: FontWeight.w900,
+                              color: Colors.white,
+                              height: 1.08,
+                              letterSpacing: -1.5,
+                            ),
+                          ),
+                          const SizedBox(height: 18),
+                          Text(
+                            'From bookings to destinations — ABRA Travels gives you '
+                            'complete command over your fleet, drivers, and passenger experience.',
+                            style: const TextStyle(
+                              fontSize: 16,
+                              color: Colors.white,
+                              height: 1.65,
+                            ),
+                          ),
+                          const SizedBox(height: 36),
+                          // the two buttons wrap onto a second line instead of overflowing
+                          Wrap(
+                            spacing: 14,
+                            runSpacing: 12,
+                            children: [
+                              _PrimaryBtn(label: 'Explore Features', icon: Icons.explore_outlined, onTap: _startTour),
+                              _GhostBtn(label: 'Sign In', onTap: _goToLogin),
+                            ],
                           ),
                         ],
                       ),
                     ),
-                    const SizedBox(height: 18),
-                    const Text(
-                      'Your Journey,\nOur Priority.',
-                      style: TextStyle(
-                        fontSize: 52,
-                        fontWeight: FontWeight.w900,
-                        color: Colors.white,
-                        height: 1.08,
-                        letterSpacing: -1.5,
+                    SizedBox(width: 64 * s),
+                    // Right — floating logo + stat cards
+                    Expanded(
+                      flex: 4,
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          _buildFloatingLogo(size: 160 * s),
+                          const SizedBox(height: 28),
+                          _buildStatCards(),
+                        ],
                       ),
-                    ),
-                    const SizedBox(height: 18),
-                    Text(
-                      'From bookings to destinations — ABRA Travels gives you '
-                      'complete command over your fleet, drivers, and passenger experience.',
-                      style: const TextStyle(
-                        fontSize: 16,
-                        color: Colors.white,
-                        height: 1.65,
-                      ),
-                    ),
-                    const SizedBox(height: 36),
-                    Row(
-                      children: [
-                        _PrimaryBtn(label: 'Explore Features', icon: Icons.explore_outlined, onTap: _startTour),
-                        const SizedBox(width: 14),
-                        _GhostBtn(label: 'Sign In', onTap: _goToLogin),
-                      ],
                     ),
                   ],
                 ),
               ),
-              const SizedBox(width: 64),
-              // Right — floating logo + stat cards
-              Expanded(
-                flex: 4,
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    _buildFloatingLogo(),
-                    const SizedBox(height: 28),
-                    _buildStatCards(),
-                  ],
-                ),
-              ),
-            ],
+            ),
           ),
         ),
       ),
     );
   }
 
-  Widget _buildHeroMobile() {
+  Widget _buildHeroMobile(BoxConstraints c) {
+    final titleSize = (c.maxWidth * 0.1).clamp(28.0, 40.0).toDouble();
+    final logoSize = (c.maxWidth * 0.28).clamp(90.0, 120.0).toDouble();
+    final sidePad = (c.maxWidth * 0.07).clamp(16.0, 28.0).toDouble();
     return SafeArea(
       child: Center(
         child: SingleChildScrollView(
-          padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 36),
+          padding: EdgeInsets.symmetric(horizontal: sidePad, vertical: 36),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              _buildFloatingLogo(size: 110),
-            const SizedBox(height: 28),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
-              decoration: BoxDecoration(
-                color: _goldAccent.withOpacity(0.12),
-                borderRadius: BorderRadius.circular(50),
-                border: Border.all(color: _goldAccent.withOpacity(0.35)),
+              _buildFloatingLogo(size: logoSize),
+              const SizedBox(height: 28),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+                decoration: BoxDecoration(
+                  color: _goldAccent.withOpacity(0.12),
+                  borderRadius: BorderRadius.circular(50),
+                  border: Border.all(color: _goldAccent.withOpacity(0.35)),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.star_rounded, color: _goldAccent, size: 12),
+                    const SizedBox(width: 6),
+                    Flexible(
+                      child: Text('ENTERPRISE FLEET MANAGEMENT',
+                        style: TextStyle(color: _goldAccent, fontSize: 9, fontWeight: FontWeight.w700, letterSpacing: 1.5)),
+                    ),
+                  ],
+                ),
               ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(Icons.star_rounded, color: _goldAccent, size: 12),
-                  const SizedBox(width: 6),
-                  Text('ENTERPRISE FLEET MANAGEMENT',
-                    style: TextStyle(color: _goldAccent, fontSize: 9, fontWeight: FontWeight.w700, letterSpacing: 1.5)),
-                ],
+              const SizedBox(height: 18),
+              Text(
+                'Your Journey,\nOur Priority.',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: titleSize,
+                  fontWeight: FontWeight.w900,
+                  color: Colors.white,
+                  height: 1.1,
+                  letterSpacing: -1,
+                ),
               ),
-            ),
-            const SizedBox(height: 18),
-            const Text(
-              'Your Journey,\nOur Priority.',
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                fontSize: 38,
-                fontWeight: FontWeight.w900,
-                color: Colors.white,
-                height: 1.1,
-                letterSpacing: -1,
+              const SizedBox(height: 16),
+              Text(
+                'Complete command over your fleet, drivers, and passenger experience.',
+                textAlign: TextAlign.center,
+                style: const TextStyle(fontSize: 14, color: Colors.white, height: 1.65),
               ),
-            ),
-            const SizedBox(height: 16),
-            Text(
-              'Complete command over your fleet, drivers, and passenger experience.',
-              textAlign: TextAlign.center,
-              style: const TextStyle(fontSize: 14, color: Colors.white, height: 1.65),
-            ),
-            const SizedBox(height: 32),
-            SizedBox(width: double.infinity,
-              child: _PrimaryBtn(label: 'Explore Features', icon: Icons.explore_outlined, onTap: _startTour)),
-            const SizedBox(height: 12),
-            SizedBox(width: double.infinity,
-              child: _GhostBtn(label: 'Sign In', onTap: _goToLogin)),
-            const SizedBox(height: 36),
-            _buildFeaturePills(),
-          ],
+              const SizedBox(height: 32),
+              SizedBox(width: double.infinity,
+                child: _PrimaryBtn(label: 'Explore Features', icon: Icons.explore_outlined, onTap: _startTour)),
+              const SizedBox(height: 12),
+              SizedBox(width: double.infinity,
+                child: _GhostBtn(label: 'Sign In', onTap: _goToLogin)),
+              const SizedBox(height: 36),
+              _buildFeaturePills(),
+            ],
+          ),
         ),
-      ),
       ),
     );
   }
@@ -620,9 +639,16 @@ class _WelcomeScreenState extends State<WelcomeScreen>
             ),
           ),
         ),
-        Center(
-          child: isWide ? _buildTourWide(step) : _buildTourMobile(step),
-        ),
+        isWide
+            ? LayoutBuilder(
+                builder: (context, box) => SingleChildScrollView(
+                  child: ConstrainedBox(
+                    constraints: BoxConstraints(minHeight: box.maxHeight),
+                    child: Center(child: _buildTourWide(step)),
+                  ),
+                ),
+              )
+            : Center(child: _buildTourMobile(step)),
       ],
     );
   }

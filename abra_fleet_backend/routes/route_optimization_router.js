@@ -77,13 +77,33 @@ const minToHHMM = (m) => {
   return String(Math.floor(x / 60)).padStart(2, '0') + ':' + String(x % 60).padStart(2, '0');
 };
 
+// 'YYYY-MM-DD' of a date value (ISO strings keep their own date part)
+const toDayString = (v) => {
+  if (!v) return null;
+  if (typeof v === 'string' && /^\d{4}-\d{2}-\d{2}/.test(v)) return v.slice(0, 10);
+  const d = new Date(v);
+  return isNaN(d.getTime()) ? null : d.toISOString().split('T')[0];
+};
+
+const WEEKDAY_KEYS = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
+const weekdayKeyOf = (day) => WEEKDAY_KEYS[new Date(day + 'T00:00:00Z').getUTCDay()];
+// working weekdays of a roster as a Set of 'mon'..'sun' (null = nothing stored = every day)
+const rosterWeekdaySet = (roster) => {
+  const list = (roster && (roster.weekdays || roster.weeklyOffDays || roster.workingDays)) || [];
+  const set = new Set((Array.isArray(list) ? list : []).map((x) => String(x).toLowerCase().slice(0, 3)).filter((x) => WEEKDAY_KEYS.includes(x)));
+  return set.size > 0 ? set : null;
+};
+
 const datesBetween = (startDate, endDate) => {
   const out = [];
-  const d = new Date(startDate);
-  const end = new Date(endDate || startDate);
-  while (d <= end && out.length < 93) {
-    out.push(d.toISOString().split('T')[0]);
-    d.setDate(d.getDate() + 1);
+  const start = toDayString(startDate);
+  const end = toDayString(endDate || startDate);
+  if (!start || !end) return out;
+  let t = new Date(start + 'T00:00:00Z').getTime();
+  const last = new Date(end + 'T00:00:00Z').getTime();
+  while (t <= last && out.length < 93) {
+    out.push(new Date(t).toISOString().split('T')[0]);
+    t += 86400000;
   }
   return out;
 };
@@ -97,7 +117,7 @@ const tripWindow = (trip) => {
   const first = stops[0];
   const last = stops[stops.length - 1];
   let end = stored;
-  if (trip.tripType === 'pickup' && stops.length >= 2) {
+  if (trip.tripType === 'pickup' && stops.length >= 2 && !trip.endsAtOffice) {
     // a pickup trip stores the LAST PICKUP time as its end - the driver is still driving to the office
     end += estimateTravelMinutes(stops[stops.length - 2].location && stops[stops.length - 2].location.coordinates, last.location && last.location.coordinates);
   }
@@ -808,7 +828,9 @@ router.post('/compatible-vehicles', verifyToken, async (req, res) => {
 
     // Buffer set by operations + every active trip in the date range (checked per vehicle AND per driver below)
     const bufferMinutes = await getDriverBufferMinutes(req.db);
-    const checkDates = datesBetween(checkStartDate, checkEndDate);
+    const rosterWeekdays = rosters.map(rosterWeekdaySet);
+    const neededWeekdays = rosterWeekdays.some(s => s === null) ? null : new Set(rosterWeekdays.flatMap(s => Array.from(s)));
+    const checkDates = datesBetween(checkStartDate, checkEndDate).filter(d => !neededWeekdays || neededWeekdays.has(weekdayKeyOf(d)));
     const selectedRosterIds = new Set(rosters.map(r => String(r._id)));
     const rangeTrips = (await req.db.collection('roster-assigned-trips').find({
       status: { $in: ['assigned', 'started', 'in_progress'] },
@@ -1133,17 +1155,47 @@ router.post('/assign-optimized-route', verifyToken, async (req, res) => {
     }
     
     // ✅ NEW: Date range validation and calculation
-    const assignStartDate = startDate || new Date().toISOString().split('T')[0];
-    const assignEndDate = endDate || assignStartDate;
-    
-    // ✅ NEW: Generate list of dates
-    const dateList = [];
-    const currentDate = new Date(assignStartDate);
-    const endDateObj = new Date(assignEndDate);
-    
-    while (currentDate <= endDateObj) {
-      dateList.push(currentDate.toISOString().split('T')[0]);
-      currentDate.setDate(currentDate.getDate() + 1);
+    // Dates are normalised to YYYY-MM-DD (the app sends full ISO strings)
+    const todayStr = new Date().toISOString().split('T')[0];
+    let assignStartDate = toDayString(startDate) || todayStr;
+    let assignEndDate = toDayString(endDate) || assignStartDate;
+    let dateList = datesBetween(assignStartDate, assignEndDate);
+
+    // The ROSTERS decide the dates: one date range and one set of weekdays for everyone on the vehicle,
+    // and no trips on days a roster does not travel (weekends etc.)
+    const routeRosterIds = route.map(r => r && r.rosterId).filter(id => id && ObjectId.isValid(id)).map(id => new ObjectId(id));
+    const routeRosterDocs = routeRosterIds.length ? await req.db.collection('rosters').find({ _id: { $in: routeRosterIds } }).toArray() : [];
+    if (routeRosterDocs.length > 0) {
+      const ranges = new Set(routeRosterDocs.map(r => toDayString(r.startDate) + ' to ' + toDayString(r.endDate)));
+      if (ranges.size > 1) {
+        return res.status(400).json({
+          success: false,
+          error: 'DIFFERENT_DATE_RANGES',
+          message: 'These customers have different date ranges (' + Array.from(ranges).join('; ') + '). Assign customers with the same date range together.'
+        });
+      }
+      const dayKeys = new Set(routeRosterDocs.map(r => { const s = rosterWeekdaySet(r); return s ? Array.from(s).sort().join(',') : 'all'; }));
+      if (dayKeys.size > 1) {
+        return res.status(400).json({
+          success: false,
+          error: 'DIFFERENT_WEEKDAYS',
+          message: 'These customers travel on different weekdays. Assign customers with the same weekdays together.'
+        });
+      }
+      const rosterStart = toDayString(routeRosterDocs[0].startDate);
+      const rosterEnd = toDayString(routeRosterDocs[0].endDate);
+      if (rosterStart && rosterEnd) dateList = dateList.filter(d => d >= rosterStart && d <= rosterEnd);
+      const allowedDays = rosterWeekdaySet(routeRosterDocs[0]);
+      if (allowedDays) dateList = dateList.filter(d => allowedDays.has(weekdayKeyOf(d)));
+      if (dateList.length === 0) {
+        return res.status(400).json({
+          success: false,
+          error: 'NO_TRIP_DATES',
+          message: "No trip dates remain: the requested dates do not fall on the roster's own dates and weekdays."
+        });
+      }
+      assignStartDate = dateList[0];
+      assignEndDate = dateList[dateList.length - 1];
     }
     
     console.log(`📋 Processing ${route.length} customer assignments`);
@@ -1403,7 +1455,6 @@ router.post('/assign-optimized-route', verifyToken, async (req, res) => {
     // STEP 4: Check TIME SLOT conflicts for consecutive trip validation
     // ========================================================================
     console.log('\n⏰ CHECKING TIME SLOT CONFLICTS (CONSECUTIVE TRIPS SUPPORT)...');
-    const scheduledDate = new Date().toISOString().split('T')[0];
     
     // Helper to parse time in 24-hour format
     const parseTime = (timeStr) => {
@@ -1422,38 +1473,7 @@ router.post('/assign-optimized-route', verifyToken, async (req, res) => {
       return 0;
     };
     
-    for (const stop of route) {
-      const stopStartMinutes = parseTime(stop.pickupTime || '00:00');
-      const stopEndMinutes = parseTime(stop.estimatedTime || stop.pickupTime || '00:00');
-      
-      const conflicts = await req.db.collection('roster-assigned-trips').find({
-        vehicleId: new ObjectId(vehicleId),
-        scheduledDate: scheduledDate,
-        status: { $in: ['assigned', 'started', 'in_progress'] }
-      }).toArray();
-      
-      for (const existingTrip of conflicts) {
-        const existingStartMinutes = parseTime(existingTrip.startTime);
-        const existingEndMinutes = parseTime(existingTrip.endTime);
-        
-        const hasOverlap = (stopStartMinutes < existingEndMinutes) && (stopEndMinutes > existingStartMinutes);
-        
-        if (hasOverlap) {
-          await session.abortTransaction();
-          console.log(`\n❌ TIME SLOT CONFLICT DETECTED`);
-          console.log(`   Stop #${stop.sequence}: ${stop.customerName}`);
-          console.log(`   Conflicting with: ${existingTrip.tripNumber}`);
-          return res.status(409).json({
-            success: false,
-            message: `Time slot conflict detected for ${stop.customerName}`,
-            error: 'TIME_SLOT_CONFLICT',
-            conflictingTrip: existingTrip
-          });
-        }
-      }
-    }
-    
-    console.log(`   ✅ No time slot conflicts found - consecutive trips allowed`);
+    // (the old "today only" time-slot check was removed: the day-by-day driver/vehicle check above covers every assigned date)
     
     const results = [];
     const errors = [];
@@ -1856,6 +1876,7 @@ for (let dateIndex = 0; dateIndex < dateList.length; dateIndex++) {
     
     // ✅ NEW: Build stops array based on trip type
     let tripStops = [];
+    let officeArrivalTime = null; // morning trips: the time the group has to be at the office
     
     if (isMorningTrip) {
       // ========================================
@@ -1875,6 +1896,8 @@ for (let dateIndex = 0; dateIndex < dateList.length; dateIndex++) {
       
       // Add office drop as final stop
       const firstRoster = firstRosterDoc;
+      const officeTimeMatch = String(firstRoster?.startTime || '').match(/^(\d{1,2}):(\d{2})/);
+      if (officeTimeMatch) officeArrivalTime = officeTimeMatch[1].padStart(2, '0') + ':' + officeTimeMatch[2];
       
       tripStops.push({
         stopId: `office-drop-${vehicleId}`,
@@ -1884,7 +1907,7 @@ for (let dateIndex = 0; dateIndex < dateList.length; dateIndex++) {
           address: firstRoster?.officeLocation || 'Office',
           coordinates: toLngLat(firstRoster?.officeLocationCoordinates || firstRoster?.locations?.office?.coordinates)
         },
-        estimatedTime: stops[stops.length - 1]?.estimatedTime || startTime,
+        estimatedTime: officeArrivalTime || stops[stops.length - 1]?.estimatedTime || startTime,
         passengers: tripStops.map(s => s.customer.name),
         status: 'pending'
       });
@@ -2021,6 +2044,7 @@ for (let dateIndex = 0; dateIndex < dateList.length; dateIndex++) {
       
       // Schedule
       scheduledDate: scheduledDateForTrip,
+      endsAtOffice: isMorningTrip && !!officeArrivalTime, // endTime = arrival at the office (new trips)
       startTime: tripStartTime,
       endTime: tripEndTime,
       

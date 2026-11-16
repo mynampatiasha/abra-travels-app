@@ -1,0 +1,23 @@
+# Compiled and Archive files
+*.zip
+*.tar.gz
+*.rar
+
+# Backup and temp files
+*.bak
+*.bak_*
+*.backup
+*_backup_*
+.backups/
+.claude/
+abra_fleet_backend/revert.js
+
+# Logs
+*.log
+error_log
+user_error.log
+
+# Uploads and local temp data
+abra_fleet_backend/uploads/
+hrm/hrm/uploads/
+e2e_test_reports/
