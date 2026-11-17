@@ -339,10 +339,14 @@ class _AddVehicleScreenState extends State<AddVehicleScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final screenWidth = MediaQuery.of(context).size.width;
+    final double horizontalPadding = screenWidth < 600 ? 12.0 : (screenWidth < 1024 ? 18.0 : 24.0);
+    final double verticalPadding = screenWidth < 600 ? 12.0 : 24.0;
+
     return Scaffold(
       backgroundColor: backgroundColor,
       body: SingleChildScrollView(
-        padding: const EdgeInsets.all(24.0),
+        padding: EdgeInsets.symmetric(horizontal: horizontalPadding, vertical: verticalPadding),
         child: Form(
           key: _formKey,
           child: Column(
@@ -541,30 +545,42 @@ class _AddVehicleScreenState extends State<AddVehicleScreen> {
                       validator: null,
                     ),
                     const SizedBox(height: 16),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: _buildTextFormField(
-                            controller: _depotLatController,
-                            label: 'Depot Latitude',
-                            hint: 'e.g., 12.9716',
-                            icon: Icons.my_location_outlined,
-                            keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                            validator: null,
-                          ),
-                        ),
-                        const SizedBox(width: 16),
-                        Expanded(
-                          child: _buildTextFormField(
-                            controller: _depotLngController,
-                            label: 'Depot Longitude',
-                            hint: 'e.g., 77.5946',
-                            icon: Icons.my_location_outlined,
-                            keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                            validator: null,
-                          ),
-                        ),
-                      ],
+                    LayoutBuilder(
+                      builder: (context, constraints) {
+                        final latField = _buildTextFormField(
+                          controller: _depotLatController,
+                          label: 'Depot Latitude',
+                          hint: 'e.g., 12.9716',
+                          icon: Icons.my_location_outlined,
+                          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                          validator: null,
+                        );
+                        final lngField = _buildTextFormField(
+                          controller: _depotLngController,
+                          label: 'Depot Longitude',
+                          hint: 'e.g., 77.5946',
+                          icon: Icons.my_location_outlined,
+                          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                          validator: null,
+                        );
+
+                        if (constraints.maxWidth < 450) {
+                          return Column(
+                            children: [
+                              latField,
+                              const SizedBox(height: 16),
+                              lngField,
+                            ],
+                          );
+                        }
+                        return Row(
+                          children: [
+                            Expanded(child: latField),
+                            const SizedBox(width: 16),
+                            Expanded(child: lngField),
+                          ],
+                        );
+                      },
                     ),
                   ],
                 ),
@@ -599,8 +615,11 @@ class _AddVehicleScreenState extends State<AddVehicleScreen> {
               const SizedBox(height: 32),
 
               // Action Buttons
-              Row(
-                mainAxisAlignment: MainAxisAlignment.end,
+              Wrap(
+                alignment: WrapAlignment.end,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                spacing: 12,
+                runSpacing: 12,
                 children: [
                   OutlinedButton(
                     onPressed: _isSubmitting ? null : widget.onCancel,
@@ -611,7 +630,6 @@ class _AddVehicleScreenState extends State<AddVehicleScreen> {
                     ),
                     child: const Text('Cancel'),
                   ),
-                  const SizedBox(width: 12),
                   ElevatedButton.icon(
                     onPressed: _isSubmitting ? null : _submitForm,
                     icon: _isSubmitting
@@ -662,12 +680,14 @@ class _AddVehicleScreenState extends State<AddVehicleScreen> {
               children: [
                 Icon(icon, color: primaryColor, size: 24),
                 const SizedBox(width: 12),
-                Text(
-                  title,
-                  style: const TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                    color: primaryColor,
+                Expanded(
+                  child: Text(
+                    title,
+                    style: const TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: primaryColor,
+                    ),
                   ),
                 ),
               ],

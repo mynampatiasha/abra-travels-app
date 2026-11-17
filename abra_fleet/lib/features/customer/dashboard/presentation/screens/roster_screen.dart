@@ -369,6 +369,7 @@ List<ShiftDefinition> get availableShifts {
 
   Future<void> _openLocationPicker({required bool isPickup}) async {
     try {
+      if (mounted) { final _m = ScaffoldMessenger.of(context); _m.clearSnackBars(); _m.removeCurrentSnackBar(); }
       setState(() => isLoadingLocation = true);
 
       final result = await Navigator.push<Map<String, dynamic>>(
@@ -384,6 +385,7 @@ List<ShiftDefinition> get availableShifts {
         ),
       );
 
+      if (mounted) { final _m = ScaffoldMessenger.of(context); _m.clearSnackBars(); _m.removeCurrentSnackBar(); } // picker's messages must not linger on this page
       if (result != null && mounted) {
         final LatLng selectedLocation = result['location'] as LatLng;
         final String selectedAddress = result['address'] as String;
@@ -462,6 +464,7 @@ List<ShiftDefinition> get availableShifts {
 
 Future<void> _openOfficeLocationPicker() async {
   try {
+    if (mounted) { final _m = ScaffoldMessenger.of(context); _m.clearSnackBars(); _m.removeCurrentSnackBar(); }
     setState(() => isLoadingLocation = true);
 
     final result = await Navigator.push<Map<String, dynamic>>(
@@ -477,6 +480,7 @@ Future<void> _openOfficeLocationPicker() async {
       ),
     );
 
+    if (mounted) { final _m = ScaffoldMessenger.of(context); _m.clearSnackBars(); _m.removeCurrentSnackBar(); } // picker's messages must not linger on this page
     if (result != null && mounted) {
       final LatLng selectedLocation = result['location'] as LatLng;
       final String selectedAddress = result['address'] as String;

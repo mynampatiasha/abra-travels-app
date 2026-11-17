@@ -172,19 +172,25 @@ class _ClosedTicketsScreenState extends State<ClosedTicketsScreen> {
           'Are you sure you want to reopen ticket $ticketNumber? Its status will be set to "Open".',
         ),
         actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            onPressed: () {
-              Navigator.pop(context);
-              _reopenTicket(ticketId);
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFF1E3A8A),
-            ),
-            child: const Text('Reopen'),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('Cancel'),
+              ),
+              ElevatedButton(
+                onPressed: () {
+                  Navigator.pop(context);
+                  _reopenTicket(ticketId);
+                },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF1E3A8A),
+                ),
+                child: const Text('Reopen'),
+              ),
+            ],
           ),
         ],
       ),
@@ -370,51 +376,89 @@ class _ClosedTicketsScreenState extends State<ClosedTicketsScreen> {
   // 📊 STATISTICS - Colorful Cards with Symbols
   // ========================================================================
   Widget _buildStatistics() {
-    return Container(
-      margin: const EdgeInsets.all(16),
-      child: Row(
-        children: [
-          Expanded(
-            child: _buildStatCard(
-              'Total Closed',
-              _totalClosed,
-              Icons.archive_rounded,
-              const Color(0xFF3B82F6), // Blue
-              const Color(0xFFDCEEFF),
-            ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: _buildStatCard(
-              'Today',
-              _todayClosed,
-              Icons.today_rounded,
-              const Color(0xFF10B981), // Green
-              const Color(0xFFD1FAE5),
-            ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: _buildStatCard(
-              'This Week',
-              _weekClosed,
-              Icons.date_range_rounded,
-              const Color(0xFF8B5CF6), // Purple
-              const Color(0xFFEDE9FE),
-            ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: _buildStatCard(
-              'This Month',
-              _monthClosed,
-              Icons.calendar_month_rounded,
-              const Color(0xFFEC4899), // Pink
-              const Color(0xFFFCE7F3),
-            ),
-          ),
-        ],
-      ),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final cardTotal = _buildStatCard(
+          'Total Closed',
+          _totalClosed,
+          Icons.archive_rounded,
+          const Color(0xFF3B82F6), // Blue
+          const Color(0xFFDCEEFF),
+        );
+        final cardToday = _buildStatCard(
+          'Today',
+          _todayClosed,
+          Icons.today_rounded,
+          const Color(0xFF10B981), // Green
+          const Color(0xFFD1FAE5),
+        );
+        final cardWeek = _buildStatCard(
+          'This Week',
+          _weekClosed,
+          Icons.date_range_rounded,
+          const Color(0xFF8B5CF6), // Purple
+          const Color(0xFFEDE9FE),
+        );
+        final cardMonth = _buildStatCard(
+          'This Month',
+          _monthClosed,
+          Icons.calendar_month_rounded,
+          const Color(0xFFEC4899), // Pink
+          const Color(0xFFFCE7F3),
+        );
+
+        Widget content;
+        if (constraints.maxWidth < 450) {
+          content = Column(
+            children: [
+              cardTotal,
+              const SizedBox(height: 12),
+              cardToday,
+              const SizedBox(height: 12),
+              cardWeek,
+              const SizedBox(height: 12),
+              cardMonth,
+            ],
+          );
+        } else if (constraints.maxWidth < 800) {
+          content = Column(
+            children: [
+              Row(
+                children: [
+                  Expanded(child: cardTotal),
+                  const SizedBox(width: 12),
+                  Expanded(child: cardToday),
+                ],
+              ),
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  Expanded(child: cardWeek),
+                  const SizedBox(width: 12),
+                  Expanded(child: cardMonth),
+                ],
+              ),
+            ],
+          );
+        } else {
+          content = Row(
+            children: [
+              Expanded(child: cardTotal),
+              const SizedBox(width: 12),
+              Expanded(child: cardToday),
+              const SizedBox(width: 12),
+              Expanded(child: cardWeek),
+              const SizedBox(width: 12),
+              Expanded(child: cardMonth),
+            ],
+          );
+        }
+
+        return Container(
+          margin: const EdgeInsets.all(16),
+          child: content,
+        );
+      },
     );
   }
 
@@ -476,221 +520,246 @@ class _ClosedTicketsScreenState extends State<ClosedTicketsScreen> {
   // 🔍 SINGLE ROW FILTERS
   // ========================================================================
   Widget _buildSingleRowFilters() {
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-      ),
-      child: Row(
-        children: [
-          // Search Bar
-          Expanded(
-            flex: 3,
-            child: TextField(
-              controller: _searchController,
-              decoration: InputDecoration(
-                hintText: 'Search tickets...',
-                hintStyle: const TextStyle(fontSize: 13),
-                prefixIcon: const Icon(Icons.search, size: 20),
-                suffixIcon: _searchQuery.isNotEmpty
-                    ? IconButton(
-                        icon: const Icon(Icons.clear, size: 18),
-                        onPressed: () {
-                          _searchController.clear();
-                          setState(() {
-                            _searchQuery = '';
-                            _applyFilters();
-                          });
-                        },
-                      )
-                    : null,
-                filled: true,
-                fillColor: const Color(0xFFF3F4F6),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: BorderSide.none,
-                ),
-                contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-              ),
-              onChanged: (value) {
-                setState(() {
-                  _searchQuery = value;
-                  _applyFilters();
-                });
-              },
-            ),
-          ),
-          const SizedBox(width: 12),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final isDesktop = constraints.maxWidth >= 1024;
+        final isMobile = constraints.maxWidth < 600;
 
-          // From Date
-          Expanded(
-            flex: 2,
-            child: GestureDetector(
-              onTap: () => _pickDate(true),
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                decoration: BoxDecoration(
-                  color: _dateFrom != null ? const Color(0xFF1E3A8A).withOpacity(0.1) : const Color(0xFFF3F4F6),
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(
-                    color: _dateFrom != null ? const Color(0xFF1E3A8A) : const Color(0xFFE5E7EB),
-                  ),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(
-                      Icons.calendar_today,
-                      size: 16,
-                      color: _dateFrom != null ? const Color(0xFF1E3A8A) : Colors.grey[600],
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        _dateFrom == null
-                            ? 'From Date'
-                            : DateFormat('MMM dd, yyyy').format(_dateFrom!),
-                        style: TextStyle(
-                          fontSize: 12,
-                          fontWeight: _dateFrom != null ? FontWeight.w600 : FontWeight.normal,
-                          color: _dateFrom != null ? const Color(0xFF1E3A8A) : Colors.grey[700],
-                        ),
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-          const SizedBox(width: 8),
-
-          // To Date
-          Expanded(
-            flex: 2,
-            child: GestureDetector(
-              onTap: () => _pickDate(false),
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                decoration: BoxDecoration(
-                  color: _dateTo != null ? const Color(0xFF1E3A8A).withOpacity(0.1) : const Color(0xFFF3F4F6),
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(
-                    color: _dateTo != null ? const Color(0xFF1E3A8A) : const Color(0xFFE5E7EB),
-                  ),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(
-                      Icons.calendar_today,
-                      size: 16,
-                      color: _dateTo != null ? const Color(0xFF1E3A8A) : Colors.grey[600],
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        _dateTo == null
-                            ? 'To Date'
-                            : DateFormat('MMM dd, yyyy').format(_dateTo!),
-                        style: TextStyle(
-                          fontSize: 12,
-                          fontWeight: _dateTo != null ? FontWeight.w600 : FontWeight.normal,
-                          color: _dateTo != null ? const Color(0xFF1E3A8A) : Colors.grey[700],
-                        ),
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-
-          // Clear Date Filters
-          if (_dateFrom != null || _dateTo != null) ...[
-            const SizedBox(width: 8),
-            IconButton(
-              icon: const Icon(Icons.clear, size: 18),
-              onPressed: _clearDateFilters,
-              tooltip: 'Clear Dates',
-              style: IconButton.styleFrom(
-                backgroundColor: Colors.red[50],
-                padding: const EdgeInsets.all(8),
-              ),
-            ),
-          ],
-          const SizedBox(width: 12),
-
-          // Assigned To Dropdown
-          Expanded(
-            flex: 2,
-            child: DropdownButtonFormField<String>(
-              value: _assignedToFilter,
-              decoration: InputDecoration(
-                labelText: 'Assigned To',
-                labelStyle: const TextStyle(fontSize: 12),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                filled: true,
-                fillColor: const Color(0xFFF3F4F6),
-              ),
-              items: [
-                const DropdownMenuItem(
-                    value: '', child: Text('All', style: TextStyle(fontSize: 12))),
-                const DropdownMenuItem(
-                    value: '0', child: Text('Unassigned', style: TextStyle(fontSize: 12))),
-                ..._employees.map((emp) {
-                  return DropdownMenuItem<String>(
-                    value: emp['_id'].toString(),
-                    child: Text(
-                      emp['name_parson'] ?? 'Unknown',
-                      style: const TextStyle(fontSize: 12),
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  );
-                }).toList(),
-              ],
-              onChanged: (value) {
-                setState(() => _assignedToFilter = value ?? '');
-                _fetchTickets();
-              },
-            ),
-          ),
-          const SizedBox(width: 12),
-
-          // Export Button
-          ElevatedButton.icon(
-            onPressed: _isExporting ? null : _exportToExcel,
-            icon: _isExporting
-                ? const SizedBox(
-                    width: 16,
-                    height: 16,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                    ),
+        final searchWidget = TextField(
+          controller: _searchController,
+          decoration: InputDecoration(
+            hintText: 'Search tickets...',
+            hintStyle: const TextStyle(fontSize: 13),
+            prefixIcon: const Icon(Icons.search, size: 20),
+            suffixIcon: _searchQuery.isNotEmpty
+                ? IconButton(
+                    icon: const Icon(Icons.clear, size: 18),
+                    onPressed: () {
+                      _searchController.clear();
+                      setState(() {
+                        _searchQuery = '';
+                        _applyFilters();
+                      });
+                    },
                   )
-                : const Icon(Icons.file_download, size: 18),
-            label: Text(
-              _isExporting ? 'Exporting...' : 'Export',
-              style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+                : null,
+            filled: true,
+            fillColor: const Color(0xFFF3F4F6),
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: BorderSide.none,
             ),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFF27AE60),
-              foregroundColor: Colors.white,
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
+            contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          ),
+          onChanged: (value) {
+            setState(() {
+              _searchQuery = value;
+              _applyFilters();
+            });
+          },
+        );
+
+        final fromDateWidget = GestureDetector(
+          onTap: () => _pickDate(true),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            decoration: BoxDecoration(
+              color: _dateFrom != null ? const Color(0xFF1E3A8A).withOpacity(0.1) : const Color(0xFFF3F4F6),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: _dateFrom != null ? const Color(0xFF1E3A8A) : const Color(0xFFE5E7EB),
               ),
             ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  Icons.calendar_today,
+                  size: 16,
+                  color: _dateFrom != null ? const Color(0xFF1E3A8A) : Colors.grey[600],
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    _dateFrom == null
+                        ? 'From Date'
+                        : DateFormat('MMM dd, yyyy').format(_dateFrom!),
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: _dateFrom != null ? FontWeight.w600 : FontWeight.normal,
+                      color: _dateFrom != null ? const Color(0xFF1E3A8A) : Colors.grey[700],
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
+            ),
           ),
-        ],
-      ),
+        );
+
+        final toDateWidget = GestureDetector(
+          onTap: () => _pickDate(false),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            decoration: BoxDecoration(
+              color: _dateTo != null ? const Color(0xFF1E3A8A).withOpacity(0.1) : const Color(0xFFF3F4F6),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: _dateTo != null ? const Color(0xFF1E3A8A) : const Color(0xFFE5E7EB),
+              ),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  Icons.calendar_today,
+                  size: 16,
+                  color: _dateTo != null ? const Color(0xFF1E3A8A) : Colors.grey[600],
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    _dateTo == null
+                        ? 'To Date'
+                        : DateFormat('MMM dd, yyyy').format(_dateTo!),
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: _dateTo != null ? FontWeight.w600 : FontWeight.normal,
+                      color: _dateTo != null ? const Color(0xFF1E3A8A) : Colors.grey[700],
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+
+        Widget? clearDatesWidget;
+        if (_dateFrom != null || _dateTo != null) {
+          clearDatesWidget = IconButton(
+            icon: const Icon(Icons.clear, size: 18),
+            onPressed: _clearDateFilters,
+            tooltip: 'Clear Dates',
+            style: IconButton.styleFrom(
+              backgroundColor: Colors.red[50],
+              padding: const EdgeInsets.all(8),
+            ),
+          );
+        }
+
+        final assignedToWidget = DropdownButtonFormField<String>(
+          value: _assignedToFilter,
+          decoration: InputDecoration(
+            labelText: 'Assigned To',
+            labelStyle: const TextStyle(fontSize: 12),
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
+            contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            filled: true,
+            fillColor: const Color(0xFFF3F4F6),
+          ),
+          items: [
+            const DropdownMenuItem(
+                value: '', child: Text('All', style: TextStyle(fontSize: 12))),
+            const DropdownMenuItem(
+                value: '0', child: Text('Unassigned', style: TextStyle(fontSize: 12))),
+            ..._employees.map((emp) {
+              return DropdownMenuItem<String>(
+                value: emp['_id'].toString(),
+                child: Text(
+                  emp['name_parson'] ?? 'Unknown',
+                  style: const TextStyle(fontSize: 12),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              );
+            }).toList(),
+          ],
+          onChanged: (value) {
+            setState(() => _assignedToFilter = value ?? '');
+            _fetchTickets();
+          },
+        );
+
+        final exportButton = ElevatedButton.icon(
+          onPressed: _isExporting ? null : _exportToExcel,
+          icon: _isExporting
+              ? const SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                  ),
+                )
+              : const Icon(Icons.file_download, size: 18),
+          label: Text(
+            _isExporting ? 'Exporting...' : 'Export',
+            style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+          ),
+          style: ElevatedButton.styleFrom(
+            backgroundColor: const Color(0xFF27AE60),
+            foregroundColor: Colors.white,
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
+          ),
+        );
+
+        return Container(
+          margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(16),
+          ),
+          child: isDesktop
+              ? Row(
+                  children: [
+                    Expanded(flex: 3, child: searchWidget),
+                    const SizedBox(width: 12),
+                    Expanded(flex: 2, child: fromDateWidget),
+                    const SizedBox(width: 8),
+                    Expanded(flex: 2, child: toDateWidget),
+                    if (clearDatesWidget != null) ...[
+                      const SizedBox(width: 8),
+                      clearDatesWidget,
+                    ],
+                    const SizedBox(width: 12),
+                    Expanded(flex: 2, child: assignedToWidget),
+                    const SizedBox(width: 12),
+                    exportButton,
+                  ],
+                )
+              : Wrap(
+                  spacing: 12,
+                  runSpacing: 12,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  children: [
+                    SizedBox(
+                      width: isMobile ? constraints.maxWidth - 32 : 240,
+                      child: searchWidget,
+                    ),
+                    SizedBox(
+                      width: isMobile ? (constraints.maxWidth - 44) / 2 : 140,
+                      child: fromDateWidget,
+                    ),
+                    SizedBox(
+                      width: isMobile ? (constraints.maxWidth - 44) / 2 : 140,
+                      child: toDateWidget,
+                    ),
+                    if (clearDatesWidget != null) clearDatesWidget,
+                    SizedBox(
+                      width: isMobile ? constraints.maxWidth - 32 : 180,
+                      child: assignedToWidget,
+                    ),
+                    exportButton,
+                  ],
+                ),
+        );
+      },
     );
   }
 

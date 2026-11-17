@@ -473,7 +473,14 @@ class _ClientDashboardAnalyticsState extends State<ClientDashboardAnalytics>
             ],
           ),
           SizedBox(height: isMobile ? 14 : 18),
-          isMobile ? _buildMobileLayout() : _buildDesktopLayout(),
+          LayoutBuilder(
+            builder: (context, constraints) {
+              if (isMobile || constraints.maxWidth < 768) {
+                return _buildMobileLayout();
+              }
+              return _buildDesktopLayout();
+            },
+          ),
         ],
       ),
     );
@@ -483,20 +490,27 @@ class _ClientDashboardAnalyticsState extends State<ClientDashboardAnalytics>
   // LAYOUTS
   // ─────────────────────────────────────────────────────────────
   Widget _buildDesktopLayout() {
-    return IntrinsicHeight(
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          // Chart 1: Daily Trips Bar — wider
-          Expanded(flex: 5, child: _buildDailyBarCard()),
-          const SizedBox(width: 16),
-          // Chart 2: Customers Pie — medium
-          Expanded(flex: 4, child: _buildEmployeeDonutCard()),
-          const SizedBox(width: 16),
-          // Chart 3: SOS Horizontal Bar — wider
-          Expanded(flex: 5, child: _buildSOSHorizontalBarCard()),
-        ],
-      ),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        if (constraints.maxWidth < 768) {
+          return _buildMobileLayout();
+        }
+        return IntrinsicHeight(
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              // Chart 1: Daily Trips Bar — wider
+              Expanded(flex: 5, child: _buildDailyBarCard()),
+              const SizedBox(width: 16),
+              // Chart 2: Customers Pie — medium
+              Expanded(flex: 4, child: _buildEmployeeDonutCard()),
+              const SizedBox(width: 16),
+              // Chart 3: SOS Horizontal Bar — wider
+              Expanded(flex: 5, child: _buildSOSHorizontalBarCard()),
+            ],
+          ),
+        );
+      },
     );
   }
 
@@ -909,17 +923,28 @@ class _ClientDashboardAnalyticsState extends State<ClientDashboardAnalytics>
             ),
           ),
           const SizedBox(height: 18),
-          isMobile
-              ? Column(children: List.generate(3, (_) => Padding(
-                  padding: const EdgeInsets.only(bottom: 14),
-                  child: _skeletonCard(260))))
-              : Row(children: [
-                  Expanded(flex: 5, child: _skeletonCard(300)),
-                  const SizedBox(width: 16),
-                  Expanded(flex: 4, child: _skeletonCard(300)),
-                  const SizedBox(width: 16),
-                  Expanded(flex: 5, child: _skeletonCard(300)),
-                ]),
+          LayoutBuilder(
+            builder: (context, constraints) {
+              if (isMobile || constraints.maxWidth < 768) {
+                return Column(
+                  children: List.generate(
+                    3,
+                    (_) => Padding(
+                      padding: const EdgeInsets.only(bottom: 14),
+                      child: _skeletonCard(260),
+                    ),
+                  ),
+                );
+              }
+              return Row(children: [
+                Expanded(flex: 5, child: _skeletonCard(300)),
+                const SizedBox(width: 16),
+                Expanded(flex: 4, child: _skeletonCard(300)),
+                const SizedBox(width: 16),
+                Expanded(flex: 5, child: _skeletonCard(300)),
+              ]);
+            },
+          ),
         ],
       ),
     );

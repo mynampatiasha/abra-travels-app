@@ -16,6 +16,7 @@ const express = require('express');
 const router = express.Router();
 
 const PLACES_URL = 'https://places.googleapis.com/v1/places:searchText';
+const DEFAULT_CENTER = { latitude: 12.9716, longitude: 77.5946 }; // Bengaluru
 const FIELD_MASK = [
   'places.id',
   'places.displayName',
@@ -47,6 +48,10 @@ router.get('/search', async (req, res) => {
   };
   if (Number.isFinite(lat) && Number.isFinite(lng) && Math.abs(lat) <= 90 && Math.abs(lng) <= 180) {
     body.locationBias = { circle: { center: { latitude: lat, longitude: lng }, radius: 50000 } };
+  } else {
+    // No GPS (e.g. desktop browser): bias to Bengaluru, otherwise local company
+    // names such as "Abra Group" return nothing. Bias only, not a restriction.
+    body.locationBias = { circle: { center: DEFAULT_CENTER, radius: 50000 } };
   }
 
   try {

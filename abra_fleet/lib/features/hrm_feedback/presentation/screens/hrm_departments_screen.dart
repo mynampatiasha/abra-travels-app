@@ -87,7 +87,7 @@ class _HrmDepartmentsScreenState extends State<HrmDepartmentsScreen> {
           ],
         ),
         content: SizedBox(
-          width: 500,
+          width: (MediaQuery.of(context).size.width * 0.9).clamp(0.0, 500.0),
           child: Form(
             key: formKey,
             child: Column(
@@ -208,7 +208,7 @@ class _HrmDepartmentsScreenState extends State<HrmDepartmentsScreen> {
           ],
         ),
         content: SizedBox(
-          width: 500,
+          width: (MediaQuery.of(context).size.width * 0.9).clamp(0.0, 500.0),
           child: Form(
             key: formKey,
             child: Column(
@@ -483,13 +483,21 @@ class _HrmDepartmentsScreenState extends State<HrmDepartmentsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final screenWidth = MediaQuery.of(context).size.width;
+    final isMobile = screenWidth < 700;
+    final horizontalPadding = isMobile ? 16.0 : 24.0;
+    final verticalPadding = isMobile ? 16.0 : 24.0;
+
     return Scaffold(
       backgroundColor: Colors.grey[100],
       body: Column(
         children: [
           // Header Section
           Container(
-            padding: const EdgeInsets.all(24),
+            padding: EdgeInsets.symmetric(
+              horizontal: horizontalPadding,
+              vertical: verticalPadding,
+            ),
             decoration: BoxDecoration(
               color: Colors.white,
               boxShadow: [
@@ -503,52 +511,65 @@ class _HrmDepartmentsScreenState extends State<HrmDepartmentsScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Row(
+                Wrap(
+                  spacing: 12,
+                  runSpacing: 12,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  alignment: WrapAlignment.spaceBetween,
                   children: [
-                    Icon(Icons.business, size: 32, color: Colors.blue[700]),
-                    const SizedBox(width: 12),
-                    const Text(
-                      'Departments List',
-                      style: TextStyle(
-                        fontSize: 24,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    const Spacer(),
-                    ElevatedButton.icon(
-                      onPressed: _showAddDepartmentDialog,
-                      icon: const Icon(Icons.add),
-                      label: const Text('Add New Department'),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.green,
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 24,
-                          vertical: 16,
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.business, size: 32, color: Colors.blue[700]),
+                        const SizedBox(width: 12),
+                        const Text(
+                          'Departments List',
+                          style: TextStyle(
+                            fontSize: 24,
+                            fontWeight: FontWeight.bold,
+                          ),
                         ),
-                      ),
+                      ],
                     ),
-                    const SizedBox(width: 12),
-                    ElevatedButton.icon(
-                      onPressed: _exportToCSV,
-                      icon: const Icon(Icons.download),
-                      label: const Text('Export to CSV'),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.blue,
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 24,
-                          vertical: 16,
+                    Wrap(
+                      spacing: 12,
+                      runSpacing: 8,
+                      children: [
+                        ElevatedButton.icon(
+                          onPressed: _showAddDepartmentDialog,
+                          icon: const Icon(Icons.add),
+                          label: const Text('Add New Department'),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.green,
+                            foregroundColor: Colors.white,
+                            padding: EdgeInsets.symmetric(
+                              horizontal: isMobile ? 16 : 24,
+                              vertical: isMobile ? 12 : 16,
+                            ),
+                          ),
                         ),
-                      ),
+                        ElevatedButton.icon(
+                          onPressed: _exportToCSV,
+                          icon: const Icon(Icons.download),
+                          label: const Text('Export to CSV'),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.blue,
+                            foregroundColor: Colors.white,
+                            padding: EdgeInsets.symmetric(
+                              horizontal: isMobile ? 16 : 24,
+                              vertical: isMobile ? 12 : 16,
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                   ],
                 ),
-                const SizedBox(height: 24),
+                const SizedBox(height: 16),
                 
                 // Search Bar
-                SizedBox(
-                  width: 400,
+                ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 400),
                   child: TextField(
                     decoration: InputDecoration(
                       hintText: 'Search departments...',
@@ -593,7 +614,7 @@ class _HrmDepartmentsScreenState extends State<HrmDepartmentsScreen> {
                         ),
                       )
                     : Container(
-                        margin: const EdgeInsets.all(24),
+                        margin: EdgeInsets.all(isMobile ? 12 : 24),
                         decoration: BoxDecoration(
                           color: Colors.white,
                           borderRadius: BorderRadius.circular(8),
@@ -605,58 +626,64 @@ class _HrmDepartmentsScreenState extends State<HrmDepartmentsScreen> {
                             ),
                           ],
                         ),
-                        child: SingleChildScrollView(
-                          child: DataTable(
-                            headingRowColor: MaterialStateProperty.all(
-                              Colors.grey[100],
-                            ),
-                            columns: const [
-                              DataColumn(label: Text('Department ID', style: TextStyle(fontWeight: FontWeight.bold))),
-                              DataColumn(label: Text('Department Name', style: TextStyle(fontWeight: FontWeight.bold))),
-                              DataColumn(label: Text('Edit', style: TextStyle(fontWeight: FontWeight.bold))),
-                              DataColumn(label: Text('Delete', style: TextStyle(fontWeight: FontWeight.bold))),
-                            ],
-                            rows: _filteredDepartments.map((department) {
-                              return DataRow(
-                                cells: [
-                                  DataCell(Text(department['_id'].toString().substring(0, 8))),
-                                  DataCell(
-                                    Container(
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 12,
-                                        vertical: 6,
-                                      ),
-                                      decoration: BoxDecoration(
-                                        color: Colors.blue[50],
-                                        borderRadius: BorderRadius.circular(12),
-                                      ),
-                                      child: Text(
-                                        department['name'] ?? '',
-                                        style: TextStyle(
-                                          color: Colors.blue[700],
-                                          fontWeight: FontWeight.w500,
+                        child: Scrollbar(
+                          thumbVisibility: true,
+                          child: SingleChildScrollView(
+                            scrollDirection: Axis.horizontal,
+                            child: SingleChildScrollView(
+                              child: DataTable(
+                                headingRowColor: MaterialStateProperty.all(
+                                  Colors.grey[100],
+                                ),
+                                columns: const [
+                                  DataColumn(label: Text('Department ID', style: TextStyle(fontWeight: FontWeight.bold))),
+                                  DataColumn(label: Text('Department Name', style: TextStyle(fontWeight: FontWeight.bold))),
+                                  DataColumn(label: Text('Edit', style: TextStyle(fontWeight: FontWeight.bold))),
+                                  DataColumn(label: Text('Delete', style: TextStyle(fontWeight: FontWeight.bold))),
+                                ],
+                                rows: _filteredDepartments.map((department) {
+                                  return DataRow(
+                                    cells: [
+                                      DataCell(Text(department['_id'].toString().substring(0, 8))),
+                                      DataCell(
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 12,
+                                            vertical: 6,
+                                          ),
+                                          decoration: BoxDecoration(
+                                            color: Colors.blue[50],
+                                            borderRadius: BorderRadius.circular(12),
+                                          ),
+                                          child: Text(
+                                            department['name'] ?? '',
+                                            style: TextStyle(
+                                              color: Colors.blue[700],
+                                              fontWeight: FontWeight.w500,
+                                            ),
+                                          ),
                                         ),
                                       ),
-                                    ),
-                                  ),
-                                  DataCell(
-                                    IconButton(
-                                      icon: const Icon(Icons.edit, color: Colors.blue),
-                                      onPressed: () => _showEditDepartmentDialog(department),
-                                    ),
-                                  ),
-                                  DataCell(
-                                    IconButton(
-                                      icon: const Icon(Icons.delete, color: Colors.red),
-                                      onPressed: () => _deleteDepartment(
-                                        department['_id'],
-                                        department['name'] ?? '',
+                                      DataCell(
+                                        IconButton(
+                                          icon: const Icon(Icons.edit, color: Colors.blue),
+                                          onPressed: () => _showEditDepartmentDialog(department),
+                                        ),
                                       ),
-                                    ),
-                                  ),
-                                ],
-                              );
-                            }).toList(),
+                                      DataCell(
+                                        IconButton(
+                                          icon: const Icon(Icons.delete, color: Colors.red),
+                                          onPressed: () => _deleteDepartment(
+                                            department['_id'],
+                                            department['name'] ?? '',
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  );
+                                }).toList(),
+                              ),
+                            ),
                           ),
                         ),
                       ),

@@ -64,11 +64,11 @@ class RouteOptimizationDialog extends StatelessWidget {
                 children: [
                   const Icon(Icons.route, color: Colors.white, size: 28),
                   const SizedBox(width: 12),
-                  const Expanded(
+                  Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
+                        const Text(
                           'Optimized Route Plan',
                           style: TextStyle(
                             color: Colors.white,
@@ -77,7 +77,9 @@ class RouteOptimizationDialog extends StatelessWidget {
                           ),
                         ),
                         Text(
-                          'Furthest customer picked first, nearest picked last',
+                          routePlan['tripType'] == 'logout'
+                              ? 'Nearest customer dropped first, farthest last'
+                              : 'Furthest customer picked first, nearest picked last',
                           style: TextStyle(
                             color: Colors.white70,
                             fontSize: 13,
@@ -634,7 +636,9 @@ class RouteOptimizationDialog extends StatelessWidget {
   }
 
   Widget _buildEndPoint(Map<String, dynamic> lastStop) {
-    final eta = lastStop['eta'] as DateTime? ?? DateTime.now();
+    final isLogout = routePlan['tripType'] == 'logout';
+    // login: the plan's office arrival; logout: the last drop
+    final eta = (routePlan['estimatedCompletion'] as DateTime?) ?? (lastStop['eta'] as DateTime? ?? DateTime.now());
     
     return Padding(
       padding: const EdgeInsets.only(left: 8),
@@ -662,8 +666,8 @@ class RouteOptimizationDialog extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text(
-                    'Route Complete - Arrive at Office',
+                  Text(
+                    isLogout ? 'Route Complete - Last Drop' : 'Route Complete - Arrive at Office',
                     style: TextStyle(
                       fontWeight: FontWeight.bold,
                       fontSize: 14,
@@ -671,7 +675,7 @@ class RouteOptimizationDialog extends StatelessWidget {
                   ),
                   const SizedBox(height: 4),
                   Text(
-                    'Estimated arrival: ${DateFormat('h:mm a').format(eta)}',
+                    '${isLogout ? 'Estimated last drop' : 'Estimated arrival'}: ${DateFormat('h:mm a').format(eta)}',
                     style: TextStyle(
                       color: Colors.grey.shade700,
                       fontSize: 12,

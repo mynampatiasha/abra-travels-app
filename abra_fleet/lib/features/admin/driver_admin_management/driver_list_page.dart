@@ -2322,7 +2322,7 @@ class _DriverListPageState extends State<DriverListPage> with SingleTickerProvid
     );
   }
 
-  // ✅ COMPLETE _buildDriverRow METHOD (Original with Expanded)
+  // ✅ COMPLETE _buildDriverRow METHOD (Original with Expanded wrapped in LayoutBuilder)
   Widget _buildDriverRow(Map<String, dynamic> driver) {
     final vehicle = driver['assignedVehicle'];
     final hasVehicle = vehicle != null || (driver['vehicleNumber'] != null && driver['vehicleNumber'] != 'N/A');
@@ -2338,104 +2338,9 @@ class _DriverListPageState extends State<DriverListPage> with SingleTickerProvid
       },
       child: Container(
         padding: const EdgeInsets.all(16),
-        child: Row(
-          children: [
-            Expanded(
-              flex: 2,
-              child: Text(
-                driver['driverId'] ?? 'N/A',
-                style: const TextStyle(fontSize: 14),
-              ),
-            ),
-            Expanded(
-              flex: 2,
-              child: Text(
-                driver['name'] ?? _getNestedValue(driver, 'personalInfo.name', 'N/A'),
-                style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
-              ),
-            ),
-            Expanded(
-              flex: 3,
-              child: Text(
-                driver['email'] ?? _getNestedValue(driver, 'personalInfo.email', 'N/A'),
-                style: const TextStyle(fontSize: 14),
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
-            Expanded(
-              flex: 2,
-              child: Text(
-                driver['phone'] ?? _getNestedValue(driver, 'personalInfo.phone', 'N/A'),
-                style: const TextStyle(fontSize: 14),
-              ),
-            ),
-            Expanded(
-              flex: 2,
-              child: _buildStatusBadge(driver['status'] ?? 'inactive'),
-            ),
-            Expanded(
-              flex: 2,
-              child: Text(
-                _getNestedValue(driver, 'license.licenseNumber'),
-                style: const TextStyle(fontSize: 14),
-              ),
-            ),
-            Expanded(
-              flex: 2,
-              child: Text(
-                _formatDate(driver['licenseExpiry']?.toString() ?? 
-                  _getNestedValue(driver, 'license.expiryDate')),
-                style: const TextStyle(fontSize: 13),
-              ),
-            ),
-            Expanded(
-              flex: 3,
-              child: hasVehicle
-                  ? Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                      decoration: BoxDecoration(
-                        color: Colors.green.shade50,
-                        borderRadius: BorderRadius.circular(6),
-                        border: Border.all(color: Colors.green.shade200),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(Icons.directions_car, size: 16, color: Colors.green.shade700),
-                          const SizedBox(width: 6),
-                          Expanded(
-                            child: Text(
-                              driver['vehicleNumber']?.toString() ??
-                              vehicle?['registrationNumber']?.toString() ??
-                              vehicle?['vehicleNumber']?.toString() ??
-                              '${vehicle?['make'] ?? ''} ${vehicle?['model'] ?? ''}'.trim(),
-                              style: TextStyle(
-                                fontSize: 12,
-                                fontWeight: FontWeight.w600,
-                                color: Colors.green.shade900,
-                              ),
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                        ],
-                      ),
-                    )
-                  : TextButton.icon(
-                      onPressed: () => _showVehicleAssignmentDialog(driver),
-                      icon: const Icon(Icons.add, size: 16),
-                      label: const Text('Assign'),
-                      style: TextButton.styleFrom(foregroundColor: primaryColor),
-                    ),
-            ),
-            Expanded(
-              flex: 1,
-              child: Center(child: _buildDocumentStatusIndicator(driver)),
-            ),
-            Expanded(
-              flex: 1,
-              child: Center(child: _buildDocumentStatusIndicator(driver)),
-            ),
-            SizedBox(
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final actionsWidget = SizedBox(
               width: 220,
               child: Wrap(
                 spacing: 4,
@@ -2505,8 +2410,199 @@ class _DriverListPageState extends State<DriverListPage> with SingleTickerProvid
                   ),
                 ],
               ),
-            ),
-          ],
+            );
+
+            final vehicleWidget = hasVehicle
+                ? Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: Colors.green.shade50,
+                      borderRadius: BorderRadius.circular(6),
+                      border: Border.all(color: Colors.green.shade200),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.directions_car, size: 16, color: Colors.green.shade700),
+                        const SizedBox(width: 6),
+                        Expanded(
+                          child: Text(
+                            driver['vehicleNumber']?.toString() ??
+                            vehicle?['registrationNumber']?.toString() ??
+                            vehicle?['vehicleNumber']?.toString() ??
+                            ' '.trim(),
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              color: Colors.green.shade900,
+                            ),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ],
+                    ),
+                  )
+                : TextButton.icon(
+                    onPressed: () => _showVehicleAssignmentDialog(driver),
+                    icon: const Icon(Icons.add, size: 16),
+                    label: const Text('Assign'),
+                    style: TextButton.styleFrom(foregroundColor: primaryColor),
+                  );
+
+            if (constraints.maxWidth < 600) {
+              // Mobile (<600px): Column stacked card
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Expanded(
+                        child: Text(
+                          driver['name'] ?? _getNestedValue(driver, 'personalInfo.name', 'N/A'),
+                          style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      _buildStatusBadge(driver['status'] ?? 'inactive'),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                  Text('ID: ', style: const TextStyle(fontSize: 13, color: Colors.grey)),
+                  Text('Email: ', style: const TextStyle(fontSize: 13)),
+                  Text('Phone: ', style: const TextStyle(fontSize: 13)),
+                  Text('License:  (Exp: )', style: const TextStyle(fontSize: 13)),
+                  const SizedBox(height: 8),
+                  vehicleWidget,
+                  const SizedBox(height: 8),
+                  actionsWidget,
+                ],
+              );
+            } else if (constraints.maxWidth <= 1024) {
+              // Tablet (600-1024px): 2x2 grid / 2-row layout
+              return Column(
+                children: [
+                  Row(
+                    children: [
+                      Expanded(
+                        flex: 2,
+                        child: Text(
+                          driver['driverId'] ?? 'N/A',
+                          style: const TextStyle(fontSize: 14),
+                        ),
+                      ),
+                      Expanded(
+                        flex: 3,
+                        child: Text(
+                          driver['name'] ?? _getNestedValue(driver, 'personalInfo.name', 'N/A'),
+                          style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+                        ),
+                      ),
+                      Expanded(
+                        flex: 2,
+                        child: _buildStatusBadge(driver['status'] ?? 'inactive'),
+                      ),
+                      Expanded(
+                        flex: 3,
+                        child: vehicleWidget,
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  Row(
+                    children: [
+                      Expanded(
+                        flex: 3,
+                        child: Text(
+                          driver['email'] ?? _getNestedValue(driver, 'personalInfo.email', 'N/A'),
+                          style: const TextStyle(fontSize: 13),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      Expanded(
+                        flex: 2,
+                        child: Text(
+                          driver['phone'] ?? _getNestedValue(driver, 'personalInfo.phone', 'N/A'),
+                          style: const TextStyle(fontSize: 13),
+                        ),
+                      ),
+                      Expanded(
+                        flex: 3,
+                        child: actionsWidget,
+                      ),
+                    ],
+                  ),
+                ],
+              );
+            } else {
+              // Desktop (>1024px): Original Row with Expanded children
+              return Row(
+                children: [
+                  Expanded(
+                    flex: 2,
+                    child: Text(
+                      driver['driverId'] ?? 'N/A',
+                      style: const TextStyle(fontSize: 14),
+                    ),
+                  ),
+                  Expanded(
+                    flex: 2,
+                    child: Text(
+                      driver['name'] ?? _getNestedValue(driver, 'personalInfo.name', 'N/A'),
+                      style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+                    ),
+                  ),
+                  Expanded(
+                    flex: 3,
+                    child: Text(
+                      driver['email'] ?? _getNestedValue(driver, 'personalInfo.email', 'N/A'),
+                      style: const TextStyle(fontSize: 14),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  Expanded(
+                    flex: 2,
+                    child: Text(
+                      driver['phone'] ?? _getNestedValue(driver, 'personalInfo.phone', 'N/A'),
+                      style: const TextStyle(fontSize: 14),
+                    ),
+                  ),
+                  Expanded(
+                    flex: 2,
+                    child: _buildStatusBadge(driver['status'] ?? 'inactive'),
+                  ),
+                  Expanded(
+                    flex: 2,
+                    child: Text(
+                      _getNestedValue(driver, 'license.licenseNumber'),
+                      style: const TextStyle(fontSize: 14),
+                    ),
+                  ),
+                  Expanded(
+                    flex: 2,
+                    child: Text(
+                      _formatDate(driver['licenseExpiry']?.toString() ?? 
+                        _getNestedValue(driver, 'license.expiryDate')),
+                      style: const TextStyle(fontSize: 13),
+                    ),
+                  ),
+                  Expanded(
+                    flex: 3,
+                    child: vehicleWidget,
+                  ),
+                  Expanded(
+                    flex: 1,
+                    child: Center(child: _buildDocumentStatusIndicator(driver)),
+                  ),
+                  Expanded(
+                    flex: 1,
+                    child: Center(child: _buildDocumentStatusIndicator(driver)),
+                  ),
+                  actionsWidget,
+                ],
+              );
+            }
+          },
         ),
       ),
     );
@@ -2793,6 +2889,17 @@ class _DriverListPageState extends State<DriverListPage> with SingleTickerProvid
 
   Widget _buildContent(BuildContext context) {
     final activeFilterCount = _getActiveFilterCount();
+    final screenWidth = MediaQuery.of(context).size.width;
+    final responsivePadding = screenWidth < 600
+        ? const EdgeInsets.all(12)
+        : screenWidth <= 1024
+            ? const EdgeInsets.all(16)
+            : const EdgeInsets.all(24);
+    final cardMargin = screenWidth < 600
+        ? const EdgeInsets.all(8)
+        : screenWidth <= 1024
+            ? const EdgeInsets.all(14)
+            : const EdgeInsets.all(20);
     
     return Container(
       color: lightBackgroundColor,
@@ -2800,37 +2907,34 @@ class _DriverListPageState extends State<DriverListPage> with SingleTickerProvid
         children: [
           // SEARCH AND BASIC FILTERS
           Container(
-            padding: const EdgeInsets.all(16),
+            padding: responsivePadding,
             decoration: const BoxDecoration(
               color: cardBackgroundColor,
               border: Border(bottom: BorderSide(color: borderColor)),
             ),
             child: Column(
               children: [
-                Row(
-                  children: [
-                    Expanded(
-                      flex: 3,
-                      child: TextField(
-                        controller: _searchController,
-                        decoration: InputDecoration(
-                          hintText: 'Search by name, email, phone, or driver ID...',
-                          prefixIcon: const Icon(Icons.search, size: 20, color: primaryColor),
-                          filled: true,
-                          fillColor: lightBackgroundColor,
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(8),
-                            borderSide: const BorderSide(color: borderColor),
-                          ),
-                          contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                LayoutBuilder(
+                  builder: (context, constraints) {
+                    final searchField = TextField(
+                      controller: _searchController,
+                      decoration: InputDecoration(
+                        hintText: 'Search by name, email, phone, or driver ID...',
+                        prefixIcon: const Icon(Icons.search, size: 20, color: primaryColor),
+                        filled: true,
+                        fillColor: lightBackgroundColor,
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8),
+                          borderSide: const BorderSide(color: borderColor),
                         ),
-                        onChanged: (value) => _searchQuery = value,
-                        onSubmitted: (value) => _fetchDrivers(),
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                       ),
-                    ),
-                    const SizedBox(width: 12),
-                    SizedBox(
-                      width: 150,
+                      onChanged: (value) => _searchQuery = value,
+                      onSubmitted: (value) => _fetchDrivers(),
+                    );
+
+                    final statusDropdown = SizedBox(
+                      width: constraints.maxWidth < 600 ? double.infinity : 150,
                       child: DropdownButtonFormField<String>(
                         value: _selectedStatus.isEmpty ? 'active' : _selectedStatus,
                         decoration: InputDecoration(
@@ -2851,10 +2955,10 @@ class _DriverListPageState extends State<DriverListPage> with SingleTickerProvid
                           _fetchDrivers();
                         },
                       ),
-                    ),
-                    const SizedBox(width: 12),
-                    SizedBox(
-                      width: 150,
+                    );
+
+                    final vehicleDropdown = SizedBox(
+                      width: constraints.maxWidth < 600 ? double.infinity : 150,
                       child: DropdownButtonFormField<String>(
                         value: _selectedVehicleFilter.isEmpty ? null : _selectedVehicleFilter,
                         decoration: InputDecoration(
@@ -2876,10 +2980,10 @@ class _DriverListPageState extends State<DriverListPage> with SingleTickerProvid
                           });
                         },
                       ),
-                    ),
-                    const SizedBox(width: 12),
-                    SizedBox(
-                      width: 150,
+                    );
+
+                    final documentDropdown = SizedBox(
+                      width: constraints.maxWidth < 600 ? double.infinity : 150,
                       child: DropdownButtonFormField<String>(
                         value: _selectedDocumentFilter.isEmpty ? null : _selectedDocumentFilter,
                         decoration: InputDecoration(
@@ -2903,11 +3007,56 @@ class _DriverListPageState extends State<DriverListPage> with SingleTickerProvid
                           });
                         },
                       ),
-                    ),
-                  ],
+                    );
+
+                    if (constraints.maxWidth < 600) {
+                      return Column(
+                        children: [
+                          searchField,
+                          const SizedBox(height: 8),
+                          statusDropdown,
+                          const SizedBox(height: 8),
+                          vehicleDropdown,
+                          const SizedBox(height: 8),
+                          documentDropdown,
+                        ],
+                      );
+                    } else if (constraints.maxWidth <= 1024) {
+                      return Column(
+                        children: [
+                          searchField,
+                          const SizedBox(height: 8),
+                          Row(
+                            children: [
+                              Expanded(child: statusDropdown),
+                              const SizedBox(width: 8),
+                              Expanded(child: vehicleDropdown),
+                              const SizedBox(width: 8),
+                              Expanded(child: documentDropdown),
+                            ],
+                          ),
+                        ],
+                      );
+                    } else {
+                      return Row(
+                        children: [
+                          Expanded(flex: 3, child: searchField),
+                          const SizedBox(width: 12),
+                          statusDropdown,
+                          const SizedBox(width: 12),
+                          vehicleDropdown,
+                          const SizedBox(width: 12),
+                          documentDropdown,
+                        ],
+                      );
+                    }
+                  },
                 ),
                 const SizedBox(height: 12),
-                Row(
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  crossAxisAlignment: WrapCrossAlignment.center,
                   children: [
                     ElevatedButton.icon(
                       onPressed: _fetchDrivers,
@@ -2919,7 +3068,6 @@ class _DriverListPageState extends State<DriverListPage> with SingleTickerProvid
                         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                       ),
                     ),
-                    const SizedBox(width: 8),
                     OutlinedButton.icon(
                       onPressed: _clearFilters,
                       icon: const Icon(Icons.clear_all, size: 18),
@@ -2929,7 +3077,6 @@ class _DriverListPageState extends State<DriverListPage> with SingleTickerProvid
                         side: const BorderSide(color: primaryColor),
                       ),
                     ),
-                    const SizedBox(width: 8),
                     OutlinedButton.icon(
                       onPressed: () async {
                         await _fetchDrivers();
@@ -2938,7 +3085,6 @@ class _DriverListPageState extends State<DriverListPage> with SingleTickerProvid
                       icon: const Icon(Icons.refresh, size: 18),
                       label: const Text('Refresh'),
                     ),
-                    const SizedBox(width: 8),
                     // ✅ ADVANCED FILTERS BUTTON
                     ElevatedButton.icon(
                       onPressed: _toggleAdvancedFilters,
@@ -2953,7 +3099,6 @@ class _DriverListPageState extends State<DriverListPage> with SingleTickerProvid
                         foregroundColor: Colors.white,
                       ),
                     ),
-                    const SizedBox(width: 8),
                     // ✅ ADD DRIVER BUTTON
                     ElevatedButton.icon(
                       onPressed: _showAddDriverDialog,
@@ -2964,7 +3109,6 @@ class _DriverListPageState extends State<DriverListPage> with SingleTickerProvid
                         foregroundColor: Colors.white,
                       ),
                     ),
-                    const SizedBox(width: 8),
                     // ✅ BULK IMPORT BUTTON
                     ElevatedButton.icon(
                       onPressed: _showBulkImportDialog,
@@ -2975,7 +3119,6 @@ class _DriverListPageState extends State<DriverListPage> with SingleTickerProvid
                         foregroundColor: Colors.white,
                       ),
                     ),
-                    const SizedBox(width: 8),
                     // ✅ EXPORT BUTTON
                     ElevatedButton.icon(
                       onPressed: _exportToExcel,
@@ -2986,7 +3129,6 @@ class _DriverListPageState extends State<DriverListPage> with SingleTickerProvid
                         foregroundColor: Colors.white,
                       ),
                     ),
-                    const Spacer(),
                     if (activeFilterCount > 0)
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
@@ -2996,6 +3138,7 @@ class _DriverListPageState extends State<DriverListPage> with SingleTickerProvid
                           border: Border.all(color: primaryColor),
                         ),
                         child: Row(
+                          mainAxisSize: MainAxisSize.min,
                           children: [
                             Icon(Icons.filter_list, size: 16, color: primaryColor),
                             const SizedBox(width: 6),
@@ -3006,7 +3149,6 @@ class _DriverListPageState extends State<DriverListPage> with SingleTickerProvid
                           ],
                         ),
                       ),
-                    const SizedBox(width: 12),
                     Text(
                       'Total: $_totalDrivers drivers',
                       style: const TextStyle(color: textPrimaryColor, fontSize: 14, fontWeight: FontWeight.w600),
@@ -3100,7 +3242,7 @@ class _DriverListPageState extends State<DriverListPage> with SingleTickerProvid
                         ),
                       )
                     : Container(
-                        margin: const EdgeInsets.all(20),
+                        margin: cardMargin,
                         decoration: BoxDecoration(
                           color: Colors.white,
                           borderRadius: BorderRadius.circular(8),
@@ -3131,12 +3273,15 @@ class _DriverListPageState extends State<DriverListPage> with SingleTickerProvid
                                       );
                                     }
                                   },
-                                  child: SingleChildScrollView(
-                                    controller: _horizontalScrollController,
-                                    scrollDirection: Axis.horizontal,
-                                    physics: const ClampingScrollPhysics(),
-                                    child: SizedBox(
-                                      width: 2000, // Fixed width for all columns
+                                  child: LayoutBuilder(
+                                    builder: (context, constraints) {
+                                      final dynamicMinWidth = constraints.maxWidth > 1700 ? constraints.maxWidth : 1700.0;
+                                      return SingleChildScrollView(
+                                        controller: _horizontalScrollController,
+                                        scrollDirection: Axis.horizontal,
+                                        physics: const ClampingScrollPhysics(),
+                                        child: SizedBox(
+                                          width: dynamicMinWidth, // Dynamic minWidth for responsive layout
                                       child: Column(
                                         children: [
                                           // HEADER ROW
@@ -3183,6 +3328,8 @@ class _DriverListPageState extends State<DriverListPage> with SingleTickerProvid
                                         ],
                                       ),
                                     ),
+                                  );
+                                    },
                                   ),
                                 ),
                               ),
@@ -3194,7 +3341,7 @@ class _DriverListPageState extends State<DriverListPage> with SingleTickerProvid
 
           // FOOTER
           Container(
-            padding: const EdgeInsets.all(16),
+            padding: responsivePadding,
             decoration: const BoxDecoration(
               color: cardBackgroundColor,
               border: Border(top: BorderSide(color: borderColor)),

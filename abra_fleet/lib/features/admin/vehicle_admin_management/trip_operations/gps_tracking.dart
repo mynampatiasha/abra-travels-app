@@ -451,11 +451,13 @@ class _GPSTrackingScreenState extends State<GPSTrackingScreen> {
     showDialog(
       context: context,
       builder: (context) => StatefulBuilder(
-        builder: (context, setDialogState) => AlertDialog(
-          title: const Text('🚗 Select Vehicle'),
-          content: SizedBox(
-            width: 500,
-            height: 500,
+        builder: (context, setDialogState) {
+          final screenWidth = MediaQuery.of(context).size.width;
+          return AlertDialog(
+            title: const Text('🚗 Select Vehicle'),
+            content: SizedBox(
+              width: (screenWidth - 48).clamp(280.0, 500.0),
+              height: 500,
             child: Column(
               children: [
                 TextField(
@@ -524,7 +526,8 @@ class _GPSTrackingScreenState extends State<GPSTrackingScreen> {
           actions: [
             TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
           ],
-        ),
+        );
+      },
       ),
     );
   }
@@ -576,6 +579,9 @@ class _GPSTrackingScreenState extends State<GPSTrackingScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final screenWidth = MediaQuery.of(context).size.width;
+    final double paddingVal = screenWidth < 600 ? 12.0 : (screenWidth < 1024 ? 18.0 : 24.0);
+
     return Scaffold(
       backgroundColor: const Color(0xFFF8FAFC),
       appBar: AppBar(
@@ -589,7 +595,7 @@ class _GPSTrackingScreenState extends State<GPSTrackingScreen> {
         ],
       ),
       body: SingleChildScrollView(
-        padding: const EdgeInsets.all(24),
+        padding: EdgeInsets.all(paddingVal),
         child: Column(
           children: [
             _buildStats(),
@@ -620,22 +626,53 @@ class _GPSTrackingScreenState extends State<GPSTrackingScreen> {
   }
 
   Widget _buildStats() {
-    return Row(
-      children: [
-        Expanded(child: _statCard('📡', '$totalCount', 'Total Devices', const Color(0xFFDBEAFE), Colors.blue)),
-        const SizedBox(width: 16),
-        Expanded(child: _statCard('🚗', '$assignedCount', 'Assigned', const Color(0xFFDDD6FE), Colors.purple)),
-        const SizedBox(width: 16),
-        Expanded(child: _statCard('✅', '$activeCount', 'Active Online', const Color(0xFFD1FAE5), Colors.green)),
-        const SizedBox(width: 16),
-        Expanded(child: _statCard('⚠️', '$unassignedCount', 'Unassigned', const Color(0xFFFEF3C7), Colors.orange)),
-      ],
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final card1 = _statCard('📡', '$totalCount', 'Total Devices', const Color(0xFFDBEAFE), Colors.blue);
+        final card2 = _statCard('🚗', '$assignedCount', 'Assigned', const Color(0xFFDDD6FE), Colors.purple);
+        final card3 = _statCard('✅', '$activeCount', 'Active Online', const Color(0xFFD1FAE5), Colors.green);
+        final card4 = _statCard('⚠️', '$unassignedCount', 'Unassigned', const Color(0xFFFEF3C7), Colors.orange);
+
+        if (constraints.maxWidth < 600) {
+          return Column(
+            children: [
+              card1,
+              const SizedBox(height: 12),
+              card2,
+              const SizedBox(height: 12),
+              card3,
+              const SizedBox(height: 12),
+              card4,
+            ],
+          );
+        } else if (constraints.maxWidth < 1024) {
+          return Column(
+            children: [
+              Row(children: [Expanded(child: card1), const SizedBox(width: 12), Expanded(child: card2)]),
+              const SizedBox(height: 12),
+              Row(children: [Expanded(child: card3), const SizedBox(width: 12), Expanded(child: card4)]),
+            ],
+          );
+        }
+
+        return Row(
+          children: [
+            Expanded(child: card1),
+            const SizedBox(width: 16),
+            Expanded(child: card2),
+            const SizedBox(width: 16),
+            Expanded(child: card3),
+            const SizedBox(width: 16),
+            Expanded(child: card4),
+          ],
+        );
+      },
     );
   }
 
   Widget _statCard(String icon, String val, String label, Color bg, Color iconColor) {
     return Container(
-      padding: const EdgeInsets.all(24),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(12),
@@ -645,18 +682,21 @@ class _GPSTrackingScreenState extends State<GPSTrackingScreen> {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(val, style: TextStyle(fontSize: 32, fontWeight: FontWeight.bold, color: iconColor)),
-              const SizedBox(height: 4),
-              Text(label, style: const TextStyle(fontSize: 13, color: Color(0xFF64748B))),
-            ],
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(val, style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: iconColor)),
+                const SizedBox(height: 4),
+                Text(label, style: const TextStyle(fontSize: 13, color: Color(0xFF64748B)), overflow: TextOverflow.ellipsis),
+              ],
+            ),
           ),
+          const SizedBox(width: 8),
           Container(
-            width: 56, height: 56,
+            width: 48, height: 48,
             decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(12)),
-            child: Center(child: Text(icon, style: const TextStyle(fontSize: 24))),
+            child: Center(child: Text(icon, style: const TextStyle(fontSize: 22))),
           ),
         ],
       ),
@@ -745,17 +785,24 @@ class _GPSTrackingScreenState extends State<GPSTrackingScreen> {
                       child: Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          Row(children: [
-                            const Icon(Icons.directions_bus, color: Colors.blue),
-                            const SizedBox(width: 12),
-                            Text(
-                              _selectedVehicleName ?? 'Select Vehicle (Optional)',
-                              style: TextStyle(
-                                fontSize: 16,
-                                color: _selectedVehicleName != null ? Colors.black : Colors.grey,
-                              ),
+                          Expanded(
+                            child: Row(
+                              children: [
+                                const Icon(Icons.directions_bus, color: Colors.blue),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: Text(
+                                    _selectedVehicleName ?? 'Select Vehicle (Optional)',
+                                    style: TextStyle(
+                                      fontSize: 16,
+                                      color: _selectedVehicleName != null ? Colors.black : Colors.grey,
+                                    ),
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                              ],
                             ),
-                          ]),
+                          ),
                           const Icon(Icons.arrow_drop_down),
                         ],
                       ),
@@ -904,21 +951,19 @@ class _GPSTrackingScreenState extends State<GPSTrackingScreen> {
             padding: const EdgeInsets.all(20),
             child: Column(
               children: [
-                Row(
-                  children: [
-                    Expanded(
-                      child: TextField(
-                        controller: _searchCtrl,
-                        decoration: InputDecoration(
-                          hintText: 'Search by IMEI, vehicle, SIM...',
-                          prefixIcon: const Icon(Icons.search),
-                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-                          contentPadding: const EdgeInsets.symmetric(vertical: 12),
-                        ),
+                LayoutBuilder(
+                  builder: (context, constraints) {
+                    final searchField = TextField(
+                      controller: _searchCtrl,
+                      decoration: InputDecoration(
+                        hintText: 'Search by IMEI, vehicle, SIM...',
+                        prefixIcon: const Icon(Icons.search),
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                        contentPadding: const EdgeInsets.symmetric(vertical: 12),
                       ),
-                    ),
-                    const SizedBox(width: 12),
-                    Container(
+                    );
+
+                    final dropdown = Container(
                       padding: const EdgeInsets.symmetric(horizontal: 12),
                       decoration: BoxDecoration(
                         border: Border.all(color: Colors.grey.shade400),
@@ -927,6 +972,7 @@ class _GPSTrackingScreenState extends State<GPSTrackingScreen> {
                       child: DropdownButton<String>(
                         value: statusFilter,
                         underline: const SizedBox(),
+                        isExpanded: constraints.maxWidth < 500,
                         items: const [
                           DropdownMenuItem(value: 'all', child: Text('All Status')),
                           DropdownMenuItem(value: 'active', child: Text('Active')),
@@ -938,8 +984,26 @@ class _GPSTrackingScreenState extends State<GPSTrackingScreen> {
                           _loadDevices();
                         },
                       ),
-                    ),
-                  ],
+                    );
+
+                    if (constraints.maxWidth < 500) {
+                      return Column(
+                        children: [
+                          searchField,
+                          const SizedBox(height: 10),
+                          SizedBox(width: double.infinity, child: dropdown),
+                        ],
+                      );
+                    }
+
+                    return Row(
+                      children: [
+                        Expanded(child: searchField),
+                        const SizedBox(width: 12),
+                        dropdown,
+                      ],
+                    );
+                  },
                 ),
                 const SizedBox(height: 20),
                 if (isLoading)

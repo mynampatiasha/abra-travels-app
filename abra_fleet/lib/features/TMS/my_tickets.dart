@@ -348,12 +348,15 @@ class _MyTicketsScreenState extends State<MyTicketsScreen>
 
   void _snack(String msg, {bool isError = false}) {
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-      content: Row(children: [
-        Icon(isError ? Icons.error_outline : Icons.check_circle,
-            color: Colors.white, size: 18),
-        const SizedBox(width: 10),
-        Expanded(child: Text(msg, style: const TextStyle(color: Colors.white))),
-      ]),
+      content: Wrap(
+        crossAxisAlignment: WrapCrossAlignment.center,
+        spacing: 10,
+        children: [
+          Icon(isError ? Icons.error_outline : Icons.check_circle,
+              color: Colors.white, size: 18),
+          Text(msg, style: const TextStyle(color: Colors.white)),
+        ],
+      ),
       backgroundColor: isError ? const Color(0xFFEF4444) : const Color(0xFF10B981),
       behavior: SnackBarBehavior.floating,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
@@ -372,18 +375,24 @@ class _MyTicketsScreenState extends State<MyTicketsScreen>
         content: const Text('Are you sure you want to close this ticket?',
             style: TextStyle(color: Color(0xFF64748B))),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context),
-              child: const Text('Cancel')),
-          ElevatedButton(
-            onPressed: () {
-              Navigator.pop(context);
-              _updateStatus(ticketId, 'closed', null, null);
-            },
-            style: ElevatedButton.styleFrom(backgroundColor: cOpen,
-                shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(10))),
-            child: const Text('Close Ticket',
-                style: TextStyle(color: Colors.white)),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              TextButton(onPressed: () => Navigator.pop(context),
+                  child: const Text('Cancel')),
+              ElevatedButton(
+                onPressed: () {
+                  Navigator.pop(context);
+                  _updateStatus(ticketId, 'closed', null, null);
+                },
+                style: ElevatedButton.styleFrom(backgroundColor: cOpen,
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10))),
+                child: const Text('Close Ticket',
+                    style: TextStyle(color: Colors.white)),
+              ),
+            ],
           ),
         ],
       ),
@@ -576,12 +585,15 @@ class _MyTicketsScreenState extends State<MyTicketsScreen>
                 ),
                 child: Column(mainAxisSize: MainAxisSize.min, children: [
                   // Row 1: Cancel + Confirm & Mark
-                  Row(children: [
-                    Expanded(
-                      child: OutlinedButton(
+                  Wrap(
+                    spacing: 12,
+                    runSpacing: 12,
+                    alignment: WrapAlignment.end,
+                    children: [
+                      OutlinedButton(
                         onPressed: () => Navigator.pop(ctx),
                         style: OutlinedButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
                           shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(12)),
                           side: BorderSide(color: Colors.grey.withOpacity(0.3)),
@@ -590,11 +602,7 @@ class _MyTicketsScreenState extends State<MyTicketsScreen>
                             style: TextStyle(color: Color(0xFF64748B),
                                 fontWeight: FontWeight.w600)),
                       ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      flex: 2,
-                      child: ElevatedButton(
+                      ElevatedButton(
                         onPressed: isSending ? null : () async {
                           if (subjectCtrl.text.trim().isEmpty ||
                               messageCtrl.text.trim().isEmpty) {
@@ -614,7 +622,7 @@ class _MyTicketsScreenState extends State<MyTicketsScreen>
                         },
                         style: ElevatedButton.styleFrom(
                           backgroundColor: statusColor,
-                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
                           shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(12)),
                         ),
@@ -622,7 +630,8 @@ class _MyTicketsScreenState extends State<MyTicketsScreen>
                             ? const SizedBox(width: 18, height: 18,
                                 child: CircularProgressIndicator(
                                     strokeWidth: 2, color: Colors.white))
-                            : Row(mainAxisAlignment: MainAxisAlignment.center,
+                            : Row(mainAxisSize: MainAxisSize.min,
+                                mainAxisAlignment: MainAxisAlignment.center,
                                 children: [
                                   const Icon(Icons.send_rounded,
                                       size: 16, color: Colors.white),
@@ -633,8 +642,8 @@ class _MyTicketsScreenState extends State<MyTicketsScreen>
                                           fontSize: 13)),
                                 ]),
                       ),
-                    ),
-                  ]),
+                    ],
+                  ),
                   const SizedBox(height: 10),
                   // Row 2: Confirm & Re-raise (full width)
                   SizedBox(
@@ -1062,6 +1071,7 @@ class _MyTicketsScreenState extends State<MyTicketsScreen>
     final isRaised = _activeTab == 1;
     final hScroll  = isRaised ? _hScroll2 : _hScroll;
     final vScroll  = isRaised ? _vScroll2 : _vScroll;
+    final tableWidth = isRaised ? 1270.0 : 1305.0;
 
     return Container(
       margin: const EdgeInsets.fromLTRB(12, 4, 12, 0),
@@ -1073,50 +1083,62 @@ class _MyTicketsScreenState extends State<MyTicketsScreen>
       ),
       child: ClipRRect(
         borderRadius: BorderRadius.circular(14),
-        child: Column(children: [
-          _tableHeader(isRaised),
-          Expanded(child: Scrollbar(
-            controller: vScroll, thumbVisibility: true,
+        child: LayoutBuilder(
+          builder: (context, constraints) => Scrollbar(
+            controller: hScroll,
+            thumbVisibility: true,
+            trackVisibility: true,
             child: SingleChildScrollView(
-              controller: vScroll,
-              child: Scrollbar(
-                controller: hScroll, thumbVisibility: true,
-                notificationPredicate: (n) => n.depth == 1,
-                child: SingleChildScrollView(
-                  controller: hScroll,
-                  scrollDirection: Axis.horizontal,
-                  child: Column(
-                    children: _paged.asMap().entries
-                        .map((e) => _buildRow(e.value, e.key.isEven, isRaised))
-                        .toList(),
-                  ),
+              controller: hScroll,
+              scrollDirection: Axis.horizontal,
+              child: SizedBox(
+                width: tableWidth,
+                height: constraints.maxHeight,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _tableHeader(isRaised),
+                    Expanded(
+                      child: Scrollbar(
+                        controller: vScroll,
+                        thumbVisibility: true,
+                        trackVisibility: true,
+                        child: SingleChildScrollView(
+                          controller: vScroll,
+                          scrollDirection: Axis.vertical,
+                          child: Column(
+                            children: _paged.asMap().entries
+                                .map((e) => _buildRow(e.value, e.key.isEven, isRaised))
+                                .toList(),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ),
-          )),
-        ]),
+          ),
+        ),
       ),
     );
   }
 
-  Widget _tableHeader(bool isRaised) => SingleChildScrollView(
-    scrollDirection: Axis.horizontal,
-    child: Container(
-      color: navyDark,
-      child: Row(children: [
-        _hCell('#',           60),
-        _hCell('Ticket #',   130),
-        _hCell('Subject',    210),
-        if (isRaised) _hCell('Assigned To', 160)
-        else          _hCell('Raised By',   160),
-        _hCell('Priority',   100),
-        _hCell('Status',     isRaised ? 120 : 155),
-        _hCell('Timeline',   100),
-        _hCell('Deadline',   170),
-        _hCell('Created At', 130),
-        _hCell('Actions',    90),
-      ]),
-    ),
+  Widget _tableHeader(bool isRaised) => Container(
+    color: navyDark,
+    child: Row(children: [
+      _hCell('#',           60),
+      _hCell('Ticket #',   130),
+      _hCell('Subject',    210),
+      if (isRaised) _hCell('Assigned To', 160)
+      else          _hCell('Raised By',   160),
+      _hCell('Priority',   100),
+      _hCell('Status',     isRaised ? 120 : 155),
+      _hCell('Timeline',   100),
+      _hCell('Deadline',   170),
+      _hCell('Created At', 130),
+      _hCell('Actions',    90),
+    ]),
   );
 
   Widget _hCell(String t, double w) => Container(
@@ -1522,56 +1544,139 @@ class _MyTicketsScreenState extends State<MyTicketsScreen>
                 ],
 
                 // People row
-                Row(children: [
-                  Expanded(child: _oSec('Raised By',
-                      Icons.person_outline, cInProgress,
-                    _personCard(
-                      name: ticket['name'] ?? ticket['created_by_name'] ?? 'System',
-                      email: ticket['creator_email'] ?? '',
-                      tag: ticket['source'] == 'crm' ? 'CRM' : 'Manual',
-                      tagColor: cReply,
-                    ),
-                  )),
-                  const SizedBox(width: 10),
-                  Expanded(child: _oSec('Assigned To',
-                      Icons.person_pin_outlined, cApproved,
-                    _personCard(
-                      name: ticket['assigned_to_name'] ?? 'Not Assigned',
-                      email: ticket['assigned_email'] ?? '',
-                    ),
-                  )),
-                ]),
+                LayoutBuilder(
+                  builder: (context, constraints) {
+                    final isMobile = constraints.maxWidth < 600;
+                    if (isMobile) {
+                      return Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          _oSec('Raised By',
+                              Icons.person_outline, cInProgress,
+                            _personCard(
+                              name: ticket['name'] ?? ticket['created_by_name'] ?? 'System',
+                              email: ticket['creator_email'] ?? '',
+                              tag: ticket['source'] == 'crm' ? 'CRM' : 'Manual',
+                              tagColor: cReply,
+                            ),
+                          ),
+                          const SizedBox(height: 10),
+                          _oSec('Assigned To',
+                              Icons.person_pin_outlined, cApproved,
+                            _personCard(
+                              name: ticket['assigned_to_name'] ?? 'Not Assigned',
+                              email: ticket['assigned_email'] ?? '',
+                            ),
+                          ),
+                        ],
+                      );
+                    }
+                    return Row(children: [
+                      Expanded(child: _oSec('Raised By',
+                          Icons.person_outline, cInProgress,
+                        _personCard(
+                          name: ticket['name'] ?? ticket['created_by_name'] ?? 'System',
+                          email: ticket['creator_email'] ?? '',
+                          tag: ticket['source'] == 'crm' ? 'CRM' : 'Manual',
+                          tagColor: cReply,
+                        ),
+                      )),
+                      const SizedBox(width: 10),
+                      Expanded(child: _oSec('Assigned To',
+                          Icons.person_pin_outlined, cApproved,
+                        _personCard(
+                          name: ticket['assigned_to_name'] ?? 'Not Assigned',
+                          email: ticket['assigned_email'] ?? '',
+                        ),
+                      )),
+                    ]);
+                  },
+                ),
                 const SizedBox(height: 14),
 
-                // Dates
-                Row(children: [
-                  Expanded(child: _iTile('Created At',
-                      _fmtDateTime(ticket['created_at']),
-                      Icons.add_circle_outline, cApproved)),
-                  const SizedBox(width: 8),
-                  Expanded(child: _iTile('Deadline',
-                      _fmtDateTime(ticket['deadline']),
-                      Icons.alarm, cOpen)),
-                  const SizedBox(width: 8),
-                  Expanded(child: _iTile('Updated At',
-                      _fmtDateTime(ticket['updated_at']),
-                      Icons.update, cInProgress)),
-                ]),
-                const SizedBox(height: 14),
+                // Info & Date Tiles (L1547 & L1562)
+                LayoutBuilder(
+                  builder: (context, constraints) {
+                    final tile1 = _iTile('Created At',
+                        _fmtDateTime(ticket['created_at']),
+                        Icons.add_circle_outline, cApproved);
+                    final tile2 = _iTile('Deadline',
+                        _fmtDateTime(ticket['deadline']),
+                        Icons.alarm, cOpen);
+                    final tile3 = _iTile('Updated At',
+                        _fmtDateTime(ticket['updated_at']),
+                        Icons.update, cInProgress);
+                    final tile4 = _iTile('Timeline',
+                        _fmtTimeline(ticket['timeline']),
+                        Icons.timer_outlined, cReply);
+                    final tile5 = _iTile('Source',
+                        ticket['source'] == 'crm' ? 'CRM System' : 'Manual',
+                        Icons.source_outlined, cClosed);
+                    final tile6 = _iTile('Attachment',
+                        ticket['attachment'] ?? 'None',
+                        Icons.attach_file, const Color(0xFF0EA5E9));
 
-                Row(children: [
-                  Expanded(child: _iTile('Timeline',
-                      _fmtTimeline(ticket['timeline']),
-                      Icons.timer_outlined, cReply)),
-                  const SizedBox(width: 8),
-                  Expanded(child: _iTile('Source',
-                      ticket['source'] == 'crm' ? 'CRM System' : 'Manual',
-                      Icons.source_outlined, cClosed)),
-                  const SizedBox(width: 8),
-                  Expanded(child: _iTile('Attachment',
-                      ticket['attachment'] ?? 'None',
-                      Icons.attach_file, const Color(0xFF0EA5E9))),
-                ]),
+                    if (constraints.maxWidth < 600) {
+                      return Column(
+                        children: [
+                          tile1,
+                          const SizedBox(height: 8),
+                          tile2,
+                          const SizedBox(height: 8),
+                          tile3,
+                          const SizedBox(height: 8),
+                          tile4,
+                          const SizedBox(height: 8),
+                          tile5,
+                          const SizedBox(height: 8),
+                          tile6,
+                        ],
+                      );
+                    } else if (constraints.maxWidth < 900) {
+                      return Column(
+                        children: [
+                          Row(children: [
+                            Expanded(child: tile1),
+                            const SizedBox(width: 8),
+                            Expanded(child: tile2),
+                          ]),
+                          const SizedBox(height: 8),
+                          Row(children: [
+                            Expanded(child: tile3),
+                            const SizedBox(width: 8),
+                            Expanded(child: tile4),
+                          ]),
+                          const SizedBox(height: 8),
+                          Row(children: [
+                            Expanded(child: tile5),
+                            const SizedBox(width: 8),
+                            Expanded(child: tile6),
+                          ]),
+                        ],
+                      );
+                    } else {
+                      return Column(
+                        children: [
+                          Row(children: [
+                            Expanded(child: tile1),
+                            const SizedBox(width: 8),
+                            Expanded(child: tile2),
+                            const SizedBox(width: 8),
+                            Expanded(child: tile3),
+                          ]),
+                          const SizedBox(height: 8),
+                          Row(children: [
+                            Expanded(child: tile4),
+                            const SizedBox(width: 8),
+                            Expanded(child: tile5),
+                            const SizedBox(width: 8),
+                            Expanded(child: tile6),
+                          ]),
+                        ],
+                      );
+                    }
+                  },
+                ),
 
                 // Status update buttons — My Tickets tab only
                 if (!isRaised) ...[

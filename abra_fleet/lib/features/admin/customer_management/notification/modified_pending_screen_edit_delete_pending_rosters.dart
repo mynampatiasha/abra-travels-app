@@ -599,7 +599,7 @@ Future<void> _showSmartGroupingDialog() async {
         child: Container(
           width: 800,
           constraints: const BoxConstraints(maxHeight: 700),
-          padding: const EdgeInsets.all(24),
+          padding: EdgeInsets.all(MediaQuery.of(context).size.width < 500 ? 14 : 24),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -608,11 +608,14 @@ Future<void> _showSmartGroupingDialog() async {
                 children: [
                   Icon(Icons.group_work, color: Colors.purple[600], size: 32),
                   const SizedBox(width: 12),
-                  const Text(
-                    'Smart Grouping Results',
-                    style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+                  const Expanded(
+                    child: Text(
+                      'Smart Grouping Results',
+                      style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
                   ),
-                  const Spacer(),
                   IconButton(
                     icon: const Icon(Icons.close),
                     onPressed: () => Navigator.pop(context),
@@ -668,21 +671,21 @@ Future<void> _showSmartGroupingDialog() async {
                               children: [
                                 Icon(Icons.login, size: 14, color: Colors.grey[600]),
                                 const SizedBox(width: 4),
-                                Text('$loginTime @ $loginLocation', style: TextStyle(fontSize: 12, color: Colors.grey[700])),
+                                Expanded(child: Text('$loginTime @ $loginLocation', style: TextStyle(fontSize: 12, color: Colors.grey[700]), maxLines: 2, overflow: TextOverflow.ellipsis)),
                               ],
                             ),
                             Row(
                               children: [
                                 Icon(Icons.logout, size: 14, color: Colors.grey[600]),
                                 const SizedBox(width: 4),
-                                Text('$logoutTime @ $logoutLocation', style: TextStyle(fontSize: 12, color: Colors.grey[700])),
+                                Expanded(child: Text('$logoutTime @ $logoutLocation', style: TextStyle(fontSize: 12, color: Colors.grey[700]), maxLines: 2, overflow: TextOverflow.ellipsis)),
                               ],
                             ),
                             Row(
                               children: [
                                 Icon(Icons.directions_car, size: 14, color: Colors.grey[600]),
                                 const SizedBox(width: 4),
-                                Text('Type: $rosterType', style: TextStyle(fontSize: 12, color: Colors.grey[700])),
+                                Expanded(child: Text('Type: $rosterType', style: TextStyle(fontSize: 12, color: Colors.grey[700]))),
                               ],
                             ),
                           ],
@@ -4517,6 +4520,9 @@ Future<void> _confirmManualAssignment(
 
       setState(() {
         _allPendingRosters = uniqueRosters;
+        // keep only selected rosters that are still pending (assigned ones must not stay ticked)
+        final stillPendingIds = uniqueRosters.map((r) => (r['id'] ?? r['_id'])?.toString()).toSet();
+        _selectedRosterIds.removeWhere((id) => !stillPendingIds.contains(id));
         _extractOrganizations();
         _applyFilters();
         _isLoading = false;
@@ -5871,7 +5877,9 @@ Future<void> _confirmManualAssignment(
                 const SizedBox(height: 16),
                 
                 // Action Buttons Row (Edit, Delete, Auto, Assign)
-                Wrap(
+                SizedBox(
+                  width: double.infinity,
+                  child: Wrap(
                   alignment: WrapAlignment.spaceBetween,
                   crossAxisAlignment: WrapCrossAlignment.center,
                   spacing: 12,
@@ -5971,6 +5979,7 @@ Future<void> _confirmManualAssignment(
                       ],
                     ),
                   ],
+                ),
                 ),
               ],
             ),

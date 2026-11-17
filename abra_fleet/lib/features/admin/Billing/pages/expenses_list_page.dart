@@ -346,7 +346,8 @@ class _ExpensesListPageState extends State<ExpensesListPage> {
               ],
             ),
             content: Container(
-              width: 500,
+              constraints: const BoxConstraints(maxWidth: 500),
+              width: MediaQuery.of(context).size.width > 550 ? 500 : MediaQuery.of(context).size.width * 0.9,
               child: SingleChildScrollView(
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
@@ -766,31 +767,28 @@ class _ExpensesListPageState extends State<ExpensesListPage> {
             ],
           ),
           const SizedBox(height: 8),
-          Row(
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
             children: [
-              Expanded(
-                child: ElevatedButton.icon(
-                  onPressed: _isLoading ? null : _handleBulkImport,
-                  icon: const Icon(Icons.upload_file, size: 18),
-                  label: const Text('Import', style: TextStyle(fontSize: 14)),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF9B59B6),
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(vertical: 12),
-                  ),
+              ElevatedButton.icon(
+                onPressed: _isLoading ? null : _handleBulkImport,
+                icon: const Icon(Icons.upload_file, size: 18),
+                label: const Text('Import', style: TextStyle(fontSize: 14)),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF9B59B6),
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                 ),
               ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: ElevatedButton.icon(
-                  onPressed: _isLoading ? null : _exportToExcel,
-                  icon: const Icon(Icons.file_download, size: 18),
-                  label: const Text('Export', style: TextStyle(fontSize: 14)),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF27AE60),
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(vertical: 12),
-                  ),
+              ElevatedButton.icon(
+                onPressed: _isLoading ? null : _exportToExcel,
+                icon: const Icon(Icons.file_download, size: 18),
+                label: const Text('Export', style: TextStyle(fontSize: 14)),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF27AE60),
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                 ),
               ),
             ],
@@ -943,20 +941,43 @@ class _ExpensesListPageState extends State<ExpensesListPage> {
   }
 
   Widget _buildStatsCards() {
-    return Container(
-      padding: const EdgeInsets.all(20),
-      color: Colors.white,
-      child: Row(
-        children: [
-          _buildStatCard('Total Expenses', '₹${_stats!.totalExpenses.toStringAsFixed(2)}', Icons.receipt_long, Colors.blue),
-          const SizedBox(width: 16),
-          _buildStatCard('Total Billable', '₹${_stats!.totalBillable.toStringAsFixed(2)}', Icons.attach_money, Colors.green),
-          const SizedBox(width: 16),
-          _buildStatCard('Expense Count', _stats!.expenseCount.toString(), Icons.list_alt, Colors.orange),
-          const SizedBox(width: 16),
-          _buildStatCard('This Month', '₹${(_stats!.totalExpenses * 0.3).toStringAsFixed(2)}', Icons.calendar_today, Colors.purple),
-        ],
-      ),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final c1 = _buildStatCard('Total Expenses', '₹${_stats!.totalExpenses.toStringAsFixed(2)}', Icons.receipt_long, Colors.blue);
+        final c2 = _buildStatCard('Total Billable', '₹${_stats!.totalBillable.toStringAsFixed(2)}', Icons.attach_money, Colors.green);
+        final c3 = _buildStatCard('Expense Count', _stats!.expenseCount.toString(), Icons.list_alt, Colors.orange);
+        final c4 = _buildStatCard('This Month', '₹${(_stats!.totalExpenses * 0.3).toStringAsFixed(2)}', Icons.calendar_today, Colors.purple);
+
+        if (constraints.maxWidth < 768) {
+          return Container(
+            padding: const EdgeInsets.all(12),
+            color: Colors.white,
+            child: Column(
+              children: [
+                Row(children: [c1, const SizedBox(width: 8), c2]),
+                const SizedBox(height: 8),
+                Row(children: [c3, const SizedBox(width: 8), c4]),
+              ],
+            ),
+          );
+        }
+
+        return Container(
+          padding: const EdgeInsets.all(20),
+          color: Colors.white,
+          child: Row(
+            children: [
+              c1,
+              const SizedBox(width: 16),
+              c2,
+              const SizedBox(width: 16),
+              c3,
+              const SizedBox(width: 16),
+              c4,
+            ],
+          ),
+        );
+      },
     );
   }
 
@@ -1025,36 +1046,43 @@ class _ExpensesListPageState extends State<ExpensesListPage> {
       ),
       child: Column(
         children: [
-          Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: const Color(0xFF34495E),
-              borderRadius: const BorderRadius.only(topLeft: Radius.circular(8), topRight: Radius.circular(8)),
-            ),
-            child: Row(
-              children: [
-                SizedBox(
-                  width: 40,
-                  child: Checkbox(
-                    value: _selectAll,
-                    onChanged: _toggleSelectAll,
-                    fillColor: MaterialStateProperty.all(Colors.white),
-                    checkColor: const Color(0xFF34495E),
-                  ),
+          LayoutBuilder(
+            builder: (context, constraints) {
+              if (constraints.maxWidth < 900) {
+                return const SizedBox.shrink();
+              }
+              return Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF34495E),
+                  borderRadius: const BorderRadius.only(topLeft: Radius.circular(8), topRight: Radius.circular(8)),
                 ),
-                _buildHeaderCell('DATE', flex: 2),
-                _buildHeaderCell('EXPENSE ACCOUNT', flex: 3),
-                _buildHeaderCell('VENDOR', flex: 2),
-                _buildHeaderCell('CUSTOMER', flex: 2),
-                _buildHeaderCell('AMOUNT', flex: 2),
-                _buildHeaderCell('TAX', flex: 1),
-                _buildHeaderCell('TOTAL', flex: 2),
-                _buildHeaderCell('PAID THROUGH', flex: 2),
-                _buildHeaderCell('RECEIPT', flex: 1),
-                _buildHeaderCell('BILLABLE', flex: 1),
-                const SizedBox(width: 60),
-              ],
-            ),
+                child: Row(
+                  children: [
+                    SizedBox(
+                      width: 40,
+                      child: Checkbox(
+                        value: _selectAll,
+                        onChanged: _toggleSelectAll,
+                        fillColor: MaterialStateProperty.all(Colors.white),
+                        checkColor: const Color(0xFF34495E),
+                      ),
+                    ),
+                    _buildHeaderCell('DATE', flex: 2),
+                    _buildHeaderCell('EXPENSE ACCOUNT', flex: 3),
+                    _buildHeaderCell('VENDOR', flex: 2),
+                    _buildHeaderCell('CUSTOMER', flex: 2),
+                    _buildHeaderCell('AMOUNT', flex: 2),
+                    _buildHeaderCell('TAX', flex: 1),
+                    _buildHeaderCell('TOTAL', flex: 2),
+                    _buildHeaderCell('PAID THROUGH', flex: 2),
+                    _buildHeaderCell('RECEIPT', flex: 1),
+                    _buildHeaderCell('BILLABLE', flex: 1),
+                    const SizedBox(width: 60),
+                  ],
+                ),
+              );
+            },
           ),
           Expanded(
             child: filteredExpenses.isEmpty
@@ -1079,93 +1107,208 @@ class _ExpensesListPageState extends State<ExpensesListPage> {
     );
   }
 
+  Widget _buildExpenseActionMenu(Expense expense) {
+    return PopupMenuButton<String>(
+      icon: const Icon(Icons.more_vert, size: 20),
+      itemBuilder: (context) => [
+        const PopupMenuItem(value: 'view', child: ListTile(leading: Icon(Icons.visibility, size: 18, color: Color(0xFF3498DB)), title: Text('View Details'), contentPadding: EdgeInsets.zero)),
+        const PopupMenuItem(value: 'edit', child: ListTile(leading: Icon(Icons.edit, size: 18), title: Text('Edit'), contentPadding: EdgeInsets.zero)),
+        if (expense.receiptFile != null) const PopupMenuItem(value: 'download', child: ListTile(leading: Icon(Icons.download, size: 18), title: Text('Download Receipt'), contentPadding: EdgeInsets.zero)),
+        const PopupMenuItem(value: 'delete', child: ListTile(leading: Icon(Icons.delete, size: 18, color: Colors.red), title: Text('Delete', style: TextStyle(color: Colors.red)), contentPadding: EdgeInsets.zero)),
+      ],
+      onSelected: (value) async {
+        switch (value) {
+          case 'view':
+            _viewExpenseDetails(expense);
+            break;
+          case 'edit':
+            _openEditExpense(expense.id);
+            break;
+          case 'download':
+            await _downloadReceipt(expense);
+            break;
+          case 'delete':
+            _deleteExpense(expense);
+            break;
+        }
+      },
+    );
+  }
+
   Widget _buildExpenseRow(Expense expense) {
     final isSelected = _selectedExpenses.contains(expense.id);
     final expenseDate = DateTime.parse(expense.date);
+
+    Widget buildGridCell(String label, Widget content) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 4),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(label, style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.grey[600])),
+            const SizedBox(height: 2),
+            content,
+          ],
+        ),
+      );
+    }
+
+    final cells = [
+      buildGridCell('DATE', Text(DateFormat('dd/MM/yyyy').format(expenseDate), style: const TextStyle(fontSize: 13))),
+      buildGridCell('EXPENSE ACCOUNT', InkWell(
+        onTap: () => _openEditExpense(expense.id),
+        child: Text(expense.expenseAccount, style: const TextStyle(color: Color(0xFF3498DB), fontWeight: FontWeight.w600, fontSize: 13), overflow: TextOverflow.ellipsis),
+      )),
+      buildGridCell('VENDOR', Text(expense.vendor ?? '-', style: TextStyle(fontSize: 13, color: Colors.grey[600]), overflow: TextOverflow.ellipsis)),
+      buildGridCell('CUSTOMER', Text(expense.customerName ?? '-', style: TextStyle(fontSize: 13, color: Colors.grey[600]), overflow: TextOverflow.ellipsis)),
+      buildGridCell('AMOUNT', Text('₹${expense.amount.toStringAsFixed(2)}', style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500))),
+      buildGridCell('TAX', Text('₹${expense.tax.toStringAsFixed(2)}', style: const TextStyle(fontSize: 13))),
+      buildGridCell('TOTAL', Text('₹${expense.total.toStringAsFixed(2)}', style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600))),
+      buildGridCell('PAID THROUGH', Text(expense.paidThrough, style: const TextStyle(fontSize: 13), overflow: TextOverflow.ellipsis)),
+      buildGridCell('BILLABLE', Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          expense.isBillable
+              ? Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  decoration: BoxDecoration(color: Colors.green[100], borderRadius: BorderRadius.circular(8)),
+                  child: Text('Yes', style: TextStyle(color: Colors.green[800], fontWeight: FontWeight.w600, fontSize: 11)),
+                )
+              : Text('No', style: TextStyle(fontSize: 12, color: Colors.grey[600])),
+          if (expense.receiptFile != null) ...[
+            const SizedBox(width: 4),
+            IconButton(
+              icon: const Icon(Icons.attach_file, color: Colors.green, size: 16),
+              onPressed: () => _downloadReceipt(expense),
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints(),
+            ),
+          ],
+        ],
+      )),
+    ];
+
+    Widget buildCardHeader() {
+      return Row(
+        children: [
+          SizedBox(
+            width: 32,
+            child: Checkbox(
+              value: isSelected,
+              onChanged: (value) => _toggleSelection(expense.id),
+            ),
+          ),
+          Expanded(
+            child: Text(
+              expense.expenseAccount,
+              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Color(0xFF2C3E50)),
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+          SizedBox(
+            width: 40,
+            child: _buildExpenseActionMenu(expense),
+          ),
+        ],
+      );
+    }
 
     return InkWell(
       onTap: () => _openEditExpense(expense.id),
       child: Container(
         padding: const EdgeInsets.all(16),
         color: isSelected ? Colors.blue[50] : null,
-        child: Row(
-          children: [
-            SizedBox(
-              width: 40,
-              child: Checkbox(
-                value: isSelected,
-                onChanged: (value) => _toggleSelection(expense.id),
-              ),
-            ),
-            Expanded(flex: 2, child: Text(DateFormat('dd/MM/yyyy').format(expenseDate), style: const TextStyle(fontSize: 14))),
-            Expanded(
-              flex: 3,
-              child: InkWell(
-                onTap: () => _openEditExpense(expense.id),
-                child: Text(expense.expenseAccount, style: const TextStyle(color: Color(0xFF3498DB), fontWeight: FontWeight.w600, fontSize: 14)),
-              ),
-            ),
-            Expanded(flex: 2, child: Text(expense.vendor ?? '-', style: TextStyle(fontSize: 14, color: Colors.grey[600]))),
-            Expanded(flex: 2, child: Text(expense.customerName ?? '-', style: TextStyle(fontSize: 14, color: Colors.grey[600]))),
-            Expanded(flex: 2, child: Text('₹${expense.amount.toStringAsFixed(2)}', style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500), textAlign: TextAlign.right)),
-            Expanded(flex: 1, child: Text('₹${expense.tax.toStringAsFixed(2)}', style: const TextStyle(fontSize: 14), textAlign: TextAlign.right)),
-            Expanded(flex: 2, child: Text('₹${expense.total.toStringAsFixed(2)}', style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600), textAlign: TextAlign.right)),
-            Expanded(flex: 2, child: Text(expense.paidThrough, style: const TextStyle(fontSize: 14))),
-            Expanded(
-              flex: 1,
-              child: Center(
-                child: expense.receiptFile != null
-                    ? Tooltip(
-                        message: 'Receipt: ${expense.receiptFile!.originalName}',
-                        child: IconButton(
-                          icon: const Icon(Icons.attach_file, color: Colors.green, size: 20),
-                          onPressed: () => _downloadReceipt(expense),
-                          padding: EdgeInsets.zero,
-                          constraints: const BoxConstraints(),
-                        ),
-                      )
-                    : Icon(Icons.attach_file_outlined, color: Colors.grey[400], size: 20),
-              ),
-            ),
-            Expanded(
-              flex: 1,
-              child: expense.isBillable
-                  ? Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                      decoration: BoxDecoration(color: Colors.green[100], borderRadius: BorderRadius.circular(12)),
-                      child: Text('Yes', style: TextStyle(color: Colors.green[800], fontWeight: FontWeight.w600, fontSize: 11), textAlign: TextAlign.center),
-                    )
-                  : Text('No', style: TextStyle(fontSize: 12, color: Colors.grey[600]), textAlign: TextAlign.center),
-            ),
-            SizedBox(
-              width: 60,
-              child: PopupMenuButton<String>(
-                icon: const Icon(Icons.more_vert, size: 20),
-                itemBuilder: (context) => [
-                  const PopupMenuItem(value: 'view', child: ListTile(leading: Icon(Icons.visibility, size: 18, color: Color(0xFF3498DB)), title: Text('View Details'), contentPadding: EdgeInsets.zero)),
-                  const PopupMenuItem(value: 'edit', child: ListTile(leading: Icon(Icons.edit, size: 18), title: Text('Edit'), contentPadding: EdgeInsets.zero)),
-                  if (expense.receiptFile != null) const PopupMenuItem(value: 'download', child: ListTile(leading: Icon(Icons.download, size: 18), title: Text('Download Receipt'), contentPadding: EdgeInsets.zero)),
-                  const PopupMenuItem(value: 'delete', child: ListTile(leading: Icon(Icons.delete, size: 18, color: Colors.red), title: Text('Delete', style: TextStyle(color: Colors.red)), contentPadding: EdgeInsets.zero)),
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            if (constraints.maxWidth < 600) {
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  buildCardHeader(),
+                  const Divider(height: 12),
+                  Row(crossAxisAlignment: CrossAxisAlignment.start, children: [Expanded(child: cells[0]), Expanded(child: cells[1])]),
+                  const SizedBox(height: 6),
+                  Row(crossAxisAlignment: CrossAxisAlignment.start, children: [Expanded(child: cells[2]), Expanded(child: cells[3])]),
+                  const SizedBox(height: 6),
+                  Row(crossAxisAlignment: CrossAxisAlignment.start, children: [Expanded(child: cells[4]), Expanded(child: cells[5])]),
+                  const SizedBox(height: 6),
+                  Row(crossAxisAlignment: CrossAxisAlignment.start, children: [Expanded(child: cells[6]), Expanded(child: cells[7])]),
+                  const SizedBox(height: 6),
+                  Row(crossAxisAlignment: CrossAxisAlignment.start, children: [Expanded(child: cells[8]), const Expanded(child: SizedBox())]),
                 ],
-                onSelected: (value) async {
-                  switch (value) {
-                    case 'view':
-                      _viewExpenseDetails(expense);
-                      break;
-                    case 'edit':
-                      _openEditExpense(expense.id);
-                      break;
-                    case 'download':
-                      await _downloadReceipt(expense);
-                      break;
-                    case 'delete':
-                      _deleteExpense(expense);
-                      break;
-                  }
-                },
-              ),
-            ),
-          ],
+              );
+            } else if (constraints.maxWidth < 900) {
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  buildCardHeader(),
+                  const Divider(height: 12),
+                  Row(crossAxisAlignment: CrossAxisAlignment.start, children: [Expanded(child: cells[0]), Expanded(child: cells[1]), Expanded(child: cells[2])]),
+                  const SizedBox(height: 8),
+                  Row(crossAxisAlignment: CrossAxisAlignment.start, children: [Expanded(child: cells[3]), Expanded(child: cells[4]), Expanded(child: cells[5])]),
+                  const SizedBox(height: 8),
+                  Row(crossAxisAlignment: CrossAxisAlignment.start, children: [Expanded(child: cells[6]), Expanded(child: cells[7]), Expanded(child: cells[8])]),
+                ],
+              );
+            }
+
+            return Row(
+              children: [
+                SizedBox(
+                  width: 40,
+                  child: Checkbox(
+                    value: isSelected,
+                    onChanged: (value) => _toggleSelection(expense.id),
+                  ),
+                ),
+                Expanded(flex: 2, child: Text(DateFormat('dd/MM/yyyy').format(expenseDate), style: const TextStyle(fontSize: 14))),
+                Expanded(
+                  flex: 3,
+                  child: InkWell(
+                    onTap: () => _openEditExpense(expense.id),
+                    child: Text(expense.expenseAccount, style: const TextStyle(color: Color(0xFF3498DB), fontWeight: FontWeight.w600, fontSize: 14)),
+                  ),
+                ),
+                Expanded(flex: 2, child: Text(expense.vendor ?? '-', style: TextStyle(fontSize: 14, color: Colors.grey[600]))),
+                Expanded(flex: 2, child: Text(expense.customerName ?? '-', style: TextStyle(fontSize: 14, color: Colors.grey[600]))),
+                Expanded(flex: 2, child: Text('₹${expense.amount.toStringAsFixed(2)}', style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500), textAlign: TextAlign.right)),
+                Expanded(flex: 1, child: Text('₹${expense.tax.toStringAsFixed(2)}', style: const TextStyle(fontSize: 14), textAlign: TextAlign.right)),
+                Expanded(flex: 2, child: Text('₹${expense.total.toStringAsFixed(2)}', style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600), textAlign: TextAlign.right)),
+                Expanded(flex: 2, child: Text(expense.paidThrough, style: const TextStyle(fontSize: 14))),
+                Expanded(
+                  flex: 1,
+                  child: Center(
+                    child: expense.receiptFile != null
+                        ? Tooltip(
+                            message: 'Receipt: ${expense.receiptFile!.originalName}',
+                            child: IconButton(
+                              icon: const Icon(Icons.attach_file, color: Colors.green, size: 20),
+                              onPressed: () => _downloadReceipt(expense),
+                              padding: EdgeInsets.zero,
+                              constraints: const BoxConstraints(),
+                            ),
+                          )
+                        : Icon(Icons.attach_file_outlined, color: Colors.grey[400], size: 20),
+                  ),
+                ),
+                Expanded(
+                  flex: 1,
+                  child: expense.isBillable
+                      ? Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                          decoration: BoxDecoration(color: Colors.green[100], borderRadius: BorderRadius.circular(12)),
+                          child: Text('Yes', style: TextStyle(color: Colors.green[800], fontWeight: FontWeight.w600, fontSize: 11), textAlign: TextAlign.center),
+                        )
+                      : Text('No', style: TextStyle(fontSize: 12, color: Colors.grey[600]), textAlign: TextAlign.center),
+                ),
+                SizedBox(
+                  width: 60,
+                  child: _buildExpenseActionMenu(expense),
+                ),
+              ],
+            );
+          },
         ),
       ),
     );
@@ -1414,7 +1557,8 @@ class _BulkImportExpensesDialogState extends State<BulkImportExpensesDialog> {
     return Dialog(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       child: Container(
-        width: 600,
+        constraints: const BoxConstraints(maxWidth: 600),
+        width: MediaQuery.of(context).size.width > 660 ? 600 : MediaQuery.of(context).size.width * 0.9,
         padding: const EdgeInsets.all(24),
         child: Column(
           mainAxisSize: MainAxisSize.min,

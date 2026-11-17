@@ -326,14 +326,16 @@ class _MaintenanceManagementScreenState
   }
 
   void _showMaintenanceDetailsOverlay(Map<String, dynamic> maintenance) {
+    final screenWidth = MediaQuery.of(context).size.width;
+    final isMobile = screenWidth < 600;
     _pushOverlay(
       Material(
         color: Colors.black54,
         child: Center(
           child: Container(
-            width: MediaQuery.of(context).size.width * 0.7,
+            width: isMobile ? screenWidth * 0.95 : (screenWidth * 0.7).clamp(400.0, 900.0),
             height: MediaQuery.of(context).size.height * 0.85,
-            margin: const EdgeInsets.all(20),
+            margin: EdgeInsets.all(isMobile ? 8 : 20),
             decoration: BoxDecoration(
               color: Colors.white,
               borderRadius: BorderRadius.circular(16),
@@ -728,10 +730,9 @@ class _MaintenanceManagementScreenState
           const SizedBox(height: 20),
 
           // Filters Row
-          Row(
-            children: [
-              // Status Filter
-              Container(
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final statusDropdown = Container(
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                 decoration: BoxDecoration(
                   border: Border.all(color: Colors.grey[300]!),
@@ -762,31 +763,22 @@ class _MaintenanceManagementScreenState
                     }
                   },
                 ),
-              ),
+              );
 
-              const Spacer(),
-
-              // Search
-              SizedBox(
-                width: 300,
-                child: TextField(
-                  controller: _searchController,
-                  decoration: InputDecoration(
-                    hintText: 'Search by vehicle, type, vendor...',
-                    prefixIcon: const Icon(Icons.search),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    contentPadding: const EdgeInsets.symmetric(vertical: 8),
+              final searchField = TextField(
+                controller: _searchController,
+                decoration: InputDecoration(
+                  hintText: 'Search by vehicle, type, vendor...',
+                  prefixIcon: const Icon(Icons.search),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8),
                   ),
-                  onChanged: (value) => _applyFilters(),
+                  contentPadding: const EdgeInsets.symmetric(vertical: 8),
                 ),
-              ),
+                onChanged: (value) => _applyFilters(),
+              );
 
-              const SizedBox(width: 12),
-
-              // From Date
-              InkWell(
+              final fromDateBtn = InkWell(
                 onTap: _selectFromDate,
                 child: Container(
                   padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
@@ -819,12 +811,9 @@ class _MaintenanceManagementScreenState
                     ],
                   ),
                 ),
-              ),
+              );
 
-              const SizedBox(width: 12),
-
-              // To Date
-              InkWell(
+              final toDateBtn = InkWell(
                 onTap: _selectToDate,
                 child: Container(
                   padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
@@ -857,25 +846,21 @@ class _MaintenanceManagementScreenState
                     ],
                   ),
                 ),
-              ),
+              );
 
-              if (_fromDate != null || _toDate != null) ...[
-                const SizedBox(width: 12),
-                IconButton(
-                  icon: const Icon(Icons.clear, color: Colors.red),
-                  onPressed: _clearDateFilters,
-                  tooltip: 'Clear Date Filters',
-                  style: IconButton.styleFrom(
-                    backgroundColor: Colors.red[50],
-                    padding: const EdgeInsets.all(12),
-                  ),
-                ),
-              ],
+              final clearBtn = (_fromDate != null || _toDate != null)
+                  ? IconButton(
+                      icon: const Icon(Icons.clear, color: Colors.red),
+                      onPressed: _clearDateFilters,
+                      tooltip: 'Clear Date Filters',
+                      style: IconButton.styleFrom(
+                        backgroundColor: Colors.red[50],
+                        padding: const EdgeInsets.all(12),
+                      ),
+                    )
+                  : null;
 
-              const SizedBox(width: 12),
-
-              // Refresh Button
-              IconButton(
+              final refreshBtn = IconButton(
                 icon: const Icon(Icons.refresh, size: 24),
                 onPressed: _isLoading ? null : _refreshMaintenances,
                 tooltip: 'Refresh',
@@ -883,12 +868,9 @@ class _MaintenanceManagementScreenState
                   backgroundColor: Colors.grey[200],
                   padding: const EdgeInsets.all(12),
                 ),
-              ),
+              );
 
-              const SizedBox(width: 12),
-
-              // Export to Excel
-              ElevatedButton.icon(
+              final exportBtn = ElevatedButton.icon(
                 onPressed: _isLoading ? null : _exportToExcel,
                 icon: const Icon(Icons.file_download, size: 20),
                 label: const Text('Export Excel'),
@@ -900,8 +882,78 @@ class _MaintenanceManagementScreenState
                     borderRadius: BorderRadius.circular(8),
                   ),
                 ),
-              ),
-            ],
+              );
+
+              if (constraints.maxWidth < 700) {
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    searchField,
+                    const SizedBox(height: 10),
+                    statusDropdown,
+                    const SizedBox(height: 10),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      children: [
+                        fromDateBtn,
+                        toDateBtn,
+                        if (clearBtn != null) clearBtn,
+                        refreshBtn,
+                        exportBtn,
+                      ],
+                    ),
+                  ],
+                );
+              } else if (constraints.maxWidth < 1100) {
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Row(
+                      children: [
+                        statusDropdown,
+                        const SizedBox(width: 12),
+                        Expanded(child: searchField),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    Wrap(
+                      spacing: 12,
+                      runSpacing: 8,
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      children: [
+                        fromDateBtn,
+                        toDateBtn,
+                        if (clearBtn != null) clearBtn,
+                        refreshBtn,
+                        exportBtn,
+                      ],
+                    ),
+                  ],
+                );
+              }
+
+              return Row(
+                children: [
+                  statusDropdown,
+                  const Spacer(),
+                  SizedBox(width: 300, child: searchField),
+                  const SizedBox(width: 12),
+                  fromDateBtn,
+                  const SizedBox(width: 12),
+                  toDateBtn,
+                  if (clearBtn != null) ...[
+                    const SizedBox(width: 12),
+                    clearBtn,
+                  ],
+                  const SizedBox(width: 12),
+                  refreshBtn,
+                  const SizedBox(width: 12),
+                  exportBtn,
+                ],
+              );
+            },
           ),
         ],
       ),
@@ -912,38 +964,52 @@ class _MaintenanceManagementScreenState
     return Container(
       padding: const EdgeInsets.all(20),
       color: Colors.white,
-      child: Row(
-        children: [
-          Expanded(
-            child: _buildActionCard(
-              icon: Icons.calendar_today_rounded,
-              title: 'Schedule Maintenance',
-              description: 'Create new maintenance schedule',
-              color: kPrimaryColor,
-              onTap: _showScheduleMaintenanceScreen,
-            ),
-          ),
-          const SizedBox(width: 16),
-          Expanded(
-            child: _buildActionCard(
-              icon: Icons.analytics_rounded,
-              title: 'Maintenance Reports',
-              description: 'View reports and analytics',
-              color: Colors.blue.shade700,
-              onTap: _showMaintenanceReportsScreen,
-            ),
-          ),
-          const SizedBox(width: 16),
-          Expanded(
-            child: _buildActionCard(
-              icon: Icons.store_mall_directory_rounded,
-              title: 'Vendor Management',
-              description: 'Manage service vendors',
-              color: Colors.grey.shade700,
-              onTap: _showVendorManagementScreen,
-            ),
-          ),
-        ],
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final card1 = _buildActionCard(
+            icon: Icons.calendar_today_rounded,
+            title: 'Schedule Maintenance',
+            description: 'Create new maintenance schedule',
+            color: kPrimaryColor,
+            onTap: _showScheduleMaintenanceScreen,
+          );
+          final card2 = _buildActionCard(
+            icon: Icons.analytics_rounded,
+            title: 'Maintenance Reports',
+            description: 'View reports and analytics',
+            color: Colors.blue.shade700,
+            onTap: _showMaintenanceReportsScreen,
+          );
+          final card3 = _buildActionCard(
+            icon: Icons.store_mall_directory_rounded,
+            title: 'Vendor Management',
+            description: 'Manage service vendors',
+            color: Colors.grey.shade700,
+            onTap: _showVendorManagementScreen,
+          );
+
+          if (constraints.maxWidth < 700) {
+            return Column(
+              children: [
+                card1,
+                const SizedBox(height: 12),
+                card2,
+                const SizedBox(height: 12),
+                card3,
+              ],
+            );
+          }
+
+          return Row(
+            children: [
+              Expanded(child: card1),
+              const SizedBox(width: 16),
+              Expanded(child: card2),
+              const SizedBox(width: 16),
+              Expanded(child: card3),
+            ],
+          );
+        },
       ),
     );
   }
@@ -1022,7 +1088,11 @@ class _MaintenanceManagementScreenState
                 topRight: Radius.circular(8),
               ),
             ),
-            child: Row(
+            child: Wrap(
+              alignment: WrapAlignment.spaceBetween,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              spacing: 12,
+              runSpacing: 6,
               children: [
                 const Text(
                   'Scheduled Maintenances',
@@ -1032,7 +1102,6 @@ class _MaintenanceManagementScreenState
                     color: kPrimaryColor,
                   ),
                 ),
-                const Spacer(),
                 Text(
                   'Showing ${_filteredMaintenances.length} of $_totalItems records',
                   style: TextStyle(
@@ -1357,14 +1426,18 @@ class _MaintenanceManagementScreenState
     return Container(
       padding: const EdgeInsets.all(20),
       color: Colors.white,
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      child: Wrap(
+        alignment: WrapAlignment.spaceBetween,
+        crossAxisAlignment: WrapCrossAlignment.center,
+        spacing: 12,
+        runSpacing: 8,
         children: [
           Text(
             'Showing ${(_currentPage - 1) * _itemsPerPage + 1} - ${(_currentPage * _itemsPerPage).clamp(0, _totalItems)} of $_totalItems',
             style: TextStyle(color: Colors.grey[700]),
           ),
           Row(
+            mainAxisSize: MainAxisSize.min,
             children: [
               IconButton(
                 icon: const Icon(Icons.chevron_left),

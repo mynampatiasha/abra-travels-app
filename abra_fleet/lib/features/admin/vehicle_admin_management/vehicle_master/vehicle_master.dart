@@ -545,19 +545,22 @@ class _VehicleMasterScreenState extends State<VehicleMasterScreen>
   void _clearAllOverlays() => setState(() => _overlayStack.clear());
 
   Widget _buildOverlayWrapper({required String title, required Widget child, double? width, double? height}) {
+    final screenWidth = MediaQuery.of(context).size.width;
+    final screenHeight = MediaQuery.of(context).size.height;
+    final isMobile = screenWidth < 600;
     return Material(
       color: Colors.black54,
       child: Center(
         child: Container(
-          width: width ?? MediaQuery.of(context).size.width * 0.9,
-          height: height ?? MediaQuery.of(context).size.height * 0.85,
-          margin: const EdgeInsets.all(20),
+          width: width != null ? width.clamp(0.0, screenWidth * 0.95) : (isMobile ? screenWidth * 0.96 : screenWidth * 0.9),
+          height: height != null ? height.clamp(0.0, screenHeight * 0.95) : (isMobile ? screenHeight * 0.92 : screenHeight * 0.85),
+          margin: EdgeInsets.all(isMobile ? 8 : 20),
           decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16),
             boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.3), blurRadius: 20, offset: const Offset(0, 10))]),
           child: Column(
             children: [
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
+                padding: EdgeInsets.symmetric(horizontal: isMobile ? 8.0 : 16.0, vertical: 12.0),
                 decoration: const BoxDecoration(
                   gradient: LinearGradient(colors: [_primaryColor, _accentColor]),
                   borderRadius: BorderRadius.only(topLeft: Radius.circular(16), topRight: Radius.circular(16)),
@@ -565,10 +568,9 @@ class _VehicleMasterScreenState extends State<VehicleMasterScreen>
                 child: Row(
                   children: [
                     IconButton(onPressed: _popOverlay, icon: const Icon(Icons.arrow_back, color: Colors.white), tooltip: 'Back'),
-                    const SizedBox(width: 12),
-                    Text(title, style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold)),
-                    const Spacer(),
-                    TextButton(onPressed: _clearAllOverlays, child: const Text('Cancel', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 16))),
+                    SizedBox(width: isMobile ? 4 : 12),
+                    Expanded(child: Text(title, style: TextStyle(color: Colors.white, fontSize: isMobile ? 16 : 20, fontWeight: FontWeight.bold), overflow: TextOverflow.ellipsis)),
+                    TextButton(onPressed: _clearAllOverlays, child: Text('Cancel', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600, fontSize: isMobile ? 14 : 16))),
                   ],
                 ),
               ),
@@ -707,8 +709,11 @@ class _VehicleMasterScreenState extends State<VehicleMasterScreen>
               ),
             ),
             const SizedBox(height: 24),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.end,
+            Wrap(
+              alignment: WrapAlignment.end,
+              spacing: 12,
+              runSpacing: 8,
+              crossAxisAlignment: WrapCrossAlignment.center,
               children: [
                 ElevatedButton.icon(
                   onPressed: () async { await _loadVehicles(); _popOverlay(); _showVehicleDetails(vehicle.id); },
@@ -716,9 +721,7 @@ class _VehicleMasterScreenState extends State<VehicleMasterScreen>
                   label: const Text('Refresh'),
                   style: ElevatedButton.styleFrom(backgroundColor: _primaryColor, foregroundColor: Colors.white),
                 ),
-                const SizedBox(width: 12),
                 TextButton(onPressed: _popOverlay, child: const Text('Close')),
-                const SizedBox(width: 12),
                 ElevatedButton(
                   onPressed: () { _popOverlay(); _showEditVehicle(vehicle.id); },
                   style: ElevatedButton.styleFrom(backgroundColor: _primaryColor),
@@ -1074,152 +1077,226 @@ class _VehicleMasterScreenState extends State<VehicleMasterScreen>
             color: _cardBg,
             border: Border(bottom: BorderSide(color: _borderColor)),
           ),
-          child: Column(
-            children: [
-              // Row 1: Search + Status + Vendor + Driver + Documents dropdowns
-              Row(
-                children: [
-                  Expanded(
-                    flex: 3,
-                    child: TextField(
-                      controller: _searchController,
-                      decoration: InputDecoration(
-                        hintText: 'Search by ID, registration, model, driver...',
-                        prefixIcon: const Icon(Icons.search, size: 20, color: _primaryColor),
-                        filled: true,
-                        fillColor: _lightBg,
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: const BorderSide(color: _borderColor)),
-                        enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: const BorderSide(color: _borderColor)),
-                        focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: const BorderSide(color: _primaryColor, width: 2)),
-                        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                        suffixIcon: _searchController.text.isNotEmpty
-                            ? IconButton(icon: const Icon(Icons.clear, size: 18), onPressed: () { _searchController.clear(); })
-                            : null,
-                      ),
-                      onSubmitted: (_) => _applyFilters(),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  SizedBox(
-                    width: 140,
-                    child: DropdownButtonFormField<String>(
-                      value: _selectedStatusFilter.isEmpty ? null : _selectedStatusFilter,
-                      decoration: InputDecoration(filled: true, fillColor: _lightBg, border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)), contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8)),
-                      hint: const Text('Status'),
-                      items: const [
-                        DropdownMenuItem(value: '', child: Text('All Status')),
-                        DropdownMenuItem(value: 'ACTIVE', child: Text('Active')),
-                        DropdownMenuItem(value: 'MAINTENANCE', child: Text('Maintenance')),
-                        DropdownMenuItem(value: 'INACTIVE', child: Text('Inactive')),
-                      ],
-                      onChanged: (value) { setState(() => _selectedStatusFilter = value ?? ''); _applyFilters(); },
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  SizedBox(
-                    width: 140,
-                    child: DropdownButtonFormField<String>(
-                      value: _selectedVendorFilter.isEmpty ? null : _selectedVendorFilter,
-                      decoration: InputDecoration(filled: true, fillColor: _lightBg, border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)), contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8)),
-                      hint: const Text('Vendor'),
-                      items: const [
-                        DropdownMenuItem(value: '', child: Text('All Vendors')),
-                        DropdownMenuItem(value: 'Own Fleet', child: Text('Own Fleet')),
-                        DropdownMenuItem(value: 'Vendor', child: Text('Vendor')),
-                      ],
-                      onChanged: (value) { setState(() => _selectedVendorFilter = value ?? ''); _applyFilters(); },
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  SizedBox(
-                    width: 140,
-                    child: DropdownButtonFormField<String>(
-                      value: _selectedDriverFilter.isEmpty ? null : _selectedDriverFilter,
-                      decoration: InputDecoration(filled: true, fillColor: _lightBg, border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)), contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8)),
-                      hint: const Text('Driver'),
-                      items: const [
-                        DropdownMenuItem(value: '', child: Text('All Drivers')),
-                        DropdownMenuItem(value: 'Assigned', child: Text('Assigned')),
-                        DropdownMenuItem(value: 'Not Assigned', child: Text('Not Assigned')),
-                      ],
-                      onChanged: (value) { setState(() => _selectedDriverFilter = value ?? ''); _applyFilters(); },
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  SizedBox(
-                    width: 150,
-                    child: DropdownButtonFormField<String>(
-                      value: _selectedDocumentFilter.isEmpty ? null : _selectedDocumentFilter,
-                      decoration: InputDecoration(filled: true, fillColor: _lightBg, border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)), contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8)),
-                      hint: const Text('Documents'),
-                      items: const [
-                        DropdownMenuItem(value: '', child: Text('All Documents')),
-                        DropdownMenuItem(value: 'Expired', child: Text('Expired')),
-                        DropdownMenuItem(value: 'Expiring Soon', child: Text('Expiring Soon')),
-                        DropdownMenuItem(value: 'All Valid', child: Text('All Valid')),
-                        DropdownMenuItem(value: 'No Documents', child: Text('No Documents')),
-                      ],
-                      onChanged: (value) { setState(() => _selectedDocumentFilter = value ?? ''); _applyFilters(); },
-                    ),
-                  ),
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final isMobile = constraints.maxWidth < 700;
+              final isTablet = constraints.maxWidth >= 700 && constraints.maxWidth < 1100;
+
+              final searchField = TextField(
+                controller: _searchController,
+                decoration: InputDecoration(
+                  hintText: 'Search by ID, registration, model, driver...',
+                  prefixIcon: const Icon(Icons.search, size: 20, color: _primaryColor),
+                  filled: true,
+                  fillColor: _lightBg,
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: const BorderSide(color: _borderColor)),
+                  enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: const BorderSide(color: _borderColor)),
+                  focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: const BorderSide(color: _primaryColor, width: 2)),
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  suffixIcon: _searchController.text.isNotEmpty
+                      ? IconButton(icon: const Icon(Icons.clear, size: 18), onPressed: () { _searchController.clear(); })
+                      : null,
+                ),
+                onSubmitted: (_) => _applyFilters(),
+              );
+
+              final statusFilter = DropdownButtonFormField<String>(
+                value: _selectedStatusFilter.isEmpty ? null : _selectedStatusFilter,
+                decoration: InputDecoration(filled: true, fillColor: _lightBg, border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)), contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8)),
+                hint: const Text('Status'),
+                items: const [
+                  DropdownMenuItem(value: '', child: Text('All Status')),
+                  DropdownMenuItem(value: 'ACTIVE', child: Text('Active')),
+                  DropdownMenuItem(value: 'MAINTENANCE', child: Text('Maintenance')),
+                  DropdownMenuItem(value: 'INACTIVE', child: Text('Inactive')),
                 ],
-              ),
-              const SizedBox(height: 12),
-              // Row 2: Action buttons
-              Row(
-                children: [
-                  ElevatedButton.icon(
-                    onPressed: _applyFilters,
-                    icon: const Icon(Icons.search, size: 18),
-                    label: const Text('Search'),
-                    style: ElevatedButton.styleFrom(backgroundColor: _primaryColor, foregroundColor: Colors.white, padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12)),
-                  ),
-                  const SizedBox(width: 8),
-                  OutlinedButton.icon(
-                    onPressed: _clearAllFilters,
-                    icon: const Icon(Icons.clear_all, size: 18),
-                    label: const Text('Clear Filters'),
-                    style: OutlinedButton.styleFrom(foregroundColor: _primaryColor, side: const BorderSide(color: _primaryColor)),
-                  ),
-                  const SizedBox(width: 8),
-                  OutlinedButton.icon(
-                    onPressed: _loadVehicles,
-                    icon: const Icon(Icons.refresh, size: 18),
-                    label: const Text('Refresh'),
-                    style: OutlinedButton.styleFrom(foregroundColor: _primaryColor, side: const BorderSide(color: _primaryColor)),
-                  ),
-                  const SizedBox(width: 8),
-                  ElevatedButton.icon(
-                    onPressed: _toggleAdvancedFilters,
-                    icon: AnimatedRotation(
-                      turns: _showAdvancedFilters ? 0.5 : 0,
-                      duration: const Duration(milliseconds: 300),
-                      child: const Icon(Icons.tune, size: 18),
+                onChanged: (value) { setState(() => _selectedStatusFilter = value ?? ''); _applyFilters(); },
+              );
+
+              final vendorFilter = DropdownButtonFormField<String>(
+                value: _selectedVendorFilter.isEmpty ? null : _selectedVendorFilter,
+                decoration: InputDecoration(filled: true, fillColor: _lightBg, border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)), contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8)),
+                hint: const Text('Vendor'),
+                items: const [
+                  DropdownMenuItem(value: '', child: Text('All Vendors')),
+                  DropdownMenuItem(value: 'Own Fleet', child: Text('Own Fleet')),
+                  DropdownMenuItem(value: 'Vendor', child: Text('Vendor')),
+                ],
+                onChanged: (value) { setState(() => _selectedVendorFilter = value ?? ''); _applyFilters(); },
+              );
+
+              final driverFilter = DropdownButtonFormField<String>(
+                value: _selectedDriverFilter.isEmpty ? null : _selectedDriverFilter,
+                decoration: InputDecoration(filled: true, fillColor: _lightBg, border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)), contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8)),
+                hint: const Text('Driver'),
+                items: const [
+                  DropdownMenuItem(value: '', child: Text('All Drivers')),
+                  DropdownMenuItem(value: 'Assigned', child: Text('Assigned')),
+                  DropdownMenuItem(value: 'Not Assigned', child: Text('Not Assigned')),
+                ],
+                onChanged: (value) { setState(() => _selectedDriverFilter = value ?? ''); _applyFilters(); },
+              );
+
+              final documentFilter = DropdownButtonFormField<String>(
+                value: _selectedDocumentFilter.isEmpty ? null : _selectedDocumentFilter,
+                decoration: InputDecoration(filled: true, fillColor: _lightBg, border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)), contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8)),
+                hint: const Text('Documents'),
+                items: const [
+                  DropdownMenuItem(value: '', child: Text('All Documents')),
+                  DropdownMenuItem(value: 'Expired', child: Text('Expired')),
+                  DropdownMenuItem(value: 'Expiring Soon', child: Text('Expiring Soon')),
+                  DropdownMenuItem(value: 'All Valid', child: Text('All Valid')),
+                  DropdownMenuItem(value: 'No Documents', child: Text('No Documents')),
+                ],
+                onChanged: (value) { setState(() => _selectedDocumentFilter = value ?? ''); _applyFilters(); },
+              );
+
+              Widget row1;
+              if (isMobile) {
+                row1 = Column(
+                  children: [
+                    searchField,
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        Expanded(child: statusFilter),
+                        const SizedBox(width: 8),
+                        Expanded(child: vendorFilter),
+                      ],
                     ),
-                    label: Text(_showAdvancedFilters ? 'Hide Advanced' : 'Advanced Filters'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: _showAdvancedFilters ? _darkPrimaryColor : _primaryColor,
-                      foregroundColor: Colors.white,
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        Expanded(child: driverFilter),
+                        const SizedBox(width: 8),
+                        Expanded(child: documentFilter),
+                      ],
                     ),
-                  ),
-                  const Spacer(),
-                  if (_getActiveFilterCount() > 0)
-                    Container(
+                  ],
+                );
+              } else if (isTablet) {
+                row1 = Column(
+                  children: [
+                    searchField,
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        Expanded(child: statusFilter),
+                        const SizedBox(width: 8),
+                        Expanded(child: vendorFilter),
+                        const SizedBox(width: 8),
+                        Expanded(child: driverFilter),
+                        const SizedBox(width: 8),
+                        Expanded(child: documentFilter),
+                      ],
+                    ),
+                  ],
+                );
+              } else {
+                row1 = Row(
+                  children: [
+                    Expanded(flex: 3, child: searchField),
+                    const SizedBox(width: 12),
+                    SizedBox(width: 140, child: statusFilter),
+                    const SizedBox(width: 12),
+                    SizedBox(width: 140, child: vendorFilter),
+                    const SizedBox(width: 12),
+                    SizedBox(width: 140, child: driverFilter),
+                    const SizedBox(width: 12),
+                    SizedBox(width: 150, child: documentFilter),
+                  ],
+                );
+              }
+
+              final searchBtn = ElevatedButton.icon(
+                onPressed: _applyFilters,
+                icon: const Icon(Icons.search, size: 18),
+                label: const Text('Search'),
+                style: ElevatedButton.styleFrom(backgroundColor: _primaryColor, foregroundColor: Colors.white, padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12)),
+              );
+              final clearBtn = OutlinedButton.icon(
+                onPressed: _clearAllFilters,
+                icon: const Icon(Icons.clear_all, size: 18),
+                label: const Text('Clear Filters'),
+                style: OutlinedButton.styleFrom(foregroundColor: _primaryColor, side: const BorderSide(color: _primaryColor)),
+              );
+              final refreshBtn = OutlinedButton.icon(
+                onPressed: _loadVehicles,
+                icon: const Icon(Icons.refresh, size: 18),
+                label: const Text('Refresh'),
+                style: OutlinedButton.styleFrom(foregroundColor: _primaryColor, side: const BorderSide(color: _primaryColor)),
+              );
+              final advBtn = ElevatedButton.icon(
+                onPressed: _toggleAdvancedFilters,
+                icon: AnimatedRotation(
+                  turns: _showAdvancedFilters ? 0.5 : 0,
+                  duration: const Duration(milliseconds: 300),
+                  child: const Icon(Icons.tune, size: 18),
+                ),
+                label: Text(_showAdvancedFilters ? 'Hide Advanced' : 'Advanced Filters'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: _showAdvancedFilters ? _darkPrimaryColor : _primaryColor,
+                  foregroundColor: Colors.white,
+                ),
+              );
+              final activeBadge = _getActiveFilterCount() > 0
+                  ? Container(
                       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                       decoration: BoxDecoration(color: _primaryColor.withOpacity(0.1), borderRadius: BorderRadius.circular(12), border: Border.all(color: _primaryColor)),
                       child: Row(
+                        mainAxisSize: MainAxisSize.min,
                         children: [
                           const Icon(Icons.filter_list, size: 16, color: _primaryColor),
                           const SizedBox(width: 6),
                           Text('${_getActiveFilterCount()} active', style: const TextStyle(color: _primaryColor, fontWeight: FontWeight.w600)),
                         ],
                       ),
-                    ),
-                  const SizedBox(width: 12),
-                  Text('Total: $_totalVehicles vehicles', style: const TextStyle(color: _textPrimary, fontSize: 14, fontWeight: FontWeight.w600)),
+                    )
+                  : null;
+              final totalText = Text('Total: $_totalVehicles vehicles', style: const TextStyle(color: _textPrimary, fontSize: 14, fontWeight: FontWeight.w600));
+
+              Widget row2;
+              if (constraints.maxWidth < 900) {
+                row2 = Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  children: [
+                    searchBtn,
+                    clearBtn,
+                    refreshBtn,
+                    advBtn,
+                    if (activeBadge != null) activeBadge,
+                    totalText,
+                  ],
+                );
+              } else {
+                row2 = Row(
+                  children: [
+                    searchBtn,
+                    const SizedBox(width: 8),
+                    clearBtn,
+                    const SizedBox(width: 8),
+                    refreshBtn,
+                    const SizedBox(width: 8),
+                    advBtn,
+                    const Spacer(),
+                    if (activeBadge != null) activeBadge,
+                    const SizedBox(width: 12),
+                    totalText,
+                  ],
+                );
+              }
+
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  row1,
+                  const SizedBox(height: 12),
+                  row2,
                 ],
-              ),
-            ],
+              );
+            },
           ),
         ),
 
@@ -1284,46 +1361,86 @@ class _VehicleMasterScreenState extends State<VehicleMasterScreen>
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
           decoration: const BoxDecoration(color: _cardBg, border: Border(bottom: BorderSide(color: _borderColor))),
-          child: Row(
-            children: [
-              _buildStatBadge('Total', _vehicleData.length, Icons.directions_car, _primaryColor),
-              const SizedBox(width: 12),
-              _buildStatBadge('Active', _vehicleData.where((v) => v.status.toUpperCase() == 'ACTIVE').length, Icons.check_circle, Colors.green.shade700),
-              const SizedBox(width: 12),
-              _buildStatBadge('Maintenance', _vehicleData.where((v) => v.status.toUpperCase() == 'MAINTENANCE').length, Icons.build, Colors.orange.shade700),
-              const SizedBox(width: 12),
-              _buildStatBadge('No Driver', _vehicleData.where((v) => v.assignedDriverName == null).length, Icons.person_off, Colors.red.shade700),
-              const Spacer(),
-              if (_lastRefreshTime != null)
-                Row(
-                  children: [
-                    Icon(Icons.access_time, size: 14, color: Colors.grey.shade500),
-                    const SizedBox(width: 4),
-                    Text('Updated: ${_lastRefreshTime!.hour}:${_lastRefreshTime!.minute.toString().padLeft(2, '0')}', style: TextStyle(fontSize: 12, color: Colors.grey.shade600)),
-                    const SizedBox(width: 16),
-                  ],
-                ),
-              ElevatedButton.icon(
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final badges = [
+                _buildStatBadge('Total', _vehicleData.length, Icons.directions_car, _primaryColor),
+                _buildStatBadge('Active', _vehicleData.where((v) => v.status.toUpperCase() == 'ACTIVE').length, Icons.check_circle, Colors.green.shade700),
+                _buildStatBadge('Maintenance', _vehicleData.where((v) => v.status.toUpperCase() == 'MAINTENANCE').length, Icons.build, Colors.orange.shade700),
+                _buildStatBadge('No Driver', _vehicleData.where((v) => v.assignedDriverName == null).length, Icons.person_off, Colors.red.shade700),
+              ];
+
+              final refreshWidget = _lastRefreshTime != null
+                  ? Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.access_time, size: 14, color: Colors.grey.shade500),
+                        const SizedBox(width: 4),
+                        Text('Updated: ${_lastRefreshTime!.hour}:${_lastRefreshTime!.minute.toString().padLeft(2, '0')}', style: TextStyle(fontSize: 12, color: Colors.grey.shade600)),
+                        const SizedBox(width: 16),
+                      ],
+                    )
+                  : const SizedBox.shrink();
+
+              final addBtn = ElevatedButton.icon(
                 onPressed: _showAddVehicleScreen,
                 icon: const Icon(Icons.add_circle_outline, size: 18),
                 label: const Text('Add Vehicle'),
                 style: ElevatedButton.styleFrom(backgroundColor: _primaryColor, foregroundColor: Colors.white, padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8))),
-              ),
-              const SizedBox(width: 8),
-              ElevatedButton.icon(
+              );
+
+              final bulkBtn = ElevatedButton.icon(
                 onPressed: _showBulkImportScreen,
                 icon: const Icon(Icons.cloud_upload_outlined, size: 18),
                 label: const Text('Bulk Import'),
                 style: ElevatedButton.styleFrom(backgroundColor: Colors.purple.shade700, foregroundColor: Colors.white, padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8))),
-              ),
-              const SizedBox(width: 8),
-              ElevatedButton.icon(
+              );
+
+              final exportBtn = ElevatedButton.icon(
                 onPressed: _exportToExcel,
                 icon: const Icon(Icons.file_download_outlined, size: 18),
                 label: const Text('Export Excel'),
                 style: ElevatedButton.styleFrom(backgroundColor: Colors.green.shade700, foregroundColor: Colors.white, padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8))),
-              ),
-            ],
+              );
+
+              if (constraints.maxWidth < 1100) {
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Wrap(
+                      spacing: 12,
+                      runSpacing: 8,
+                      children: badges,
+                    ),
+                    const SizedBox(height: 10),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      children: [
+                        refreshWidget,
+                        addBtn,
+                        bulkBtn,
+                        exportBtn,
+                      ],
+                    ),
+                  ],
+                );
+              }
+
+              return Row(
+                children: [
+                  ...badges.expand((b) => [b, const SizedBox(width: 12)]).toList()..removeLast(),
+                  const Spacer(),
+                  refreshWidget,
+                  addBtn,
+                  const SizedBox(width: 8),
+                  bulkBtn,
+                  const SizedBox(width: 8),
+                  exportBtn,
+                ],
+              );
+            },
           ),
         ),
 

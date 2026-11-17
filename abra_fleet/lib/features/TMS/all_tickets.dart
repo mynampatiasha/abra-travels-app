@@ -476,12 +476,15 @@ class _AllTicketsScreenState extends State<AllTicketsScreen>
                 decoration: BoxDecoration(
                     border: Border(top: BorderSide(
                         color: Colors.grey.withOpacity(0.15)))),
-                child: Row(children: [
-                  Expanded(
-                    child: OutlinedButton(
+                child: Wrap(
+                  spacing: 12,
+                  runSpacing: 12,
+                  alignment: WrapAlignment.end,
+                  children: [
+                    OutlinedButton(
                       onPressed: () => Navigator.pop(ctx),
                       style: OutlinedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
                         shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(12)),
                         side: BorderSide(color: Colors.grey.withOpacity(0.3)),
@@ -490,11 +493,7 @@ class _AllTicketsScreenState extends State<AllTicketsScreen>
                           style: TextStyle(color: Color(0xFF64748B),
                               fontWeight: FontWeight.w600)),
                     ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    flex: 2,
-                    child: ElevatedButton(
+                    ElevatedButton(
                       onPressed: isSending ? null : () async {
                         if (subjectCtrl.text.trim().isEmpty ||
                             messageCtrl.text.trim().isEmpty) {
@@ -514,7 +513,7 @@ class _AllTicketsScreenState extends State<AllTicketsScreen>
                       },
                       style: ElevatedButton.styleFrom(
                         backgroundColor: statusColor,
-                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
                         shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(12)),
                       ),
@@ -522,7 +521,8 @@ class _AllTicketsScreenState extends State<AllTicketsScreen>
                           ? const SizedBox(width: 18, height: 18,
                               child: CircularProgressIndicator(
                                   strokeWidth: 2, color: Colors.white))
-                          : Row(mainAxisAlignment: MainAxisAlignment.center,
+                          : Row(mainAxisSize: MainAxisSize.min,
+                              mainAxisAlignment: MainAxisAlignment.center,
                               children: [
                                 const Icon(Icons.send_rounded,
                                     size: 16, color: Colors.white),
@@ -533,8 +533,8 @@ class _AllTicketsScreenState extends State<AllTicketsScreen>
                                         fontSize: 13)),
                               ]),
                     ),
-                  ),
-                ]),
+                  ],
+                ),
               ),
             ]),
           ),
@@ -661,8 +661,15 @@ class _AllTicketsScreenState extends State<AllTicketsScreen>
   }
 
   // ==========================================================================
-  // BUILD
+  // RESPONSIVE PADDING & BUILD
   // ==========================================================================
+  double _hPad(BuildContext context) {
+    final w = MediaQuery.of(context).size.width;
+    if (w < 600) return 12.0;
+    if (w < 1024) return 16.0;
+    return 24.0;
+  }
+
   @override
   Widget build(BuildContext context) => Scaffold(
     backgroundColor: Colors.white,
@@ -685,7 +692,7 @@ class _AllTicketsScreenState extends State<AllTicketsScreen>
     child: SafeArea(
       bottom: false,
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        padding: EdgeInsets.symmetric(horizontal: _hPad(context), vertical: 12),
         child: Row(children: [
           GestureDetector(
             onTap: () => Navigator.pop(context),
@@ -730,7 +737,7 @@ class _AllTicketsScreenState extends State<AllTicketsScreen>
       _SC('Unassigned',  _unassignedCount, Icons.person_off_outlined,          cUnassigned),
     ];
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+      padding: EdgeInsets.fromLTRB(_hPad(context), 16, _hPad(context), 0),
       child: Center(
         child: SingleChildScrollView(
           scrollDirection: Axis.horizontal,
@@ -781,7 +788,7 @@ class _AllTicketsScreenState extends State<AllTicketsScreen>
 
   Widget _buildFilterRow() => Container(
     height: 48,
-    margin: const EdgeInsets.symmetric(horizontal: 12),
+    margin: EdgeInsets.symmetric(horizontal: _hPad(context)),
     child: SingleChildScrollView(
       scrollDirection: Axis.horizontal,
       child: Row(children: [
@@ -973,55 +980,68 @@ class _AllTicketsScreenState extends State<AllTicketsScreen>
   }
 
   Widget _buildTable() => Container(
-    margin: const EdgeInsets.fromLTRB(12, 4, 12, 0),
+    margin: EdgeInsets.fromLTRB(_hPad(context), 4, _hPad(context), 0),
     decoration: BoxDecoration(color: Colors.white,
         borderRadius: BorderRadius.circular(14),
         boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.06),
             blurRadius: 12, offset: const Offset(0, 4))]),
     child: ClipRRect(
       borderRadius: BorderRadius.circular(14),
-      child: Column(children: [
-        _tableHeader(),
-        Expanded(child: Scrollbar(
-          controller: _vScroll, thumbVisibility: true,
+      child: LayoutBuilder(
+        builder: (context, constraints) => Scrollbar(
+          controller: _hScroll,
+          thumbVisibility: true,
+          trackVisibility: true,
           child: SingleChildScrollView(
-            controller: _vScroll,
-            child: Scrollbar(
-              controller: _hScroll, thumbVisibility: true,
-              notificationPredicate: (n) => n.depth == 1,
-              child: SingleChildScrollView(
-                controller: _hScroll,
-                scrollDirection: Axis.horizontal,
-                child: Column(
-                  children: _paged.asMap().entries
-                      .map((e) => _buildRow(e.value, e.key.isEven))
-                      .toList(),
-                ),
+            controller: _hScroll,
+            scrollDirection: Axis.horizontal,
+            child: SizedBox(
+              width: 1540,
+              height: constraints.maxHeight,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _tableHeader(),
+                  Expanded(
+                    child: Scrollbar(
+                      controller: _vScroll,
+                      thumbVisibility: true,
+                      trackVisibility: true,
+                      child: SingleChildScrollView(
+                        controller: _vScroll,
+                        scrollDirection: Axis.vertical,
+                        child: Column(
+                          children: _paged.asMap().entries
+                              .map((e) => _buildRow(e.value, e.key.isEven))
+                              .toList(),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ),
           ),
-        )),
-      ]),
+        ),
+      ),
     ),
   );
 
-  Widget _tableHeader() => SingleChildScrollView(
-    scrollDirection: Axis.horizontal,
-    child: Container(color: navyDark,
-      child: Row(children: [
-        _hCell('#',           60),
-        _hCell('Ticket #',   130),
-        _hCell('Subject',    200),
-        _hCell('Raised By',  155),
-        _hCell('Assigned To',155),
-        _hCell('Priority',   100),
-        _hCell('Status',     155),
-        _hCell('Timeline',   95),
-        _hCell('Deadline',   165),
-        _hCell('Created At', 125),
-        _hCell('Actions',    155),
-      ]),
-    ),
+  Widget _tableHeader() => Container(
+    color: navyDark,
+    child: Row(children: [
+      _hCell('#',           60),
+      _hCell('Ticket #',   130),
+      _hCell('Subject',    200),
+      _hCell('Raised By',  155),
+      _hCell('Assigned To',155),
+      _hCell('Priority',   100),
+      _hCell('Status',     155),
+      _hCell('Timeline',   95),
+      _hCell('Deadline',   165),
+      _hCell('Created At', 125),
+      _hCell('Actions',    155),
+    ]),
   );
 
   Widget _hCell(String t, double w) => Container(
@@ -1397,53 +1417,137 @@ class _AllTicketsScreenState extends State<AllTicketsScreen>
                   const SizedBox(height: 14),
                 ],
 
-                Row(children: [
-                  Expanded(child: _oSec('Raised By',
-                      Icons.person_outline, cInProgress,
-                    _personCard(
-                      name: ticket['name'] ?? ticket['created_by_name'] ?? 'System',
-                      email: ticket['creator_email'] ?? '',
-                      tag: ticket['source'] == 'crm' ? 'CRM' : 'Manual',
-                      tagColor: cReply,
-                    ),
-                  )),
-                  const SizedBox(width: 10),
-                  Expanded(child: _oSec('Assigned To',
-                      Icons.person_pin_outlined, cApproved,
-                    _personCard(
-                      name: ticket['assigned_to_name'] ?? 'Not Assigned',
-                      email: ticket['assigned_email'] ?? '',
-                    ),
-                  )),
-                ]),
+                LayoutBuilder(
+                  builder: (context, constraints) {
+                    final isMobile = constraints.maxWidth < 600;
+                    if (isMobile) {
+                      return Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          _oSec('Raised By',
+                              Icons.person_outline, cInProgress,
+                            _personCard(
+                              name: ticket['name'] ?? ticket['created_by_name'] ?? 'System',
+                              email: ticket['creator_email'] ?? '',
+                              tag: ticket['source'] == 'crm' ? 'CRM' : 'Manual',
+                              tagColor: cReply,
+                            ),
+                          ),
+                          const SizedBox(height: 10),
+                          _oSec('Assigned To',
+                              Icons.person_pin_outlined, cApproved,
+                            _personCard(
+                              name: ticket['assigned_to_name'] ?? 'Not Assigned',
+                              email: ticket['assigned_email'] ?? '',
+                            ),
+                          ),
+                        ],
+                      );
+                    }
+                    return Row(children: [
+                      Expanded(child: _oSec('Raised By',
+                          Icons.person_outline, cInProgress,
+                        _personCard(
+                          name: ticket['name'] ?? ticket['created_by_name'] ?? 'System',
+                          email: ticket['creator_email'] ?? '',
+                          tag: ticket['source'] == 'crm' ? 'CRM' : 'Manual',
+                          tagColor: cReply,
+                        ),
+                      )),
+                      const SizedBox(width: 10),
+                      Expanded(child: _oSec('Assigned To',
+                          Icons.person_pin_outlined, cApproved,
+                        _personCard(
+                          name: ticket['assigned_to_name'] ?? 'Not Assigned',
+                          email: ticket['assigned_email'] ?? '',
+                        ),
+                      )),
+                    ]);
+                  },
+                ),
                 const SizedBox(height: 14),
-                Row(children: [
-                  Expanded(child: _iTile('Created At',
-                      _fmtDT(ticket['created_at']),
-                      Icons.add_circle_outline, cApproved)),
-                  const SizedBox(width: 8),
-                  Expanded(child: _iTile('Deadline',
-                      _fmtDT(ticket['deadline']),
-                      Icons.alarm, cOpen)),
-                  const SizedBox(width: 8),
-                  Expanded(child: _iTile('Updated At',
-                      _fmtDT(ticket['updated_at']),
-                      Icons.update, cInProgress)),
-                ]),
-                const SizedBox(height: 14),
-                Row(children: [
-                  Expanded(child: _iTile('Timeline',
-                      _fmtTL(ticket['timeline']),
-                      Icons.timer_outlined, cReply)),
-                  const SizedBox(width: 8),
-                  Expanded(child: _iTile('Source',
-                      ticket['source'] == 'crm' ? 'CRM System' : 'Manual',
-                      Icons.source_outlined, const Color(0xFF64748B))),
-                  const SizedBox(width: 8),
-                  Expanded(child: _iTile('Attachment',
-                      ticket['attachment'] ?? 'None',
-                      Icons.attach_file, const Color(0xFF0EA5E9))),
-                ]),
+                LayoutBuilder(
+                  builder: (context, constraints) {
+                    final tile1 = _iTile('Created At',
+                        _fmtDT(ticket['created_at']),
+                        Icons.add_circle_outline, cApproved);
+                    final tile2 = _iTile('Deadline',
+                        _fmtDT(ticket['deadline']),
+                        Icons.alarm, cOpen);
+                    final tile3 = _iTile('Updated At',
+                        _fmtDT(ticket['updated_at']),
+                        Icons.update, cInProgress);
+                    final tile4 = _iTile('Timeline',
+                        _fmtTL(ticket['timeline']),
+                        Icons.timer_outlined, cReply);
+                    final tile5 = _iTile('Source',
+                        ticket['source'] == 'crm' ? 'CRM System' : 'Manual',
+                        Icons.source_outlined, const Color(0xFF64748B));
+                    final tile6 = _iTile('Attachment',
+                        ticket['attachment'] ?? 'None',
+                        Icons.attach_file, const Color(0xFF0EA5E9));
+
+                    if (constraints.maxWidth < 600) {
+                      return Column(
+                        children: [
+                          tile1,
+                          const SizedBox(height: 8),
+                          tile2,
+                          const SizedBox(height: 8),
+                          tile3,
+                          const SizedBox(height: 8),
+                          tile4,
+                          const SizedBox(height: 8),
+                          tile5,
+                          const SizedBox(height: 8),
+                          tile6,
+                        ],
+                      );
+                    } else if (constraints.maxWidth < 900) {
+                      return Column(
+                        children: [
+                          Row(children: [
+                            Expanded(child: tile1),
+                            const SizedBox(width: 8),
+                            Expanded(child: tile2),
+                          ]),
+                          const SizedBox(height: 8),
+                          Row(children: [
+                            Expanded(child: tile3),
+                            const SizedBox(width: 8),
+                            Expanded(child: tile4),
+                          ]),
+                          const SizedBox(height: 8),
+                          Row(children: [
+                            Expanded(child: tile5),
+                            const SizedBox(width: 8),
+                            Expanded(child: tile6),
+                          ]),
+                        ],
+                      );
+                    } else {
+                      return Column(
+                        children: [
+                          Row(children: [
+                            Expanded(child: tile1),
+                            const SizedBox(width: 8),
+                            Expanded(child: tile2),
+                            const SizedBox(width: 8),
+                            Expanded(child: tile3),
+                          ]),
+                          const SizedBox(height: 8),
+                          Row(children: [
+                            Expanded(child: tile4),
+                            const SizedBox(width: 8),
+                            Expanded(child: tile5),
+                            const SizedBox(width: 8),
+                            Expanded(child: tile6),
+                          ]),
+                        ],
+                      );
+                    }
+                  },
+                ),
                 const SizedBox(height: 18),
                 const Text('Update Status', style: TextStyle(fontSize: 13,
                     fontWeight: FontWeight.bold, color: navyDark)),

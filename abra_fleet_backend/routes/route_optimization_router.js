@@ -1941,7 +1941,27 @@ for (let dateIndex = 0; dateIndex < dateList.length; dateIndex++) {
       
       // Reverse the order: Drop nearest customer first, farthest last
       let eveningClock = parseTime(logoutTime); // running clock: every drop adds the leg from the previous stop
-      for (let i = pickupStops.length - 1; i >= 0; i--) {
+      const isLogoutOnlyRoute = ['logout', 'drop'].includes(commonRosterType);
+      if (isLogoutOnlyRoute) {
+        for (const originalStop of pickupStops) {
+          const clientDropTime = originalStop.pickupTime || originalStop.estimatedTime || logoutTime;
+          tripStops.push({
+            stopId: new ObjectId().toString(),
+            rosterId: originalStop.rosterId,
+            sequence: tripStops.length + 1,
+            type: 'drop',
+            customer: originalStop.customer,
+            location: originalStop.location,
+            estimatedTime: clientDropTime,
+            pickupTime: clientDropTime,
+            readyByTime: logoutTime, // customer waits at the office
+            distanceFromPrevious: originalStop.distanceFromPrevious || 0,
+            status: 'pending',
+            passengerStatus: null
+          });
+        }
+      }
+      for (let i = pickupStops.length - 1; i >= 0 && !isLogoutOnlyRoute; i--) {
         const originalStop = pickupStops[i];
         
         // Calculate evening drop time (add travel time progressively)

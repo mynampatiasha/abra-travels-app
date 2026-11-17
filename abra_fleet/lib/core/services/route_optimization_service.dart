@@ -1161,10 +1161,10 @@ static Future<Map<String, dynamic>> generateRoutePlan({
   final hasBothTrips = rosterType == 'both';
   
   // Get office time from first customer
-  final officeTime = firstCustomer?['startTime'] ?? 
-                    firstCustomer?['officeTime'] ?? 
-                    firstCustomer?['loginTime'] ?? 
-                    '08:30';
+  // LOGIN plans use the office start time; LOGOUT-only plans use the office end (logout) time
+  final officeTime = isLoginTrip
+      ? (firstCustomer?['startTime'] ?? firstCustomer?['officeTime'] ?? firstCustomer?['loginTime'] ?? '08:30')
+      : (firstCustomer?['endTime'] ?? firstCustomer?['logoutTime'] ?? firstCustomer?['officeEndTime'] ?? '18:00');
   
   // Get office coordinates for distance calculation
   // 🔥 ENHANCED: Support multiple location formats

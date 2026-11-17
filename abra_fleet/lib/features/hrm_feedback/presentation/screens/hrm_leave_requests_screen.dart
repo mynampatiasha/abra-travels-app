@@ -974,70 +974,95 @@ class _HrmLeaveRequestsScreenState extends State<HrmLeaveRequestsScreen> with Er
                 ),
               ],
             ),
-            child: Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: Colors.purple.shade50,
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Icon(Icons.event_note, color: Colors.purple.shade700, size: 28),
-                ),
-                const SizedBox(width: 16),
-                const Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Leave Requests',
-                        style: TextStyle(
-                          fontSize: 24,
-                          fontWeight: FontWeight.bold,
-                          color: Color(0xFF1A1A1A),
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                final isMobile = constraints.maxWidth < 768;
+                return Wrap(
+                  spacing: 12,
+                  runSpacing: 12,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  alignment: WrapAlignment.spaceBetween,
+                  children: [
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: Colors.purple.shade50,
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Icon(Icons.event_note, color: Colors.purple.shade700, size: 28),
                         ),
-                      ),
-                      SizedBox(height: 4),
-                      Text(
-                        'Manage employee leave requests - Add as Pending, Edit to Approve/Reject',
-                        style: TextStyle(
-                          fontSize: 14,
-                          color: Color(0xFF757575),
+                        const SizedBox(width: 16),
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text(
+                              'Leave Requests',
+                              style: TextStyle(
+                                fontSize: 24,
+                                fontWeight: FontWeight.bold,
+                                color: Color(0xFF1A1A1A),
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              isMobile
+                                  ? 'Manage employee leave requests'
+                                  : 'Manage employee leave requests - Add as Pending, Edit to Approve/Reject',
+                              style: const TextStyle(
+                                fontSize: 14,
+                                color: Color(0xFF757575),
+                              ),
+                            ),
+                          ],
                         ),
-                      ),
-                    ],
-                  ),
-                ),
-                ElevatedButton.icon(
-                  onPressed: _showAddLeaveDialog,
-                  icon: const Icon(Icons.add_circle_outline),
-                  label: const Text('Add New Leave'),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.teal.shade700,
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
+                      ],
                     ),
-                    elevation: 2,
-                  ),
-                ),
-                const SizedBox(width: 12),
-                ElevatedButton.icon(
-                  onPressed: _exportToCSV,
-                  icon: const Icon(Icons.file_download),
-                  label: const Text('Export CSV'),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.indigo.shade700,
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
+                    Wrap(
+                      spacing: 12,
+                      runSpacing: 8,
+                      children: [
+                        ElevatedButton.icon(
+                          onPressed: _showAddLeaveDialog,
+                          icon: const Icon(Icons.add_circle_outline),
+                          label: const Text('Add New Leave'),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.teal.shade700,
+                            foregroundColor: Colors.white,
+                            padding: EdgeInsets.symmetric(
+                              horizontal: isMobile ? 16 : 24,
+                              vertical: isMobile ? 12 : 16,
+                            ),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            elevation: 2,
+                          ),
+                        ),
+                        ElevatedButton.icon(
+                          onPressed: _exportToCSV,
+                          icon: const Icon(Icons.file_download),
+                          label: const Text('Export CSV'),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.indigo.shade700,
+                            foregroundColor: Colors.white,
+                            padding: EdgeInsets.symmetric(
+                              horizontal: isMobile ? 16 : 24,
+                              vertical: isMobile ? 12 : 16,
+                            ),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            elevation: 2,
+                          ),
+                        ),
+                      ],
                     ),
-                    elevation: 2,
-                  ),
-                ),
-              ],
+                  ],
+                );
+              },
             ),
           ),
           
@@ -1082,277 +1107,440 @@ class _HrmLeaveRequestsScreenState extends State<HrmLeaveRequestsScreen> with Er
   }
 
   Widget _buildLeaveRequestsTable() {
-    return Container(
-      margin: const EdgeInsets.all(24),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 10,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      child: Column(
-        children: [
-          Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: Colors.grey.shade50,
-              borderRadius: const BorderRadius.only(
-                topLeft: Radius.circular(12),
-                topRight: Radius.circular(12),
-              ),
-            ),
-            child: Row(
-              children: [
-                Expanded(
-                  flex: 1,
-                  child: Text(
-                    'Request ID',
-                    style: TextStyle(
-                      fontWeight: FontWeight.bold,
-                      color: Colors.grey.shade700,
-                    ),
-                  ),
-                ),
-                Expanded(
-                  flex: 2,
-                  child: Text(
-                    'Employee Name',
-                    style: TextStyle(
-                      fontWeight: FontWeight.bold,
-                      color: Colors.grey.shade700,
-                    ),
-                  ),
-                ),
-                Expanded(
-                  flex: 2,
-                  child: Text(
-                    'Start Date',
-                    style: TextStyle(
-                      fontWeight: FontWeight.bold,
-                      color: Colors.grey.shade700,
-                    ),
-                  ),
-                ),
-                Expanded(
-                  flex: 2,
-                  child: Text(
-                    'End Date',
-                    style: TextStyle(
-                      fontWeight: FontWeight.bold,
-                      color: Colors.grey.shade700,
-                    ),
-                  ),
-                ),
-                Expanded(
-                  flex: 3,
-                  child: Text(
-                    'Reason',
-                    style: TextStyle(
-                      fontWeight: FontWeight.bold,
-                      color: Colors.grey.shade700,
-                    ),
-                  ),
-                ),
-                Expanded(
-                  flex: 2,
-                  child: Text(
-                    'Status',
-                    style: TextStyle(
-                      fontWeight: FontWeight.bold,
-                      color: Colors.grey.shade700,
-                    ),
-                  ),
-                ),
-                Expanded(
-                  flex: 2,
-                  child: Text(
-                    'Actions',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      fontWeight: FontWeight.bold,
-                      color: Colors.grey.shade700,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          
-          Expanded(
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final isMobile = constraints.maxWidth < 768;
+        final marginVal = isMobile ? 12.0 : 24.0;
+
+        if (isMobile) {
+          // Mobile responsive cards
+          return Container(
+            margin: EdgeInsets.all(marginVal),
             child: ListView.builder(
-              padding: const EdgeInsets.all(0),
+              padding: EdgeInsets.zero,
               itemCount: _leaveRequests.length,
               itemBuilder: (context, index) {
                 final leave = _leaveRequests[index];
-                if (leave == null) {
-                  return const SizedBox.shrink(); // Skip null entries
-                }
-                
-                final isEven = index % 2 == 0;
-                
+                if (leave == null) return const SizedBox.shrink();
+
+                final status = (leave['status'] ?? 'pending').toString().toLowerCase();
+                final statusColor = _getStatusColor(status);
+                final statusIcon = _getStatusIcon(status);
+
                 return Container(
+                  margin: const EdgeInsets.only(bottom: 12),
                   padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
-                    color: isEven ? Colors.white : Colors.grey.shade50,
-                    border: Border(
-                      bottom: BorderSide(color: Colors.grey.shade200),
-                    ),
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(12),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.04),
+                        blurRadius: 8,
+                        offset: const Offset(0, 2),
+                      ),
+                    ],
+                    border: Border.all(color: Colors.grey.shade200),
                   ),
-                  child: Row(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Expanded(
-                        flex: 1,
-                        child: Text(
-                          leave['_id']?.toString().substring(0, 8) ?? 'N/A',
-                          style: const TextStyle(
-                            fontWeight: FontWeight.w500,
-                            fontSize: 13,
-                          ),
-                        ),
-                      ),
-                      
-                      Expanded(
-                        flex: 2,
-                        child: Row(
-                          children: [
-                            Container(
-                              padding: const EdgeInsets.all(6),
-                              decoration: BoxDecoration(
-                                color: Colors.blue.shade50,
-                                borderRadius: BorderRadius.circular(6),
-                              ),
-                              child: Icon(Icons.person, size: 16, color: Colors.blue.shade700),
-                            ),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: Text(
-                                leave['employee_name'] ?? 'Unknown',
-                                style: const TextStyle(fontSize: 14),
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      
-                      Expanded(
-                        flex: 2,
-                        child: Row(
-                          children: [
-                            Icon(Icons.calendar_today, size: 14, color: Colors.grey.shade600),
-                            const SizedBox(width: 6),
-                            Text(
-                              leave['start_date'] != null
-                                  ? DateFormat('dd-MM-yyyy').format(DateTime.parse(leave['start_date']))
-                                  : 'N/A',
-                              style: const TextStyle(fontSize: 13),
-                            ),
-                          ],
-                        ),
-                      ),
-                      
-                      Expanded(
-                        flex: 2,
-                        child: Row(
-                          children: [
-                            Icon(Icons.event, size: 14, color: Colors.grey.shade600),
-                            const SizedBox(width: 6),
-                            Text(
-                              leave['end_date'] != null
-                                  ? DateFormat('dd-MM-yyyy').format(DateTime.parse(leave['end_date']))
-                                  : 'N/A',
-                              style: const TextStyle(fontSize: 13),
-                            ),
-                          ],
-                        ),
-                      ),
-                      
-                      Expanded(
-                        flex: 3,
-                        child: Text(
-                          leave['reason'] ?? 'N/A',
-                          style: const TextStyle(fontSize: 13),
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                      
-                      Expanded(
-                        flex: 2,
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                          decoration: BoxDecoration(
-                            color: _getStatusColor(leave['status'] ?? '').withOpacity(0.1),
-                            borderRadius: BorderRadius.circular(20),
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Row(
                             children: [
-                              Icon(
-                                _getStatusIcon(leave['status'] ?? ''),
-                                size: 14,
-                                color: _getStatusColor(leave['status'] ?? ''),
-                              ),
-                              const SizedBox(width: 6),
-                              Expanded(
-                                child: Text(
-                                  (leave['status'] ?? 'pending').toString().toUpperCase(),
-                                  style: TextStyle(
-                                    fontSize: 11,
-                                    fontWeight: FontWeight.bold,
-                                    color: _getStatusColor(leave['status'] ?? ''),
-                                  ),
-                                  overflow: TextOverflow.ellipsis,
+                              Container(
+                                padding: const EdgeInsets.all(6),
+                                decoration: BoxDecoration(
+                                  color: Colors.blue.shade50,
+                                  borderRadius: BorderRadius.circular(6),
                                 ),
+                                child: Icon(Icons.person, size: 16, color: Colors.blue.shade700),
+                              ),
+                              const SizedBox(width: 8),
+                              Text(
+                                leave['employee_name'] ?? 'Unknown',
+                                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
                               ),
                             ],
                           ),
-                        ),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: statusColor.withOpacity(0.1),
+                              borderRadius: BorderRadius.circular(16),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(statusIcon, size: 13, color: statusColor),
+                                const SizedBox(width: 4),
+                                Text(
+                                  status.toUpperCase(),
+                                  style: TextStyle(
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.bold,
+                                    color: statusColor,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
                       ),
-                      
-                      Expanded(
-                        flex: 2,
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Tooltip(
-                              message: 'Edit to Approve/Reject',
-                              child: IconButton(
-                                onPressed: () => _showEditLeaveDialog(leave),
-                                icon: const Icon(Icons.edit_note),
-                                color: Colors.blue.shade700,
-                                tooltip: 'Edit',
-                                iconSize: 22,
-                                padding: const EdgeInsets.all(8),
-                                constraints: const BoxConstraints(),
+                      const SizedBox(height: 8),
+                      Text(
+                        'ID: ${leave['_id']?.toString().substring(0, 8) ?? 'N/A'}',
+                        style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                      ),
+                      const SizedBox(height: 8),
+                      Wrap(
+                        spacing: 16,
+                        runSpacing: 4,
+                        children: [
+                          Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(Icons.calendar_today, size: 13, color: Colors.grey.shade600),
+                              const SizedBox(width: 4),
+                              Text(
+                                'From: ${leave['start_date'] != null ? DateFormat('dd-MM-yyyy').format(DateTime.parse(leave['start_date'])) : 'N/A'}',
+                                style: const TextStyle(fontSize: 12),
                               ),
-                            ),
-                            const SizedBox(width: 8),
-                            IconButton(
-                              onPressed: () => _deleteLeaveRequest(leave['_id'].toString()),
-                              icon: const Icon(Icons.delete_outline),
-                              color: Colors.red.shade700,
-                              tooltip: 'Delete',
-                              iconSize: 22,
-                              padding: const EdgeInsets.all(8),
-                              constraints: const BoxConstraints(),
-                            ),
-                          ],
+                            ],
+                          ),
+                          Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(Icons.event, size: 13, color: Colors.grey.shade600),
+                              const SizedBox(width: 4),
+                              Text(
+                                'To: ${leave['end_date'] != null ? DateFormat('dd-MM-yyyy').format(DateTime.parse(leave['end_date'])) : 'N/A'}',
+                                style: const TextStyle(fontSize: 12),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                      if (leave['reason'] != null && leave['reason'].toString().isNotEmpty) ...[
+                        const SizedBox(height: 8),
+                        Text(
+                          'Reason: ${leave['reason']}',
+                          style: TextStyle(fontSize: 13, color: Colors.grey.shade800),
                         ),
+                      ],
+                      const SizedBox(height: 12),
+                      const Divider(height: 1),
+                      const SizedBox(height: 8),
+                      Wrap(
+                        spacing: 8,
+                        alignment: WrapAlignment.end,
+                        children: [
+                          TextButton.icon(
+                            onPressed: () => _showEditLeaveDialog(leave),
+                            icon: const Icon(Icons.edit_note, size: 18),
+                            label: const Text('Edit / Status'),
+                            style: TextButton.styleFrom(
+                              foregroundColor: Colors.blue.shade700,
+                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                            ),
+                          ),
+                          TextButton.icon(
+                            onPressed: () => _deleteLeaveRequest(leave['_id'].toString()),
+                            icon: const Icon(Icons.delete_outline, size: 18),
+                            label: const Text('Delete'),
+                            style: TextButton.styleFrom(
+                              foregroundColor: Colors.red.shade700,
+                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                            ),
+                          ),
+                        ],
                       ),
                     ],
                   ),
                 );
               },
             ),
+          );
+        }
+
+        // Desktop / Tablet table view with horizontal scrolling support
+        return Container(
+          margin: EdgeInsets.all(marginVal),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(12),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.05),
+                blurRadius: 10,
+                offset: const Offset(0, 2),
+              ),
+            ],
           ),
-        ],
-      ),
+          child: Scrollbar(
+            thumbVisibility: true,
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: SizedBox(
+                width: constraints.maxWidth < 900 ? 900 : constraints.maxWidth - (marginVal * 2),
+                child: Column(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: Colors.grey.shade50,
+                        borderRadius: const BorderRadius.only(
+                          topLeft: Radius.circular(12),
+                          topRight: Radius.circular(12),
+                        ),
+                      ),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            flex: 1,
+                            child: Text(
+                              'Request ID',
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                color: Colors.grey.shade700,
+                              ),
+                            ),
+                          ),
+                          Expanded(
+                            flex: 2,
+                            child: Text(
+                              'Employee Name',
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                color: Colors.grey.shade700,
+                              ),
+                            ),
+                          ),
+                          Expanded(
+                            flex: 2,
+                            child: Text(
+                              'Start Date',
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                color: Colors.grey.shade700,
+                              ),
+                            ),
+                          ),
+                          Expanded(
+                            flex: 2,
+                            child: Text(
+                              'End Date',
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                color: Colors.grey.shade700,
+                              ),
+                            ),
+                          ),
+                          Expanded(
+                            flex: 3,
+                            child: Text(
+                              'Reason',
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                color: Colors.grey.shade700,
+                              ),
+                            ),
+                          ),
+                          Expanded(
+                            flex: 2,
+                            child: Text(
+                              'Status',
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                color: Colors.grey.shade700,
+                              ),
+                            ),
+                          ),
+                          Expanded(
+                            flex: 2,
+                            child: Text(
+                              'Actions',
+                              textAlign: TextAlign.center,
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                color: Colors.grey.shade700,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    Expanded(
+                      child: ListView.builder(
+                        padding: const EdgeInsets.all(0),
+                        itemCount: _leaveRequests.length,
+                        itemBuilder: (context, index) {
+                          final leave = _leaveRequests[index];
+                          if (leave == null) {
+                            return const SizedBox.shrink();
+                          }
+                          
+                          final isEven = index % 2 == 0;
+                          
+                          return Container(
+                            padding: const EdgeInsets.all(16),
+                            decoration: BoxDecoration(
+                              color: isEven ? Colors.white : Colors.grey.shade50,
+                              border: Border(
+                                bottom: BorderSide(color: Colors.grey.shade200),
+                              ),
+                            ),
+                            child: Row(
+                              children: [
+                                Expanded(
+                                  flex: 1,
+                                  child: Text(
+                                    leave['_id']?.toString().substring(0, 8) ?? 'N/A',
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.w500,
+                                      fontSize: 13,
+                                    ),
+                                  ),
+                                ),
+                                Expanded(
+                                  flex: 2,
+                                  child: Row(
+                                    children: [
+                                      Container(
+                                        padding: const EdgeInsets.all(6),
+                                        decoration: BoxDecoration(
+                                          color: Colors.blue.shade50,
+                                          borderRadius: BorderRadius.circular(6),
+                                        ),
+                                        child: Icon(Icons.person, size: 16, color: Colors.blue.shade700),
+                                      ),
+                                      const SizedBox(width: 8),
+                                      Expanded(
+                                        child: Text(
+                                          leave['employee_name'] ?? 'Unknown',
+                                          style: const TextStyle(fontSize: 14),
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                Expanded(
+                                  flex: 2,
+                                  child: Row(
+                                    children: [
+                                      Icon(Icons.calendar_today, size: 14, color: Colors.grey.shade600),
+                                      const SizedBox(width: 6),
+                                      Text(
+                                        leave['start_date'] != null
+                                            ? DateFormat('dd-MM-yyyy').format(DateTime.parse(leave['start_date']))
+                                            : 'N/A',
+                                        style: const TextStyle(fontSize: 13),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                Expanded(
+                                  flex: 2,
+                                  child: Row(
+                                    children: [
+                                      Icon(Icons.event, size: 14, color: Colors.grey.shade600),
+                                      const SizedBox(width: 6),
+                                      Text(
+                                        leave['end_date'] != null
+                                            ? DateFormat('dd-MM-yyyy').format(DateTime.parse(leave['end_date']))
+                                            : 'N/A',
+                                        style: const TextStyle(fontSize: 13),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                Expanded(
+                                  flex: 3,
+                                  child: Text(
+                                    leave['reason'] ?? 'N/A',
+                                    style: const TextStyle(fontSize: 13),
+                                    maxLines: 2,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                                Expanded(
+                                  flex: 2,
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                                    decoration: BoxDecoration(
+                                      color: _getStatusColor(leave['status'] ?? '').withOpacity(0.1),
+                                      borderRadius: BorderRadius.circular(20),
+                                    ),
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Icon(
+                                          _getStatusIcon(leave['status'] ?? ''),
+                                          size: 14,
+                                          color: _getStatusColor(leave['status'] ?? ''),
+                                        ),
+                                        const SizedBox(width: 6),
+                                        Expanded(
+                                          child: Text(
+                                            (leave['status'] ?? 'pending').toString().toUpperCase(),
+                                            style: TextStyle(
+                                              fontSize: 11,
+                                              fontWeight: FontWeight.bold,
+                                              color: _getStatusColor(leave['status'] ?? ''),
+                                            ),
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                                Expanded(
+                                  flex: 2,
+                                  child: Row(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      Tooltip(
+                                        message: 'Edit to Approve/Reject',
+                                        child: IconButton(
+                                          onPressed: () => _showEditLeaveDialog(leave),
+                                          icon: const Icon(Icons.edit_note),
+                                          color: Colors.blue.shade700,
+                                          tooltip: 'Edit',
+                                          iconSize: 22,
+                                          padding: const EdgeInsets.all(8),
+                                          constraints: const BoxConstraints(),
+                                        ),
+                                      ),
+                                      const SizedBox(width: 8),
+                                      IconButton(
+                                        onPressed: () => _deleteLeaveRequest(leave['_id'].toString()),
+                                        icon: const Icon(Icons.delete_outline),
+                                        color: Colors.red.shade700,
+                                        tooltip: 'Delete',
+                                        iconSize: 22,
+                                        padding: const EdgeInsets.all(8),
+                                        constraints: const BoxConstraints(),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        );
+      },
     );
   }
 }

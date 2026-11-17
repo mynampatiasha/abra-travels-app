@@ -94,7 +94,9 @@ class _RouteOptimizationInputDialogState extends State<RouteOptimizationInputDia
             child: Icon(Icons.route, color: Colors.green.shade700, size: 24),
           ),
           const SizedBox(width: 12),
-          const Text('Route Optimization'),
+          const Expanded(
+            child: Text('Route Optimization', maxLines: 1, overflow: TextOverflow.ellipsis),
+          ),
         ],
       ),
       content: SingleChildScrollView( // ✅ FIX: Added for long content
@@ -120,13 +122,15 @@ class _RouteOptimizationInputDialogState extends State<RouteOptimizationInputDia
                     value: 'auto',
                     groupValue: _selectedMode,
                     onChanged: (value) => setState(() => _selectedMode = value!),
-                    title: Row(
+                    title: Wrap(
+                      spacing: 8,
+                      runSpacing: 4,
+                      crossAxisAlignment: WrapCrossAlignment.center,
                       children: [
                         const Text(
                           'Auto Mode',
                           style: TextStyle(fontWeight: FontWeight.bold),
                         ),
-                        const SizedBox(width: 8),
                         Container(
                           padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                           decoration: BoxDecoration(

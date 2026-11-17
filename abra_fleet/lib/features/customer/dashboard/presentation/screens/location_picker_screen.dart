@@ -43,6 +43,8 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
   final List<PlaceSuggestion> _recentSearches = [];
   final List<PlaceSuggestion> _popularPlaces = [];
   bool _hasUserTyped = false;
+  // True once the user has chosen a place (search result or map tap), so a late GPS fix can never overwrite it.
+  bool _userPickedLocation = false;
 
   @override
   void initState() {
@@ -119,7 +121,7 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
     if (mounted) {
       setState(() => _isLoadingAddress = true);
       
-      ScaffoldMessenger.of(context).showSnackBar(
+      ScaffoldMessenger.of(context)..clearSnackBars()..showSnackBar(
         SnackBar(
           content: Row(
             children: [
@@ -149,6 +151,7 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
     try {
       // First check if location service is initialized
       final hasPermission = await _locationService.initialize();
+      if (mounted) ScaffoldMessenger.of(context).hideCurrentSnackBar(); // lookup step finished
       
       if (!hasPermission) {
         if (mounted) {
@@ -205,6 +208,13 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
             )
           : await _locationService.getCurrentLocation(withAddress: true);
 
+      if (mounted) ScaffoldMessenger.of(context).hideCurrentSnackBar(); // GPS lookup finished: clear the loading message
+
+      // The automatic lookup must never overwrite a place the user already chose.
+      if (auto && _userPickedLocation) {
+        if (mounted) setState(() => _isLoadingAddress = false);
+        return;
+      }
       if (locationData == null && auto) {
         // Quiet fallback: stop loading, keep the default map, user can search or tap locate.
         if (mounted) setState(() => _isLoadingAddress = false);
@@ -214,6 +224,25 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
       if (locationData != null && mounted) {
         // Check GPS accuracy
         final accuracy = locationData.accuracy ?? 999;
+
+        // A fix worse than ~1 km (typical for desktop browsers) is not a usable pickup point.
+        if (accuracy > 1000) {
+          setState(() => _isLoadingAddress = false);
+          if (!auto) {
+            ScaffoldMessenger.of(context)..clearSnackBars()..showSnackBar(
+              SnackBar(
+                content: Text(
+                  'Could not get a precise location (about ${(accuracy / 1000).toStringAsFixed(1)} km off). '
+                  'Please search for your address or tap on the map.',
+                ),
+                backgroundColor: Colors.orange[800],
+                duration: const Duration(seconds: 4),
+                behavior: SnackBarBehavior.floating,
+              ),
+            );
+          }
+          return;
+        }
         String accuracyMessage = '';
         Color accuracyColor = Colors.green;
         
@@ -242,7 +271,7 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
         _mapController.move(_selectedLocation!, 17.0); // Zoom in more for accuracy
         
         // Show success message with accuracy info
-        ScaffoldMessenger.of(context).showSnackBar(
+        ScaffoldMessenger.of(context)..clearSnackBars()..showSnackBar(
           SnackBar(
             content: Column(
               mainAxisSize: MainAxisSize.min,
@@ -397,6 +426,7 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
   }
 
   void _onMapTap(LatLng point) {
+    _userPickedLocation = true;
     setState(() {
       _selectedLocation = point;
       _showSuggestions = false;
@@ -409,7 +439,7 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
     _loadAddressForLocation(point);
     
     // Provide immediate feedback
-    ScaffoldMessenger.of(context).showSnackBar(
+    ScaffoldMessenger.of(context)..clearSnackBars()..showSnackBar(
       SnackBar(
         content: Row(
           children: [
@@ -520,9 +550,10 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
 
   Future<void> _selectSuggestion(PlaceSuggestion suggestion) async {
     print('Selecting suggestion: ${suggestion.title} at ${suggestion.coordinates}'); // Debug log
+    _userPickedLocation = true;
 
     if (suggestion.coordinates == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
+      ScaffoldMessenger.of(context)..clearSnackBars()..showSnackBar(
         const SnackBar(
           content: Text('This location doesn\'t have valid coordinates'),
           backgroundColor: Colors.red,
@@ -570,7 +601,7 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
         
         _mapController.move(_selectedLocation!, 16.0);
         
-        ScaffoldMessenger.of(context).showSnackBar(
+        ScaffoldMessenger.of(context)..clearSnackBars()..showSnackBar(
           SnackBar(
             content: Row(
               children: [
@@ -593,7 +624,7 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
     } catch (e) {
       if (mounted) {
         setState(() => _isSearching = false);
-        ScaffoldMessenger.of(context).showSnackBar(
+        ScaffoldMessenger.of(context)..clearSnackBars()..showSnackBar(
           SnackBar(
             content: Text('Failed to select location: ${e.toString()}'),
             backgroundColor: Colors.red,
@@ -623,7 +654,7 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
         'locationData': _selectedLocationData,
       });
     } else {
-      ScaffoldMessenger.of(context).showSnackBar(
+      ScaffoldMessenger.of(context)..clearSnackBars()..showSnackBar(
         const SnackBar(
           content: Text('Please select a location first.'),
           backgroundColor: Colors.red,

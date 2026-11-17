@@ -532,7 +532,9 @@ class _TripVerificationScreenState extends State<TripVerificationScreen> {
               // Content
               Expanded(
                 child: SingleChildScrollView(
-                  padding: const EdgeInsets.all(24),
+                  padding: EdgeInsets.all(
+                    MediaQuery.of(context).size.width < 600 ? 12.0 : 20.0,
+                  ),
                   child: _buildTripDetailsContent(trip),
                 ),
               ),
@@ -569,26 +571,37 @@ class _TripVerificationScreenState extends State<TripVerificationScreen> {
         // Odometer Readings
         _buildSectionTitle('Odometer Readings'),
         const SizedBox(height: 12),
-        Row(
-          children: [
-            // Start Odometer
-            Expanded(
-              child: _buildOdometerCard(
-                'START ODOMETER',
-                trip['startOdometer'],
-                Colors.green,
-              ),
-            ),
-            const SizedBox(width: 16),
-            // End Odometer
-            Expanded(
-              child: _buildOdometerCard(
-                'END ODOMETER',
-                trip['endOdometer'],
-                Colors.red,
-              ),
-            ),
-          ],
+        LayoutBuilder(
+          builder: (context, constraints) {
+            final startCard = _buildOdometerCard(
+              'START ODOMETER',
+              trip['startOdometer'],
+              Colors.green,
+            );
+            final endCard = _buildOdometerCard(
+              'END ODOMETER',
+              trip['endOdometer'],
+              Colors.red,
+            );
+
+            if (constraints.maxWidth < 600) {
+              return Column(
+                children: [
+                  startCard,
+                  const SizedBox(height: 12),
+                  endCard,
+                ],
+              );
+            } else {
+              return Row(
+                children: [
+                  Expanded(child: startCard),
+                  const SizedBox(width: 16),
+                  Expanded(child: endCard),
+                ],
+              );
+            }
+          },
         ),
         
         const SizedBox(height: 24),
@@ -1071,7 +1084,9 @@ class _TripVerificationScreenState extends State<TripVerificationScreen> {
           // Filters Section
           Container(
             color: Colors.white,
-            padding: const EdgeInsets.all(16),
+            padding: EdgeInsets.all(
+              MediaQuery.of(context).size.width < 600 ? 12.0 : 16.0,
+            ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -1165,76 +1180,91 @@ class _TripVerificationScreenState extends State<TripVerificationScreen> {
           },
         ),
         const SizedBox(height: 12),
-        Row(
-          children: [
-            // Driver - Searchable
-            Expanded(
-              child: InkWell(
-                onTap: _showDriverSearchDialog,
-                child: InputDecorator(
-                  decoration: const InputDecoration(
-                    labelText: 'Driver',
-                    border: OutlineInputBorder(),
-                    contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                    suffixIcon: Icon(Icons.search),
-                  ),
-                  child: Text(
-                    driverDisplayName,
-                    style: TextStyle(
-                      color: selectedDriverId != 'all' ? Colors.black : Colors.grey,
-                    ),
-                  ),
-                ),
-              ),
-            ),
-            const SizedBox(width: 12),
-            // Vehicle - Searchable
-            Expanded(
-              child: InkWell(
-                onTap: _showVehicleSearchDialog,
-                child: InputDecorator(
-                  decoration: const InputDecoration(
-                    labelText: 'Vehicle',
-                    border: OutlineInputBorder(),
-                    contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                    suffixIcon: Icon(Icons.search),
-                  ),
-                  child: Text(
-                    vehicleDisplayName,
-                    style: TextStyle(
-                      color: selectedVehicleId != 'all' ? Colors.black : Colors.grey,
-                    ),
-                  ),
-                ),
-              ),
-            ),
-            const SizedBox(width: 12),
-            // Status
-            Expanded(
-              child: DropdownButtonFormField<String>(
-                value: selectedStatus,
+        LayoutBuilder(
+          builder: (context, constraints) {
+            final driverWidget = InkWell(
+              onTap: _showDriverSearchDialog,
+              child: InputDecorator(
                 decoration: const InputDecoration(
-                  labelText: 'Status',
+                  labelText: 'Driver',
                   border: OutlineInputBorder(),
                   contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  suffixIcon: Icon(Icons.search),
                 ),
-                items: const [
-                  DropdownMenuItem(value: 'all', child: Text('All Status')),
-                  DropdownMenuItem(value: 'completed', child: Text('Completed')),
-                  DropdownMenuItem(value: 'in_progress', child: Text('In Progress')),
-                  DropdownMenuItem(value: 'started', child: Text('Started')),
-                ],
-                onChanged: (value) {
-                  setState(() => selectedStatus = value!);
-                  _loadTrips();
-                },
+                child: Text(
+                  driverDisplayName,
+                  style: TextStyle(
+                    color: selectedDriverId != 'all' ? Colors.black : Colors.grey,
+                  ),
+                ),
               ),
-            ),
-          ],
+            );
+
+            final vehicleWidget = InkWell(
+              onTap: _showVehicleSearchDialog,
+              child: InputDecorator(
+                decoration: const InputDecoration(
+                  labelText: 'Vehicle',
+                  border: OutlineInputBorder(),
+                  contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  suffixIcon: Icon(Icons.search),
+                ),
+                child: Text(
+                  vehicleDisplayName,
+                  style: TextStyle(
+                    color: selectedVehicleId != 'all' ? Colors.black : Colors.grey,
+                  ),
+                ),
+              ),
+            );
+
+            final statusWidget = DropdownButtonFormField<String>(
+              value: selectedStatus,
+              decoration: const InputDecoration(
+                labelText: 'Status',
+                border: OutlineInputBorder(),
+                contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              ),
+              items: const [
+                DropdownMenuItem(value: 'all', child: Text('All Status')),
+                DropdownMenuItem(value: 'completed', child: Text('Completed')),
+                DropdownMenuItem(value: 'in_progress', child: Text('In Progress')),
+                DropdownMenuItem(value: 'started', child: Text('Started')),
+              ],
+              onChanged: (value) {
+                setState(() => selectedStatus = value!);
+                _loadTrips();
+              },
+            );
+
+            if (constraints.maxWidth < 600) {
+              return Column(
+                children: [
+                  driverWidget,
+                  const SizedBox(height: 12),
+                  vehicleWidget,
+                  const SizedBox(height: 12),
+                  statusWidget,
+                ],
+              );
+            } else {
+              return Row(
+                children: [
+                  Expanded(child: driverWidget),
+                  const SizedBox(width: 12),
+                  Expanded(child: vehicleWidget),
+                  const SizedBox(width: 12),
+                  Expanded(child: statusWidget),
+                ],
+              );
+            }
+          },
         ),
         const SizedBox(height: 12),
-        Row(
-          mainAxisAlignment: MainAxisAlignment.end,
+        Wrap(
+          alignment: WrapAlignment.end,
+          spacing: 8,
+          runSpacing: 8,
           children: [
             TextButton.icon(
               onPressed: _clearFilters,
@@ -1251,52 +1281,69 @@ class _TripVerificationScreenState extends State<TripVerificationScreen> {
   // Build trips table
   // ============================================================================
   Widget _buildTripsTable() {
-    return SingleChildScrollView(
-      child: Container(
-        margin: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(8),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.05),
-              blurRadius: 10,
-              offset: const Offset(0, 2),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final tableMinWidth = constraints.maxWidth < 900 ? 900.0 : constraints.maxWidth;
+        return SingleChildScrollView(
+          child: Container(
+            margin: EdgeInsets.all(
+              MediaQuery.of(context).size.width < 600
+                  ? 8.0
+                  : MediaQuery.of(context).size.width <= 1024
+                      ? 12.0
+                      : 16.0,
             ),
-          ],
-        ),
-        child: Column(
-          children: [
-            // Table Header
-            Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: Colors.grey[100],
-                borderRadius: const BorderRadius.only(
-                  topLeft: Radius.circular(8),
-                  topRight: Radius.circular(8),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(8),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.05),
+                  blurRadius: 10,
+                  offset: const Offset(0, 2),
+                ),
+              ],
+            ),
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: SizedBox(
+                width: tableMinWidth,
+                child: Column(
+                  children: [
+                    // Table Header
+                    Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: Colors.grey[100],
+                        borderRadius: const BorderRadius.only(
+                          topLeft: Radius.circular(8),
+                          topRight: Radius.circular(8),
+                        ),
+                      ),
+                      child: Row(
+                        children: [
+                          const SizedBox(width: 40), // For expand icon
+                          const Expanded(flex: 2, child: Text('Trip ID', style: TextStyle(fontWeight: FontWeight.bold))),
+                          const Expanded(flex: 2, child: Text('Date', style: TextStyle(fontWeight: FontWeight.bold))),
+                          const Expanded(flex: 2, child: Text('Driver', style: TextStyle(fontWeight: FontWeight.bold))),
+                          const Expanded(flex: 2, child: Text('Vehicle', style: TextStyle(fontWeight: FontWeight.bold))),
+                          const Expanded(flex: 2, child: Text('Start → End', style: TextStyle(fontWeight: FontWeight.bold))),
+                          const Expanded(flex: 1, child: Text('Distance', style: TextStyle(fontWeight: FontWeight.bold))),
+                          const Expanded(flex: 1, child: Text('Status', style: TextStyle(fontWeight: FontWeight.bold))),
+                          const SizedBox(width: 100), // For actions
+                        ],
+                      ),
+                    ),
+                    
+                    // Table Rows
+                    ...trips.map((trip) => _buildTripRow(trip)),
+                  ],
                 ),
               ),
-              child: Row(
-                children: [
-                  const SizedBox(width: 40), // For expand icon
-                  const Expanded(flex: 2, child: Text('Trip ID', style: TextStyle(fontWeight: FontWeight.bold))),
-                  const Expanded(flex: 2, child: Text('Date', style: TextStyle(fontWeight: FontWeight.bold))),
-                  const Expanded(flex: 2, child: Text('Driver', style: TextStyle(fontWeight: FontWeight.bold))),
-                  const Expanded(flex: 2, child: Text('Vehicle', style: TextStyle(fontWeight: FontWeight.bold))),
-                  const Expanded(flex: 2, child: Text('Start → End', style: TextStyle(fontWeight: FontWeight.bold))),
-                  const Expanded(flex: 1, child: Text('Distance', style: TextStyle(fontWeight: FontWeight.bold))),
-                  const Expanded(flex: 1, child: Text('Status', style: TextStyle(fontWeight: FontWeight.bold))),
-                  const SizedBox(width: 100), // For actions
-                ],
-              ),
             ),
-            
-            // Table Rows
-            ...trips.map((trip) => _buildTripRow(trip)).toList(),
-          ],
-        ),
-      ),
+          ),
+        );
+      },
     );
   }
 

@@ -790,7 +790,13 @@ class _AdminPendingDriversPageState extends State<AdminPendingDriversPage> {
         : RefreshIndicator(
             onRefresh: _refreshData,
             child: SingleChildScrollView(
-              padding: const EdgeInsets.all(24),
+              padding: EdgeInsets.all(
+                MediaQuery.of(context).size.width < 600
+                    ? 12.0
+                    : MediaQuery.of(context).size.width <= 1024
+                        ? 16.0
+                        : 24.0,
+              ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -858,52 +864,87 @@ class _AdminPendingDriversPageState extends State<AdminPendingDriversPage> {
       return today.difference(d).inDays >= 7;
     }).length;
 
-    return Row(
-      children: [
-        Expanded(
-          child: _buildStatCard(
-            label: 'Total Pending',
-            value: total.toString(),
-            subtitle: 'Awaiting approval',
-            icon: Icons.hourglass_top_rounded,
-            color: const Color(0xFFF59E0B),
-            iconBg: const Color(0xFFFFFBEB),
-          ),
-        ),
-        const SizedBox(width: 16),
-        Expanded(
-          child: _buildStatCard(
-            label: 'Registered Today',
-            value: registeredToday.toString(),
-            subtitle: 'New registrations',
-            icon: Icons.person_add_alt_1_rounded,
-            color: const Color(0xFF3B82F6),
-            iconBg: const Color(0xFFEFF6FF),
-          ),
-        ),
-        const SizedBox(width: 16),
-        Expanded(
-          child: _buildStatCard(
-            label: 'Waiting 7+ Days',
-            value: waiting7Plus.toString(),
-            subtitle: 'Needs attention',
-            icon: Icons.warning_amber_rounded,
-            color: const Color(0xFFEF4444),
-            iconBg: const Color(0xFFFEF2F2),
-          ),
-        ),
-        const SizedBox(width: 16),
-        Expanded(
-          child: _buildStatCard(
-            label: 'Filtered Results',
-            value: _getFilteredCustomers().length.toString(),
-            subtitle: 'Currently showing',
-            icon: Icons.filter_list_rounded,
-            color: const Color(0xFF10B981),
-            iconBg: const Color(0xFFECFDF5),
-          ),
-        ),
-      ],
+    final card1 = _buildStatCard(
+      label: 'Total Pending',
+      value: total.toString(),
+      subtitle: 'Awaiting approval',
+      icon: Icons.hourglass_top_rounded,
+      color: const Color(0xFFF59E0B),
+      iconBg: const Color(0xFFFFFBEB),
+    );
+    final card2 = _buildStatCard(
+      label: 'Registered Today',
+      value: registeredToday.toString(),
+      subtitle: 'New registrations',
+      icon: Icons.person_add_alt_1_rounded,
+      color: const Color(0xFF3B82F6),
+      iconBg: const Color(0xFFEFF6FF),
+    );
+    final card3 = _buildStatCard(
+      label: 'Waiting 7+ Days',
+      value: waiting7Plus.toString(),
+      subtitle: 'Needs attention',
+      icon: Icons.warning_amber_rounded,
+      color: const Color(0xFFEF4444),
+      iconBg: const Color(0xFFFEF2F2),
+    );
+    final card4 = _buildStatCard(
+      label: 'Filtered Results',
+      value: _getFilteredCustomers().length.toString(),
+      subtitle: 'Currently showing',
+      icon: Icons.filter_list_rounded,
+      color: const Color(0xFF10B981),
+      iconBg: const Color(0xFFECFDF5),
+    );
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        if (constraints.maxWidth < 600) {
+          return Column(
+            children: [
+              card1,
+              const SizedBox(height: 12),
+              card2,
+              const SizedBox(height: 12),
+              card3,
+              const SizedBox(height: 12),
+              card4,
+            ],
+          );
+        } else if (constraints.maxWidth <= 1024) {
+          return Column(
+            children: [
+              Row(
+                children: [
+                  Expanded(child: card1),
+                  const SizedBox(width: 16),
+                  Expanded(child: card2),
+                ],
+              ),
+              const SizedBox(height: 16),
+              Row(
+                children: [
+                  Expanded(child: card3),
+                  const SizedBox(width: 16),
+                  Expanded(child: card4),
+                ],
+              ),
+            ],
+          );
+        } else {
+          return Row(
+            children: [
+              Expanded(child: card1),
+              const SizedBox(width: 16),
+              Expanded(child: card2),
+              const SizedBox(width: 16),
+              Expanded(child: card3),
+              const SizedBox(width: 16),
+              Expanded(child: card4),
+            ],
+          );
+        }
+      },
     );
   }
 
@@ -1021,44 +1062,39 @@ class _AdminPendingDriversPageState extends State<AdminPendingDriversPage> {
             ],
           ),
           const SizedBox(height: 18),
-          Row(
-            children: [
-              // Universal Search Field
-              Expanded(
-                flex: 3,
-                child: Container(
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(10),
-                    border: Border.all(color: const Color(0xFFE2E8F0), width: 1.5),
-                  ),
-                  child: TextField(
-                    controller: _searchController,
-                    onChanged: (value) => setState(() => _currentPage = 1),
-                    decoration: InputDecoration(
-                      hintText: 'Search by Name, Email, Phone, Company, Department, Employee ID...',
-                      hintStyle: const TextStyle(
-                        color: Color(0xFF94A3B8),
-                        fontSize: 13,
-                      ),
-                      prefixIcon: const Icon(Icons.search, size: 20, color: Color(0xFF64748B)),
-                      suffixIcon: _searchController.text.isNotEmpty
-                        ? IconButton(
-                            icon: const Icon(Icons.clear, size: 18, color: Color(0xFF94A3B8)),
-                            onPressed: () {
-                              _searchController.clear();
-                              setState(() => _currentPage = 1);
-                            },
-                          )
-                        : null,
-                      border: InputBorder.none,
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final searchField = Container(
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: const Color(0xFFE2E8F0), width: 1.5),
+                ),
+                child: TextField(
+                  controller: _searchController,
+                  onChanged: (value) => setState(() => _currentPage = 1),
+                  decoration: InputDecoration(
+                    hintText: 'Search by Name, Email, Phone, Company, Department, Employee ID...',
+                    hintStyle: const TextStyle(
+                      color: Color(0xFF94A3B8),
+                      fontSize: 13,
                     ),
+                    prefixIcon: const Icon(Icons.search, size: 20, color: Color(0xFF64748B)),
+                    suffixIcon: _searchController.text.isNotEmpty
+                      ? IconButton(
+                          icon: const Icon(Icons.clear, size: 18, color: Color(0xFF94A3B8)),
+                          onPressed: () {
+                            _searchController.clear();
+                            setState(() => _currentPage = 1);
+                          },
+                        )
+                      : null,
+                    border: InputBorder.none,
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
                   ),
                 ),
-              ),
-              const SizedBox(width: 16),
-              // Apply / Reset buttons
-              Container(
+              );
+
+              final applyButton = Container(
                 decoration: BoxDecoration(
                   gradient: const LinearGradient(
                     colors: [Color(0xFF0F2557), Color(0xFF1A3FC4)],
@@ -1089,9 +1125,9 @@ class _AdminPendingDriversPageState extends State<AdminPendingDriversPage> {
                     ),
                   ),
                 ),
-              ),
-              const SizedBox(width: 12),
-              OutlinedButton.icon(
+              );
+
+              final resetButton = OutlinedButton.icon(
                 onPressed: () {
                   setState(() {
                     _searchController.clear();
@@ -1112,8 +1148,39 @@ class _AdminPendingDriversPageState extends State<AdminPendingDriversPage> {
                     borderRadius: BorderRadius.circular(10),
                   ),
                 ),
-              ),
-            ],
+              );
+
+              if (constraints.maxWidth < 720) {
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    searchField,
+                    const SizedBox(height: 12),
+                    Wrap(
+                      spacing: 12,
+                      runSpacing: 10,
+                      children: [
+                        applyButton,
+                        resetButton,
+                      ],
+                    ),
+                  ],
+                );
+              } else {
+                return Row(
+                  children: [
+                    Expanded(
+                      flex: 3,
+                      child: searchField,
+                    ),
+                    const SizedBox(width: 16),
+                    applyButton,
+                    const SizedBox(width: 12),
+                    resetButton,
+                  ],
+                );
+              }
+            },
           ),
         ],
       ),
@@ -1161,25 +1228,29 @@ class _AdminPendingDriversPageState extends State<AdminPendingDriversPage> {
                 bottom: BorderSide(color: Color(0xFFE2E8F0), width: 1.5),
               ),
             ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Row(
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                final titleWidget = Row(
+                  mainAxisSize: MainAxisSize.min,
                   children: [
                     const Icon(Icons.approval, color: Color(0xFF0F2557), size: 22),
                     const SizedBox(width: 10),
-                    Text(
-                      'Pending Driver Approvals (${filteredCustomers.length})',
-                      style: const TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.w800,
-                        color: Color(0xFF0F2557),
-                        letterSpacing: 0.2,
+                    Flexible(
+                      child: Text(
+                        'Pending Driver Approvals (${filteredCustomers.length})',
+                        style: const TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w800,
+                          color: Color(0xFF0F2557),
+                          letterSpacing: 0.2,
+                        ),
+                        overflow: TextOverflow.ellipsis,
                       ),
                     ),
                   ],
-                ),
-                Wrap(
+                );
+
+                final actionButtons = Wrap(
                   spacing: 8,
                   runSpacing: 8,
                   crossAxisAlignment: WrapCrossAlignment.center,
@@ -1341,8 +1412,27 @@ class _AdminPendingDriversPageState extends State<AdminPendingDriversPage> {
                       ),
                     ),
                   ],
-                ),
-              ],
+                );
+
+                if (constraints.maxWidth < 960) {
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      titleWidget,
+                      const SizedBox(height: 12),
+                      actionButtons,
+                    ],
+                  );
+                } else {
+                  return Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      titleWidget,
+                      actionButtons,
+                    ],
+                  );
+                }
+              },
             ),
           ),
 
@@ -1449,7 +1539,13 @@ class _AdminPendingDriversPageState extends State<AdminPendingDriversPage> {
                           scrollDirection: Axis.vertical,
                           physics: const BouncingScrollPhysics(),
                           child: ConstrainedBox(
-                            constraints: const BoxConstraints(minWidth: 1400),
+                            constraints: BoxConstraints(
+                              minWidth: MediaQuery.of(context).size.width < 600
+                                  ? 900.0
+                                  : MediaQuery.of(context).size.width <= 1024
+                                      ? 1200.0
+                                      : 1400.0,
+                            ),
                             child: MouseRegion(
                               cursor: SystemMouseCursors.grab,
                               child: DataTable(

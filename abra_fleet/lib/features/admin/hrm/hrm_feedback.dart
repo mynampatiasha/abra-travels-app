@@ -375,7 +375,8 @@ class _HRMFeedbackScreenState extends State<HRMFeedbackScreen> with SingleTicker
         backgroundColor: cardWhite,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
         child: Container(
-          constraints: const BoxConstraints(maxHeight: 600),
+          constraints: const BoxConstraints(maxWidth: 600, maxHeight: 600),
+          width: (MediaQuery.of(context).size.width * 0.9).clamp(0.0, 600.0),
           padding: const EdgeInsets.all(24),
           child: StatefulBuilder(
             builder: (context, setDialogState) => Column(
@@ -546,8 +547,9 @@ class _HRMFeedbackScreenState extends State<HRMFeedbackScreen> with SingleTicker
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
         backgroundColor: cardWhite,
         child: Container(
-          width: MediaQuery.of(context).size.width * 0.9,
-          height: MediaQuery.of(context).size.height * 0.8,
+          constraints: const BoxConstraints(maxWidth: 800),
+          width: (MediaQuery.of(context).size.width * 0.95).clamp(0.0, 800.0),
+          height: MediaQuery.of(context).size.height * 0.85,
           child: Column(
             children: [
               Container(
@@ -694,38 +696,202 @@ class _HRMFeedbackScreenState extends State<HRMFeedbackScreen> with SingleTicker
   // ============================================================================
   
   Widget _buildAdminFilters() {
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 20),
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(color: cardWhite, borderRadius: BorderRadius.circular(20), boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 15, offset: const Offset(0, 5))]),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(children: const [Icon(Icons.filter_list, color: primaryBlue, size: 24), SizedBox(width: 12), Text('Filters', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: darkText))]),
-          const SizedBox(height: 20),
-          Container(decoration: BoxDecoration(color: lightBg, borderRadius: BorderRadius.circular(16), border: Border.all(color: borderGray)), child: TextField(style: const TextStyle(color: darkText), decoration: const InputDecoration(hintText: 'Search feedback...', hintStyle: TextStyle(color: textGray), prefixIcon: Icon(Icons.search, color: primaryBlue), border: InputBorder.none, contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 14)), onChanged: (value) { setState(() { _searchQuery = value; }); }, onSubmitted: (_) => _applyFilters())),
-          const SizedBox(height: 16),
-          Row(children: [
-            Expanded(child: Container(decoration: BoxDecoration(color: lightBg, borderRadius: BorderRadius.circular(12), border: Border.all(color: borderGray)), child: DropdownButtonFormField<String>(value: _selectedSource, dropdownColor: cardWhite, style: const TextStyle(color: darkText, fontSize: 14), decoration: const InputDecoration(labelText: 'Source', labelStyle: TextStyle(color: textGray, fontSize: 12), border: InputBorder.none, contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 8)), items: const [DropdownMenuItem(value: 'all', child: Text('All Sources')), DropdownMenuItem(value: 'customers', child: Text('Customers')), DropdownMenuItem(value: 'drivers', child: Text('Drivers')), DropdownMenuItem(value: 'clients', child: Text('Clients')), DropdownMenuItem(value: 'employee_admins', child: Text('Admins'))], onChanged: (value) { setState(() { _selectedSource = value!; _selectedName = null; }); _loadUserNames(); }))),
-            const SizedBox(width: 12),
-            Expanded(child: Container(decoration: BoxDecoration(color: lightBg, borderRadius: BorderRadius.circular(12), border: Border.all(color: borderGray)), child: DropdownButtonFormField<String>(value: _selectedType, dropdownColor: cardWhite, style: const TextStyle(color: darkText, fontSize: 14), decoration: const InputDecoration(labelText: 'Type', labelStyle: TextStyle(color: textGray, fontSize: 12), border: InputBorder.none, contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 8)), items: const [DropdownMenuItem(value: 'all', child: Text('All Types')), DropdownMenuItem(value: 'suggestion', child: Text('Suggestion')), DropdownMenuItem(value: 'complaint', child: Text('Complaint')), DropdownMenuItem(value: 'appreciation', child: Text('Appreciation')), DropdownMenuItem(value: 'general', child: Text('General'))], onChanged: (value) { setState(() { _selectedType = value!; }); })))
-          ]),
-          const SizedBox(height: 16),
-          Row(children: [
-            Expanded(child: Container(decoration: BoxDecoration(color: lightBg, borderRadius: BorderRadius.circular(12), border: Border.all(color: borderGray)), child: DropdownButtonFormField<String>(value: _selectedName, dropdownColor: cardWhite, style: const TextStyle(color: darkText, fontSize: 14), decoration: const InputDecoration(labelText: 'Name', labelStyle: TextStyle(color: textGray, fontSize: 12), border: InputBorder.none, contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 8)), items: [const DropdownMenuItem(value: null, child: Text('All People')), ..._buildNameFilterItems()], onChanged: (value) { setState(() { _selectedName = value; }); }))),
-            const SizedBox(width: 12),
-            Expanded(child: InkWell(onTap: () async { final date = await showDatePicker(context: context, initialDate: _dateFrom != null ? DateTime.parse(_dateFrom!) : DateTime.now(), firstDate: DateTime(2020), lastDate: DateTime.now()); if (date != null) { setState(() { _dateFrom = DateFormat('yyyy-MM-dd').format(date); }); } }, child: Container(padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16), decoration: BoxDecoration(color: lightBg, borderRadius: BorderRadius.circular(12), border: Border.all(color: borderGray)), child: Row(children: [const Icon(Icons.calendar_today, size: 16, color: primaryBlue), const SizedBox(width: 8), Expanded(child: Text(_dateFrom ?? 'From Date', style: TextStyle(fontSize: 14, color: _dateFrom != null ? darkText : textGray)))])))),
-            const SizedBox(width: 12),
-            Expanded(child: InkWell(onTap: () async { final date = await showDatePicker(context: context, initialDate: _dateTo != null ? DateTime.parse(_dateTo!) : DateTime.now(), firstDate: DateTime(2020), lastDate: DateTime.now()); if (date != null) { setState(() { _dateTo = DateFormat('yyyy-MM-dd').format(date); }); } }, child: Container(padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16), decoration: BoxDecoration(color: lightBg, borderRadius: BorderRadius.circular(12), border: Border.all(color: borderGray)), child: Row(children: [const Icon(Icons.calendar_today, size: 16, color: primaryPurple), const SizedBox(width: 8), Expanded(child: Text(_dateTo ?? 'To Date', style: TextStyle(fontSize: 14, color: _dateTo != null ? darkText : textGray)))]))))
-          ]),
-          const SizedBox(height: 20),
-          Row(children: [
-            Expanded(child: Container(height: 48, decoration: BoxDecoration(gradient: const LinearGradient(colors: [primaryBlue, primaryPurple]), borderRadius: BorderRadius.circular(12), boxShadow: [BoxShadow(color: primaryBlue.withOpacity(0.3), blurRadius: 8, offset: const Offset(0, 4))]), child: ElevatedButton.icon(onPressed: _applyFilters, icon: const Icon(Icons.check, color: Colors.white, size: 20), label: const Text('Apply', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)), style: ElevatedButton.styleFrom(backgroundColor: Colors.transparent, shadowColor: Colors.transparent, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)))))),
-            const SizedBox(width: 12),
-            Container(height: 48, decoration: BoxDecoration(color: lightBg, borderRadius: BorderRadius.circular(12), border: Border.all(color: borderGray, width: 2)), child: ElevatedButton.icon(onPressed: _resetFilters, icon: const Icon(Icons.refresh, color: textGray, size: 20), label: const Text('Reset', style: TextStyle(color: textGray, fontWeight: FontWeight.w600)), style: ElevatedButton.styleFrom(backgroundColor: Colors.transparent, shadowColor: Colors.transparent, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)))))
-          ])
-        ],
-      ),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final isMobile = constraints.maxWidth < 600;
+        final isTablet = constraints.maxWidth < 900;
+        final paddingVal = isMobile ? 14.0 : 20.0;
+        final marginH = isMobile ? 12.0 : 20.0;
+
+        final sourceField = Container(
+          decoration: BoxDecoration(color: lightBg, borderRadius: BorderRadius.circular(12), border: Border.all(color: borderGray)),
+          child: DropdownButtonFormField<String>(
+            value: _selectedSource,
+            dropdownColor: cardWhite,
+            style: const TextStyle(color: darkText, fontSize: 14),
+            decoration: const InputDecoration(labelText: 'Source', labelStyle: TextStyle(color: textGray, fontSize: 12), border: InputBorder.none, contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 8)),
+            items: const [
+              DropdownMenuItem(value: 'all', child: Text('All Sources')),
+              DropdownMenuItem(value: 'customers', child: Text('Customers')),
+              DropdownMenuItem(value: 'drivers', child: Text('Drivers')),
+              DropdownMenuItem(value: 'clients', child: Text('Clients')),
+              DropdownMenuItem(value: 'employee_admins', child: Text('Admins'))
+            ],
+            onChanged: (value) {
+              setState(() { _selectedSource = value!; _selectedName = null; });
+              _loadUserNames();
+            },
+          ),
+        );
+
+        final typeField = Container(
+          decoration: BoxDecoration(color: lightBg, borderRadius: BorderRadius.circular(12), border: Border.all(color: borderGray)),
+          child: DropdownButtonFormField<String>(
+            value: _selectedType,
+            dropdownColor: cardWhite,
+            style: const TextStyle(color: darkText, fontSize: 14),
+            decoration: const InputDecoration(labelText: 'Type', labelStyle: TextStyle(color: textGray, fontSize: 12), border: InputBorder.none, contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 8)),
+            items: const [
+              DropdownMenuItem(value: 'all', child: Text('All Types')),
+              DropdownMenuItem(value: 'suggestion', child: Text('Suggestion')),
+              DropdownMenuItem(value: 'complaint', child: Text('Complaint')),
+              DropdownMenuItem(value: 'appreciation', child: Text('Appreciation')),
+              DropdownMenuItem(value: 'general', child: Text('General'))
+            ],
+            onChanged: (value) {
+              setState(() { _selectedType = value!; });
+            },
+          ),
+        );
+
+        final nameField = Container(
+          decoration: BoxDecoration(color: lightBg, borderRadius: BorderRadius.circular(12), border: Border.all(color: borderGray)),
+          child: DropdownButtonFormField<String>(
+            value: _selectedName,
+            dropdownColor: cardWhite,
+            style: const TextStyle(color: darkText, fontSize: 14),
+            decoration: const InputDecoration(labelText: 'Name', labelStyle: TextStyle(color: textGray, fontSize: 12), border: InputBorder.none, contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 8)),
+            items: [const DropdownMenuItem(value: null, child: Text('All People')), ..._buildNameFilterItems()],
+            onChanged: (value) {
+              setState(() { _selectedName = value; });
+            },
+          ),
+        );
+
+        final fromDateField = InkWell(
+          onTap: () async {
+            final date = await showDatePicker(
+              context: context,
+              initialDate: _dateFrom != null ? DateTime.parse(_dateFrom!) : DateTime.now(),
+              firstDate: DateTime(2020),
+              lastDate: DateTime.now(),
+            );
+            if (date != null) {
+              setState(() { _dateFrom = DateFormat('yyyy-MM-dd').format(date); });
+            }
+          },
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+            decoration: BoxDecoration(color: lightBg, borderRadius: BorderRadius.circular(12), border: Border.all(color: borderGray)),
+            child: Row(
+              children: [
+                const Icon(Icons.calendar_today, size: 16, color: primaryBlue),
+                const SizedBox(width: 8),
+                Expanded(child: Text(_dateFrom ?? 'From Date', style: TextStyle(fontSize: 14, color: _dateFrom != null ? darkText : textGray))),
+              ],
+            ),
+          ),
+        );
+
+        final toDateField = InkWell(
+          onTap: () async {
+            final date = await showDatePicker(
+              context: context,
+              initialDate: _dateTo != null ? DateTime.parse(_dateTo!) : DateTime.now(),
+              firstDate: DateTime(2020),
+              lastDate: DateTime.now(),
+            );
+            if (date != null) {
+              setState(() { _dateTo = DateFormat('yyyy-MM-dd').format(date); });
+            }
+          },
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+            decoration: BoxDecoration(color: lightBg, borderRadius: BorderRadius.circular(12), border: Border.all(color: borderGray)),
+            child: Row(
+              children: [
+                const Icon(Icons.calendar_today, size: 16, color: primaryPurple),
+                const SizedBox(width: 8),
+                Expanded(child: Text(_dateTo ?? 'To Date', style: TextStyle(fontSize: 14, color: _dateTo != null ? darkText : textGray))),
+              ],
+            ),
+          ),
+        );
+
+        final applyButton = Container(
+          height: 48,
+          decoration: BoxDecoration(
+            gradient: const LinearGradient(colors: [primaryBlue, primaryPurple]),
+            borderRadius: BorderRadius.circular(12),
+            boxShadow: [BoxShadow(color: primaryBlue.withOpacity(0.3), blurRadius: 8, offset: const Offset(0, 4))],
+          ),
+          child: ElevatedButton.icon(
+            onPressed: _applyFilters,
+            icon: const Icon(Icons.check, color: Colors.white, size: 20),
+            label: const Text('Apply', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.transparent, shadowColor: Colors.transparent, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
+          ),
+        );
+
+        final resetButton = Container(
+          height: 48,
+          decoration: BoxDecoration(color: lightBg, borderRadius: BorderRadius.circular(12), border: Border.all(color: borderGray, width: 2)),
+          child: ElevatedButton.icon(
+            onPressed: _resetFilters,
+            icon: const Icon(Icons.refresh, color: textGray, size: 20),
+            label: const Text('Reset', style: TextStyle(color: textGray, fontWeight: FontWeight.w600)),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.transparent, shadowColor: Colors.transparent, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
+          ),
+        );
+
+        return Container(
+          margin: EdgeInsets.symmetric(horizontal: marginH),
+          padding: EdgeInsets.all(paddingVal),
+          decoration: BoxDecoration(color: cardWhite, borderRadius: BorderRadius.circular(20), boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 15, offset: const Offset(0, 5))]),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(children: const [Icon(Icons.filter_list, color: primaryBlue, size: 24), SizedBox(width: 12), Text('Filters', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: darkText))]),
+              const SizedBox(height: 20),
+              Container(
+                decoration: BoxDecoration(color: lightBg, borderRadius: BorderRadius.circular(16), border: Border.all(color: borderGray)),
+                child: TextField(
+                  style: const TextStyle(color: darkText),
+                  decoration: const InputDecoration(hintText: 'Search feedback...', hintStyle: TextStyle(color: textGray), prefixIcon: Icon(Icons.search, color: primaryBlue), border: InputBorder.none, contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 14)),
+                  onChanged: (value) { setState(() { _searchQuery = value; }); },
+                  onSubmitted: (_) => _applyFilters(),
+                ),
+              ),
+              const SizedBox(height: 16),
+              if (isMobile) ...[
+                sourceField,
+                const SizedBox(height: 12),
+                typeField,
+                const SizedBox(height: 12),
+                nameField,
+                const SizedBox(height: 12),
+                fromDateField,
+                const SizedBox(height: 12),
+                toDateField,
+              ] else if (isTablet) ...[
+                Row(children: [Expanded(child: sourceField), const SizedBox(width: 12), Expanded(child: typeField)]),
+                const SizedBox(height: 12),
+                nameField,
+                const SizedBox(height: 12),
+                Row(children: [Expanded(child: fromDateField), const SizedBox(width: 12), Expanded(child: toDateField)]),
+              ] else ...[
+                Row(children: [Expanded(child: sourceField), const SizedBox(width: 12), Expanded(child: typeField)]),
+                const SizedBox(height: 16),
+                Row(children: [Expanded(child: nameField), const SizedBox(width: 12), Expanded(child: fromDateField), const SizedBox(width: 12), Expanded(child: toDateField)]),
+              ],
+              const SizedBox(height: 20),
+              Wrap(
+                spacing: 12,
+                runSpacing: 12,
+                children: [
+                  if (isMobile) ...[
+                    SizedBox(width: double.infinity, child: applyButton),
+                    SizedBox(width: double.infinity, child: resetButton),
+                  ] else ...[
+                    applyButton,
+                    resetButton,
+                  ],
+                ],
+              ),
+            ],
+          ),
+        );
+      },
     );
   }
   
@@ -753,15 +919,58 @@ class _HRMFeedbackScreenState extends State<HRMFeedbackScreen> with SingleTicker
   
   Widget _buildStatisticsCards() {
     final bySource = _statistics['bySource'] ?? {};
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 20),
-      child: Column(
-        children: [
-          Row(children: [Expanded(child: _buildStatCard('Customers', bySource['customers'] ?? 0, Icons.people, primaryBlue)), const SizedBox(width: 12), Expanded(child: _buildStatCard('Drivers', bySource['drivers'] ?? 0, Icons.local_shipping, successGreen))]),
-          const SizedBox(height: 12),
-          Row(children: [Expanded(child: _buildStatCard('Clients', bySource['clients'] ?? 0, Icons.business, warningOrange)), const SizedBox(width: 12), Expanded(child: _buildStatCard('Admins', bySource['employeeAdmins'] ?? 0, Icons.admin_panel_settings, primaryPurple))])
-        ],
-      ),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final isMobile = constraints.maxWidth < 600;
+        final marginH = isMobile ? 12.0 : 20.0;
+        final cardCustomers = _buildStatCard('Customers', bySource['customers'] ?? 0, Icons.people, primaryBlue);
+        final cardDrivers = _buildStatCard('Drivers', bySource['drivers'] ?? 0, Icons.local_shipping, successGreen);
+        final cardClients = _buildStatCard('Clients', bySource['clients'] ?? 0, Icons.business, warningOrange);
+        final cardAdmins = _buildStatCard('Admins', bySource['employeeAdmins'] ?? 0, Icons.admin_panel_settings, primaryPurple);
+
+        Widget content;
+        if (constraints.maxWidth < 600) {
+          // 1-col on mobile
+          content = Column(
+            children: [
+              cardCustomers,
+              const SizedBox(height: 12),
+              cardDrivers,
+              const SizedBox(height: 12),
+              cardClients,
+              const SizedBox(height: 12),
+              cardAdmins,
+            ],
+          );
+        } else if (constraints.maxWidth < 1000) {
+          // 2x2 on tablet
+          content = Column(
+            children: [
+              Row(children: [Expanded(child: cardCustomers), const SizedBox(width: 12), Expanded(child: cardDrivers)]),
+              const SizedBox(height: 12),
+              Row(children: [Expanded(child: cardClients), const SizedBox(width: 12), Expanded(child: cardAdmins)]),
+            ],
+          );
+        } else {
+          // Row on desktop
+          content = Row(
+            children: [
+              Expanded(child: cardCustomers),
+              const SizedBox(width: 12),
+              Expanded(child: cardDrivers),
+              const SizedBox(width: 12),
+              Expanded(child: cardClients),
+              const SizedBox(width: 12),
+              Expanded(child: cardAdmins),
+            ],
+          );
+        }
+
+        return Padding(
+          padding: EdgeInsets.symmetric(horizontal: marginH),
+          child: content,
+        );
+      },
     );
   }
   
@@ -781,21 +990,27 @@ class _HRMFeedbackScreenState extends State<HRMFeedbackScreen> with SingleTicker
     final byType = _statistics['byType']?['overall'] ?? {};
     final total = (byType['suggestion'] ?? 0) + (byType['complaint'] ?? 0) + (byType['appreciation'] ?? 0) + (byType['general'] ?? 0);
     if (total == 0) return const SizedBox.shrink();
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 20),
-      padding: const EdgeInsets.all(24),
-      decoration: BoxDecoration(color: cardWhite, borderRadius: BorderRadius.circular(20), boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 15, offset: const Offset(0, 5))]),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(children: const [Icon(Icons.pie_chart, color: primaryBlue, size: 24), SizedBox(width: 12), Text('Feedback Distribution', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: darkText))]),
-          const SizedBox(height: 24),
-          SizedBox(height: 200, child: PieChart(PieChartData(sections: [PieChartSectionData(value: (byType['suggestion'] ?? 0).toDouble(), color: primaryBlue, title: '${(((byType['suggestion'] ?? 0) / total) * 100).toStringAsFixed(0)}%', radius: 85, titleStyle: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Colors.white)), PieChartSectionData(value: (byType['complaint'] ?? 0).toDouble(), color: dangerRed, title: '${(((byType['complaint'] ?? 0) / total) * 100).toStringAsFixed(0)}%', radius: 85, titleStyle: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Colors.white)), PieChartSectionData(value: (byType['appreciation'] ?? 0).toDouble(), color: const Color(0xFFEC4899), title: '${(((byType['appreciation'] ?? 0) / total) * 100).toStringAsFixed(0)}%', radius: 85, titleStyle: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Colors.white)), PieChartSectionData(value: (byType['general'] ?? 0).toDouble(), color: textGray, title: '${(((byType['general'] ?? 0) / total) * 100).toStringAsFixed(0)}%', radius: 85, titleStyle: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Colors.white))], sectionsSpace: 3, centerSpaceRadius: 45))),
-          const SizedBox(height: 24),
-          Wrap(spacing: 20, runSpacing: 12, children: [_buildLegendItem('Suggestions', primaryBlue, byType['suggestion'] ?? 0), _buildLegendItem('Complaints', dangerRed, byType['complaint'] ?? 0), _buildLegendItem('Appreciation', const Color(0xFFEC4899), byType['appreciation'] ?? 0), _buildLegendItem('General', textGray, byType['general'] ?? 0)])
-        ],
-      ),
-    );
+    return LayoutBuilder(builder: (context, constraints) {
+      final isMobile = constraints.maxWidth < 600;
+      final marginH = isMobile ? 12.0 : 20.0;
+      final paddingVal = isMobile ? 16.0 : 24.0;
+
+      return Container(
+        margin: EdgeInsets.symmetric(horizontal: marginH),
+        padding: EdgeInsets.all(paddingVal),
+        decoration: BoxDecoration(color: cardWhite, borderRadius: BorderRadius.circular(20), boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 15, offset: const Offset(0, 5))]),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(children: const [Icon(Icons.pie_chart, color: primaryBlue, size: 24), SizedBox(width: 12), Text('Feedback Distribution', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: darkText))]),
+            const SizedBox(height: 24),
+            SizedBox(height: 200, child: PieChart(PieChartData(sections: [PieChartSectionData(value: (byType['suggestion'] ?? 0).toDouble(), color: primaryBlue, title: '${(((byType['suggestion'] ?? 0) / total) * 100).toStringAsFixed(0)}%', radius: 85, titleStyle: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Colors.white)), PieChartSectionData(value: (byType['complaint'] ?? 0).toDouble(), color: dangerRed, title: '${(((byType['complaint'] ?? 0) / total) * 100).toStringAsFixed(0)}%', radius: 85, titleStyle: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Colors.white)), PieChartSectionData(value: (byType['appreciation'] ?? 0).toDouble(), color: const Color(0xFFEC4899), title: '${(((byType['appreciation'] ?? 0) / total) * 100).toStringAsFixed(0)}%', radius: 85, titleStyle: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Colors.white)), PieChartSectionData(value: (byType['general'] ?? 0).toDouble(), color: textGray, title: '${(((byType['general'] ?? 0) / total) * 100).toStringAsFixed(0)}%', radius: 85, titleStyle: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Colors.white))], sectionsSpace: 3, centerSpaceRadius: 45))),
+            const SizedBox(height: 24),
+            Wrap(spacing: 20, runSpacing: 12, children: [_buildLegendItem('Suggestions', primaryBlue, byType['suggestion'] ?? 0), _buildLegendItem('Complaints', dangerRed, byType['complaint'] ?? 0), _buildLegendItem('Appreciation', const Color(0xFFEC4899), byType['appreciation'] ?? 0), _buildLegendItem('General', textGray, byType['general'] ?? 0)])
+          ],
+        ),
+      );
+    });
   }
   
   Widget _buildLegendItem(String label, Color color, int value) {
@@ -807,17 +1022,21 @@ class _HRMFeedbackScreenState extends State<HRMFeedbackScreen> with SingleTicker
   // ============================================================================
   
   Widget _buildFeedbackTable(List<Map<String, dynamic>> feedbacks, {required bool isAdmin}) {
+    final screenWidth = MediaQuery.of(context).size.width;
+    final isMobile = screenWidth < 600;
+    final marginH = isMobile ? 12.0 : 20.0;
+
     if (feedbacks.isEmpty) {
-      return Container(margin: const EdgeInsets.symmetric(horizontal: 20), padding: const EdgeInsets.all(40), decoration: BoxDecoration(color: cardWhite, borderRadius: BorderRadius.circular(20), border: Border.all(color: borderGray, width: 2)), child: Column(children: [Icon(Icons.inbox, size: 64, color: borderGray.withOpacity(0.5)), const SizedBox(height: 16), const Text('No feedback found', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: darkText)), const SizedBox(height: 8), Text(isAdmin ? 'No feedback matches your filters.' : 'Be the first to share your thoughts!', style: const TextStyle(color: textGray, fontSize: 14))]));
+      return Container(margin: EdgeInsets.symmetric(horizontal: marginH), padding: EdgeInsets.all(isMobile ? 24 : 40), decoration: BoxDecoration(color: cardWhite, borderRadius: BorderRadius.circular(20), border: Border.all(color: borderGray, width: 2)), child: Column(children: [Icon(Icons.inbox, size: isMobile ? 48 : 64, color: borderGray.withOpacity(0.5)), const SizedBox(height: 16), const Text('No feedback found', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: darkText)), const SizedBox(height: 8), Text(isAdmin ? 'No feedback matches your filters.' : 'Be the first to share your thoughts!', style: const TextStyle(color: textGray, fontSize: 14))]));
     }
     
     return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 20),
+      margin: EdgeInsets.symmetric(horizontal: marginH),
       decoration: BoxDecoration(color: cardWhite, borderRadius: BorderRadius.circular(20), boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 15, offset: const Offset(0, 5))]),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Container(padding: const EdgeInsets.all(20), decoration: const BoxDecoration(gradient: LinearGradient(colors: [primaryBlue, primaryPurple]), borderRadius: BorderRadius.only(topLeft: Radius.circular(20), topRight: Radius.circular(20))), child: Row(children: const [Icon(Icons.feedback, color: Colors.white, size: 24), SizedBox(width: 12), Text('Feedback Management', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold))])),
+          Container(padding: EdgeInsets.all(isMobile ? 16 : 20), decoration: const BoxDecoration(gradient: LinearGradient(colors: [primaryBlue, primaryPurple]), borderRadius: BorderRadius.only(topLeft: Radius.circular(20), topRight: Radius.circular(20))), child: Row(children: const [Icon(Icons.feedback, color: Colors.white, size: 24), SizedBox(width: 12), Text('Feedback Management', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold))])),
           SingleChildScrollView(
             scrollDirection: Axis.horizontal,
             child: Theme(
@@ -825,8 +1044,8 @@ class _HRMFeedbackScreenState extends State<HRMFeedbackScreen> with SingleTicker
               child: DataTable(
                 headingRowColor: MaterialStateProperty.all(lightBg),
                 dataRowHeight: 80,
-                horizontalMargin: 20,
-                columnSpacing: 20,
+                horizontalMargin: isMobile ? 12 : 20,
+                columnSpacing: isMobile ? 14 : 20,
                 columns: [
                   const DataColumn(label: Text('SOURCE', style: TextStyle(fontWeight: FontWeight.bold))),
                   const DataColumn(label: Text('TYPE', style: TextStyle(fontWeight: FontWeight.bold))),
@@ -910,73 +1129,147 @@ class _HRMFeedbackScreenState extends State<HRMFeedbackScreen> with SingleTicker
   Widget _buildPagination() {
     final currentPage = _pagination['currentPage'] ?? 1;
     final totalPages = _pagination['totalPages'] ?? 1;
-    return Container(margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 20), child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [Container(decoration: BoxDecoration(gradient: currentPage > 1 ? const LinearGradient(colors: [primaryBlue, primaryPurple]) : null, color: currentPage > 1 ? null : borderGray, borderRadius: BorderRadius.circular(12)), child: IconButton(onPressed: currentPage > 1 ? () { setState(() { _currentPage = currentPage - 1; }); _loadAllFeedbacks(); } : null, icon: const Icon(Icons.chevron_left, color: Colors.white))), const SizedBox(width: 20), Container(padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12), decoration: BoxDecoration(color: cardWhite, borderRadius: BorderRadius.circular(12), border: Border.all(color: primaryBlue, width: 2)), child: Text('Page $currentPage of $totalPages', style: const TextStyle(fontWeight: FontWeight.bold, color: primaryBlue, fontSize: 14))), const SizedBox(width: 20), Container(decoration: BoxDecoration(gradient: currentPage < totalPages ? const LinearGradient(colors: [primaryBlue, primaryPurple]) : null, color: currentPage < totalPages ? null : borderGray, borderRadius: BorderRadius.circular(12)), child: IconButton(onPressed: currentPage < totalPages ? () { setState(() { _currentPage = currentPage + 1; }); _loadAllFeedbacks(); } : null, icon: const Icon(Icons.chevron_right, color: Colors.white)))]));
+    final isMobile = MediaQuery.of(context).size.width < 600;
+    final marginH = isMobile ? 12.0 : 20.0;
+    return Container(
+      margin: EdgeInsets.symmetric(horizontal: marginH, vertical: 20),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Container(
+            decoration: BoxDecoration(
+              gradient: currentPage > 1 ? const LinearGradient(colors: [primaryBlue, primaryPurple]) : null,
+              color: currentPage > 1 ? null : borderGray,
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: IconButton(
+              onPressed: currentPage > 1
+                  ? () {
+                      setState(() { _currentPage = currentPage - 1; });
+                      _loadAllFeedbacks();
+                    }
+                  : null,
+              icon: const Icon(Icons.chevron_left, color: Colors.white),
+            ),
+          ),
+          SizedBox(width: isMobile ? 10 : 20),
+          Container(
+            padding: EdgeInsets.symmetric(horizontal: isMobile ? 12 : 20, vertical: 12),
+            decoration: BoxDecoration(color: cardWhite, borderRadius: BorderRadius.circular(12), border: Border.all(color: primaryBlue, width: 2)),
+            child: Text('Page $currentPage of $totalPages', style: TextStyle(fontWeight: FontWeight.bold, color: primaryBlue, fontSize: isMobile ? 12 : 14)),
+          ),
+          SizedBox(width: isMobile ? 10 : 20),
+          Container(
+            decoration: BoxDecoration(
+              gradient: currentPage < totalPages ? const LinearGradient(colors: [primaryBlue, primaryPurple]) : null,
+              color: currentPage < totalPages ? null : borderGray,
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: IconButton(
+              onPressed: currentPage < totalPages
+                  ? () {
+                      setState(() { _currentPage = currentPage + 1; });
+                      _loadAllFeedbacks();
+                    }
+                  : null,
+              icon: const Icon(Icons.chevron_right, color: Colors.white),
+            ),
+          ),
+        ],
+      ),
+    );
   }
   
   Widget _buildPersonalSectionDivider() {
-    return Container(margin: const EdgeInsets.symmetric(horizontal: 20), child: Column(children: [Container(height: 4, decoration: BoxDecoration(gradient: const LinearGradient(colors: [primaryBlue, primaryPurple]), borderRadius: BorderRadius.circular(2)), ), const SizedBox(height: 12), Container(padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10), decoration: BoxDecoration(gradient: const LinearGradient(colors: [primaryBlue, primaryPurple]), borderRadius: BorderRadius.circular(20), boxShadow: [BoxShadow(color: primaryBlue.withOpacity(0.3), blurRadius: 12, offset: const Offset(0, 4))]), child: const Text('MY PERSONAL FEEDBACK', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w900, color: Colors.white, letterSpacing: 1.5)))]));
+    final marginH = MediaQuery.of(context).size.width < 600 ? 12.0 : 20.0;
+    return Container(margin: EdgeInsets.symmetric(horizontal: marginH), child: Column(children: [Container(height: 4, decoration: BoxDecoration(gradient: const LinearGradient(colors: [primaryBlue, primaryPurple]), borderRadius: BorderRadius.circular(2)), ), const SizedBox(height: 12), Container(padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10), decoration: BoxDecoration(gradient: const LinearGradient(colors: [primaryBlue, primaryPurple]), borderRadius: BorderRadius.circular(20), boxShadow: [BoxShadow(color: primaryBlue.withOpacity(0.3), blurRadius: 12, offset: const Offset(0, 4))]), child: const Text('MY PERSONAL FEEDBACK', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w900, color: Colors.white, letterSpacing: 1.5)))]));
   }
   
   Widget _buildPersonalStatistics() {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 20),
-      child: LayoutBuilder(builder: (context, constraints) {
-        final total = _buildStatCard('Total', _myStatistics['totalCount'] ?? 0, Icons.chat_bubble, primaryBlue);
-        final responded = _buildStatCard('Responded', _myStatistics['respondedCount'] ?? 0, Icons.check_circle, successGreen);
-        final pending = _buildStatCard('Pending', _myStatistics['pendingCount'] ?? 0, Icons.access_time, warningOrange);
-        if (constraints.maxWidth < 420) {
-          // Phone: one card per row so numbers/labels never get squeezed.
-          return Column(children: [total, const SizedBox(height: 12), responded, const SizedBox(height: 12), pending]);
-        }
-        return Column(children: [
+    return LayoutBuilder(builder: (context, constraints) {
+      final isMobile = constraints.maxWidth < 600;
+      final marginH = isMobile ? 12.0 : 20.0;
+      final total = _buildStatCard('Total', _myStatistics['totalCount'] ?? 0, Icons.chat_bubble, primaryBlue);
+      final responded = _buildStatCard('Responded', _myStatistics['respondedCount'] ?? 0, Icons.check_circle, successGreen);
+      final pending = _buildStatCard('Pending', _myStatistics['pendingCount'] ?? 0, Icons.access_time, warningOrange);
+
+      Widget content;
+      if (constraints.maxWidth < 600) {
+        // Phone: one card per row so numbers/labels never get squeezed.
+        content = Column(children: [total, const SizedBox(height: 12), responded, const SizedBox(height: 12), pending]);
+      } else if (constraints.maxWidth < 900) {
+        // Tablet: 2 in first row, 1 in second row
+        content = Column(children: [
           Row(children: [Expanded(child: total), const SizedBox(width: 12), Expanded(child: responded)]),
           const SizedBox(height: 12),
           Row(children: [Expanded(child: pending), const SizedBox(width: 12), const Expanded(child: SizedBox())])
         ]);
-      }),
-    );
+      } else {
+        // Desktop: all 3 in a single Row
+        content = Row(children: [
+          Expanded(child: total),
+          const SizedBox(width: 12),
+          Expanded(child: responded),
+          const SizedBox(width: 12),
+          Expanded(child: pending),
+        ]);
+      }
+
+      return Padding(
+        padding: EdgeInsets.symmetric(horizontal: marginH),
+        child: content,
+      );
+    });
   }
   
   Widget _buildPersonalFilters() {
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 20),
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(color: cardWhite, borderRadius: BorderRadius.circular(20), boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 15, offset: const Offset(0, 5))]),
-      child: LayoutBuilder(builder: (context, constraints) {
-        final fromField = Expanded(child: InkWell(onTap: () async { final date = await showDatePicker(context: context, initialDate: _myDateFrom != null ? DateTime.parse(_myDateFrom!) : DateTime.now(), firstDate: DateTime(2020), lastDate: DateTime.now()); if (date != null) { setState(() { _myDateFrom = DateFormat('yyyy-MM-dd').format(date); }); } }, child: Container(padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16), decoration: BoxDecoration(color: lightBg, borderRadius: BorderRadius.circular(12), border: Border.all(color: borderGray)), child: Row(children: [const Icon(Icons.calendar_today, size: 16, color: primaryBlue), const SizedBox(width: 8), Expanded(child: Text(_myDateFrom ?? 'From Date', style: TextStyle(fontSize: 14, color: _myDateFrom != null ? darkText : textGray)))]))));
-        final toField = Expanded(child: InkWell(onTap: () async { final date = await showDatePicker(context: context, initialDate: _myDateTo != null ? DateTime.parse(_myDateTo!) : DateTime.now(), firstDate: DateTime(2020), lastDate: DateTime.now()); if (date != null) { setState(() { _myDateTo = DateFormat('yyyy-MM-dd').format(date); }); } }, child: Container(padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16), decoration: BoxDecoration(color: lightBg, borderRadius: BorderRadius.circular(12), border: Border.all(color: borderGray)), child: Row(children: [const Icon(Icons.calendar_today, size: 16, color: primaryPurple), const SizedBox(width: 8), Expanded(child: Text(_myDateTo ?? 'To Date', style: TextStyle(fontSize: 14, color: _myDateTo != null ? darkText : textGray)))]))));
-        final applyBtn = Container(height: 50, width: 50, decoration: BoxDecoration(gradient: const LinearGradient(colors: [primaryBlue, primaryPurple]), borderRadius: BorderRadius.circular(12), boxShadow: [BoxShadow(color: primaryBlue.withOpacity(0.3), blurRadius: 8, offset: const Offset(0, 4))]), child: IconButton(onPressed: _applyPersonalFilters, icon: const Icon(Icons.filter_list, color: Colors.white)));
-        if (constraints.maxWidth < 480) {
-          // Phone: stack the two date pickers, filter button below.
-          return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-            (fromField as Expanded).child, const SizedBox(height: 12),
-            (toField as Expanded).child, const SizedBox(height: 12),
-            Align(alignment: Alignment.centerRight, child: applyBtn),
-          ]);
-        }
-        return Row(children: [fromField, const SizedBox(width: 12), toField, const SizedBox(width: 12), applyBtn]);
-      }),
-    );
+    return LayoutBuilder(builder: (context, constraints) {
+      final isMobile = constraints.maxWidth < 600;
+      final marginH = isMobile ? 12.0 : 20.0;
+      final paddingVal = isMobile ? 14.0 : 20.0;
+      final fromFieldWidget = InkWell(onTap: () async { final date = await showDatePicker(context: context, initialDate: _myDateFrom != null ? DateTime.parse(_myDateFrom!) : DateTime.now(), firstDate: DateTime(2020), lastDate: DateTime.now()); if (date != null) { setState(() { _myDateFrom = DateFormat('yyyy-MM-dd').format(date); }); } }, child: Container(padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16), decoration: BoxDecoration(color: lightBg, borderRadius: BorderRadius.circular(12), border: Border.all(color: borderGray)), child: Row(children: [const Icon(Icons.calendar_today, size: 16, color: primaryBlue), const SizedBox(width: 8), Expanded(child: Text(_myDateFrom ?? 'From Date', style: TextStyle(fontSize: 14, color: _myDateFrom != null ? darkText : textGray)))])));
+      final toFieldWidget = InkWell(onTap: () async { final date = await showDatePicker(context: context, initialDate: _myDateTo != null ? DateTime.parse(_myDateTo!) : DateTime.now(), firstDate: DateTime(2020), lastDate: DateTime.now()); if (date != null) { setState(() { _myDateTo = DateFormat('yyyy-MM-dd').format(date); }); } }, child: Container(padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16), decoration: BoxDecoration(color: lightBg, borderRadius: BorderRadius.circular(12), border: Border.all(color: borderGray)), child: Row(children: [const Icon(Icons.calendar_today, size: 16, color: primaryPurple), const SizedBox(width: 8), Expanded(child: Text(_myDateTo ?? 'To Date', style: TextStyle(fontSize: 14, color: _myDateTo != null ? darkText : textGray)))])));
+      final applyBtn = Container(height: 50, width: 50, decoration: BoxDecoration(gradient: const LinearGradient(colors: [primaryBlue, primaryPurple]), borderRadius: BorderRadius.circular(12), boxShadow: [BoxShadow(color: primaryBlue.withOpacity(0.3), blurRadius: 8, offset: const Offset(0, 4))]), child: IconButton(onPressed: _applyPersonalFilters, icon: const Icon(Icons.filter_list, color: Colors.white)));
+
+      return Container(
+        margin: EdgeInsets.symmetric(horizontal: marginH),
+        padding: EdgeInsets.all(paddingVal),
+        decoration: BoxDecoration(color: cardWhite, borderRadius: BorderRadius.circular(20), boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 15, offset: const Offset(0, 5))]),
+        child: isMobile
+            ? Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                fromFieldWidget, const SizedBox(height: 12),
+                toFieldWidget, const SizedBox(height: 12),
+                Align(alignment: Alignment.centerRight, child: applyBtn),
+              ])
+            : Row(children: [Expanded(child: fromFieldWidget), const SizedBox(width: 12), Expanded(child: toFieldWidget), const SizedBox(width: 12), applyBtn]),
+      );
+    });
   }
   
   Widget _buildSubmitFeedbackForm() {
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 20),
-      padding: const EdgeInsets.all(24),
-      decoration: BoxDecoration(color: cardWhite, borderRadius: BorderRadius.circular(20), boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 15, offset: const Offset(0, 5))]),
-      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Row(children: const [Icon(Icons.edit, color: primaryBlue, size: 24), SizedBox(width: 12), Text('Submit New Feedback', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: darkText))]),
-        const SizedBox(height: 20),
-        Container(decoration: BoxDecoration(color: lightBg, borderRadius: BorderRadius.circular(12), border: Border.all(color: borderGray)), child: DropdownButtonFormField<String>(dropdownColor: cardWhite, style: const TextStyle(color: darkText, fontSize: 14), decoration: const InputDecoration(labelText: 'Feedback Type *', labelStyle: TextStyle(color: textGray, fontSize: 13), border: InputBorder.none, contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 12)), hint: const Text('Select Type'), items: const [DropdownMenuItem(value: 'suggestion', child: Text('💡 Suggestion')), DropdownMenuItem(value: 'complaint', child: Text('⚠️ Complaint')), DropdownMenuItem(value: 'general', child: Text('📝 General Feedback')), DropdownMenuItem(value: 'appreciation', child: Text('🎉 Appreciation'))], onChanged: (value) { _feedbackTypeController.text = value ?? ''; })),
-        const SizedBox(height: 16),
-        Column(crossAxisAlignment: CrossAxisAlignment.start, children: [const Text('Rating *', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: darkText)), const SizedBox(height: 8), Wrap(children: List.generate(5, (i) => IconButton(onPressed: () => setState(() => _selectedRating = i + 1), icon: Icon(i < _selectedRating ? Icons.star : Icons.star_border, color: warningOrange, size: 36))))]),
-        const SizedBox(height: 16),
-        Container(decoration: BoxDecoration(color: lightBg, borderRadius: BorderRadius.circular(12), border: Border.all(color: borderGray)), child: TextField(controller: _subjectController, style: const TextStyle(color: darkText), decoration: const InputDecoration(labelText: 'Subject *', labelStyle: TextStyle(color: textGray, fontSize: 13), hintText: 'Brief subject', border: InputBorder.none, contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 12)))),
-        const SizedBox(height: 16),
-        Container(decoration: BoxDecoration(color: lightBg, borderRadius: BorderRadius.circular(12), border: Border.all(color: borderGray)), child: TextField(controller: _messageController, maxLines: 5, style: const TextStyle(color: darkText), decoration: const InputDecoration(labelText: 'Message *', labelStyle: TextStyle(color: textGray, fontSize: 13), hintText: 'Provide detailed feedback', border: InputBorder.none, contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 12)))),
-        const SizedBox(height: 24),
-        SizedBox(width: double.infinity, height: 54, child: Container(decoration: BoxDecoration(gradient: const LinearGradient(colors: [primaryBlue, primaryPurple]), borderRadius: BorderRadius.circular(14), boxShadow: [BoxShadow(color: primaryBlue.withOpacity(0.4), blurRadius: 15, offset: const Offset(0, 8))]), child: ElevatedButton.icon(onPressed: _submitFeedback, icon: const Icon(Icons.send, color: Colors.white, size: 20), label: const Text('Submit Feedback', style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)), style: ElevatedButton.styleFrom(backgroundColor: Colors.transparent, shadowColor: Colors.transparent, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14))))))
-      ]),
-    );
+    return LayoutBuilder(builder: (context, constraints) {
+      final isMobile = constraints.maxWidth < 600;
+      final marginH = isMobile ? 12.0 : 20.0;
+      final paddingVal = isMobile ? 16.0 : 24.0;
+
+      return Container(
+        margin: EdgeInsets.symmetric(horizontal: marginH),
+        padding: EdgeInsets.all(paddingVal),
+        decoration: BoxDecoration(color: cardWhite, borderRadius: BorderRadius.circular(20), boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 15, offset: const Offset(0, 5))]),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Row(children: const [Icon(Icons.edit, color: primaryBlue, size: 24), SizedBox(width: 12), Text('Submit New Feedback', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: darkText))]),
+          const SizedBox(height: 20),
+          Container(decoration: BoxDecoration(color: lightBg, borderRadius: BorderRadius.circular(12), border: Border.all(color: borderGray)), child: DropdownButtonFormField<String>(dropdownColor: cardWhite, style: const TextStyle(color: darkText, fontSize: 14), decoration: const InputDecoration(labelText: 'Feedback Type *', labelStyle: TextStyle(color: textGray, fontSize: 13), border: InputBorder.none, contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 12)), hint: const Text('Select Type'), items: const [DropdownMenuItem(value: 'suggestion', child: Text('💡 Suggestion')), DropdownMenuItem(value: 'complaint', child: Text('⚠️ Complaint')), DropdownMenuItem(value: 'general', child: Text('📝 General Feedback')), DropdownMenuItem(value: 'appreciation', child: Text('🎉 Appreciation'))], onChanged: (value) { _feedbackTypeController.text = value ?? ''; })),
+          const SizedBox(height: 16),
+          Column(crossAxisAlignment: CrossAxisAlignment.start, children: [const Text('Rating *', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: darkText)), const SizedBox(height: 8), Wrap(children: List.generate(5, (i) => IconButton(onPressed: () => setState(() => _selectedRating = i + 1), icon: Icon(i < _selectedRating ? Icons.star : Icons.star_border, color: warningOrange, size: 36))))]),
+          const SizedBox(height: 16),
+          Container(decoration: BoxDecoration(color: lightBg, borderRadius: BorderRadius.circular(12), border: Border.all(color: borderGray)), child: TextField(controller: _subjectController, style: const TextStyle(color: darkText), decoration: const InputDecoration(labelText: 'Subject *', labelStyle: TextStyle(color: textGray, fontSize: 13), hintText: 'Brief subject', border: InputBorder.none, contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 12)))),
+          const SizedBox(height: 16),
+          Container(decoration: BoxDecoration(color: lightBg, borderRadius: BorderRadius.circular(12), border: Border.all(color: borderGray)), child: TextField(controller: _messageController, maxLines: 5, style: const TextStyle(color: darkText), decoration: const InputDecoration(labelText: 'Message *', labelStyle: TextStyle(color: textGray, fontSize: 13), hintText: 'Provide detailed feedback', border: InputBorder.none, contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 12)))),
+          const SizedBox(height: 24),
+          SizedBox(width: double.infinity, height: 54, child: Container(decoration: BoxDecoration(gradient: const LinearGradient(colors: [primaryBlue, primaryPurple]), borderRadius: BorderRadius.circular(14), boxShadow: [BoxShadow(color: primaryBlue.withOpacity(0.4), blurRadius: 15, offset: const Offset(0, 8))]), child: ElevatedButton.icon(onPressed: _submitFeedback, icon: const Icon(Icons.send, color: Colors.white, size: 20), label: const Text('Submit Feedback', style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)), style: ElevatedButton.styleFrom(backgroundColor: Colors.transparent, shadowColor: Colors.transparent, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14))))))
+        ]),
+      );
+    });
   }
 }

@@ -204,7 +204,7 @@ class _AdminAllCustomersPageState extends State<AdminAllCustomersPage> {
               return RefreshIndicator(
                 onRefresh: () => _refreshCustomers(),
                 child: SingleChildScrollView(
-                  padding: const EdgeInsets.all(24),
+                  padding: EdgeInsets.all(MediaQuery.of(context).size.width < 600 ? 12 : (MediaQuery.of(context).size.width < 1024 ? 16 : 24)),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -723,54 +723,89 @@ class _AdminAllCustomersPageState extends State<AdminAllCustomersPage> {
     final inactiveCustomers = customers.where((c) => c.status.toLowerCase() == 'inactive').length;
     final pendingCustomers = customers.where((c) => c.status.toLowerCase() == 'pending').length;
 
-    return Row(
-      children: [
-        Expanded(
-          child: _buildStatCard(
-            label: 'Total Customers',
-            value: customers.length.toString(),
-            subtitle: 'All registered',
-            icon: Icons.people_alt_rounded,
-            color: const Color(0xFF0F2557),
-            iconBg: const Color(0xFFEFF6FF),
-          ),
-        ),
-        const SizedBox(width: 16),
-        Expanded(
-          child: _buildStatCard(
-            label: 'Active Customers',
-            value: activeCustomers.toString(),
-            subtitle: customers.isEmpty 
-              ? '0%' 
-              : '${((activeCustomers / customers.length) * 100).toStringAsFixed(0)}% active',
-            icon: Icons.check_circle_rounded,
-            color: const Color(0xFF10B981),
-            iconBg: const Color(0xFFECFDF5),
-          ),
-        ),
-        const SizedBox(width: 16),
-        Expanded(
-          child: _buildStatCard(
-            label: 'Inactive',
-            value: inactiveCustomers.toString(),
-            subtitle: 'Need attention',
-            icon: Icons.pause_circle_filled_rounded,
-            color: const Color(0xFFF59E0B),
-            iconBg: const Color(0xFFFFFBEB),
-          ),
-        ),
-        const SizedBox(width: 16),
-        Expanded(
-          child: _buildStatCard(
-            label: 'Pending Approval',
-            value: pendingCustomers.toString(),
-            subtitle: 'Awaiting verification',
-            icon: Icons.hourglass_top_rounded,
-            color: const Color(0xFFEF4444),
-            iconBg: const Color(0xFFFEF2F2),
-          ),
-        ),
-      ],
+    final cardTotal = _buildStatCard(
+      label: 'Total Customers',
+      value: customers.length.toString(),
+      subtitle: 'All registered',
+      icon: Icons.people_alt_rounded,
+      color: const Color(0xFF0F2557),
+      iconBg: const Color(0xFFEFF6FF),
+    );
+    final cardActive = _buildStatCard(
+      label: 'Active Customers',
+      value: activeCustomers.toString(),
+      subtitle: customers.isEmpty 
+        ? '0%' 
+        : '\% active',
+      icon: Icons.check_circle_rounded,
+      color: const Color(0xFF10B981),
+      iconBg: const Color(0xFFECFDF5),
+    );
+    final cardInactive = _buildStatCard(
+      label: 'Inactive',
+      value: inactiveCustomers.toString(),
+      subtitle: 'Need attention',
+      icon: Icons.pause_circle_filled_rounded,
+      color: const Color(0xFFF59E0B),
+      iconBg: const Color(0xFFFFFBEB),
+    );
+    final cardPending = _buildStatCard(
+      label: 'Pending Approval',
+      value: pendingCustomers.toString(),
+      subtitle: 'Awaiting verification',
+      icon: Icons.hourglass_top_rounded,
+      color: const Color(0xFFEF4444),
+      iconBg: const Color(0xFFFEF2F2),
+    );
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        if (constraints.maxWidth < 600) {
+          return Column(
+            children: [
+              cardTotal,
+              const SizedBox(height: 12),
+              cardActive,
+              const SizedBox(height: 12),
+              cardInactive,
+              const SizedBox(height: 12),
+              cardPending,
+            ],
+          );
+        } else if (constraints.maxWidth < 1024) {
+          return Column(
+            children: [
+              Row(
+                children: [
+                  Expanded(child: cardTotal),
+                  const SizedBox(width: 16),
+                  Expanded(child: cardActive),
+                ],
+              ),
+              const SizedBox(height: 16),
+              Row(
+                children: [
+                  Expanded(child: cardInactive),
+                  const SizedBox(width: 16),
+                  Expanded(child: cardPending),
+                ],
+              ),
+            ],
+          );
+        } else {
+          return Row(
+            children: [
+              Expanded(child: cardTotal),
+              const SizedBox(width: 16),
+              Expanded(child: cardActive),
+              const SizedBox(width: 16),
+              Expanded(child: cardInactive),
+              const SizedBox(width: 16),
+              Expanded(child: cardPending),
+            ],
+          );
+        }
+      },
     );
   }
 
@@ -884,19 +919,59 @@ class _AdminAllCustomersPageState extends State<AdminAllCustomersPage> {
             ],
           ),
           const SizedBox(height: 18),
-          Row(
-            children: [
-              Expanded(child: _buildOrganizationDropdown(provider)),
-              const SizedBox(width: 16),
-              Expanded(child: _buildStatusDropdown()),
-              const SizedBox(width: 16),
-              Expanded(child: _buildDepartmentDropdown()),
-              const SizedBox(width: 16),
-              Expanded(flex: 2, child: _buildSearchField()),
-            ],
+          LayoutBuilder(
+            builder: (context, constraints) {
+              if (constraints.maxWidth < 600) {
+                return Column(
+                  children: [
+                    _buildOrganizationDropdown(provider),
+                    const SizedBox(height: 12),
+                    _buildStatusDropdown(),
+                    const SizedBox(height: 12),
+                    _buildDepartmentDropdown(),
+                    const SizedBox(height: 12),
+                    _buildSearchField(),
+                  ],
+                );
+              } else if (constraints.maxWidth < 1024) {
+                return Column(
+                  children: [
+                    Row(
+                      children: [
+                        Expanded(child: _buildOrganizationDropdown(provider)),
+                        const SizedBox(width: 16),
+                        Expanded(child: _buildStatusDropdown()),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    Row(
+                      children: [
+                        Expanded(child: _buildDepartmentDropdown()),
+                        const SizedBox(width: 16),
+                        Expanded(child: _buildSearchField()),
+                      ],
+                    ),
+                  ],
+                );
+              } else {
+                return Row(
+                  children: [
+                    Expanded(child: _buildOrganizationDropdown(provider)),
+                    const SizedBox(width: 16),
+                    Expanded(child: _buildStatusDropdown()),
+                    const SizedBox(width: 16),
+                    Expanded(child: _buildDepartmentDropdown()),
+                    const SizedBox(width: 16),
+                    Expanded(flex: 2, child: _buildSearchField()),
+                  ],
+                );
+              }
+            },
           ),
           const SizedBox(height: 18),
-          Row(
+          Wrap(
+            spacing: 12,
+            runSpacing: 12,
             children: [
               Container(
                 decoration: BoxDecoration(
@@ -935,7 +1010,6 @@ class _AdminAllCustomersPageState extends State<AdminAllCustomersPage> {
                   ),
                 ),
               ),
-              const SizedBox(width: 12),
               OutlinedButton.icon(
                 onPressed: () {
                   setState(() {
@@ -1333,25 +1407,29 @@ class _AdminAllCustomersPageState extends State<AdminAllCustomersPage> {
                 bottom: BorderSide(color: Color(0xFFE2E8F0), width: 1.5),
               ),
             ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Row(
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                final titleWidget = Row(
+                  mainAxisSize: MainAxisSize.min,
                   children: [
                     const Icon(Icons.people_alt, color: Color(0xFF0F2557), size: 22),
                     const SizedBox(width: 10),
-                    Text(
-                      'Customer Directory (${customers.length})',
-                      style: const TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.w800,
-                        color: Color(0xFF0F2557),
-                        letterSpacing: 0.2,
+                    Flexible(
+                      child: Text(
+                        'Customer Directory ()',
+                        style: const TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w800,
+                          color: Color(0xFF0F2557),
+                          letterSpacing: 0.2,
+                        ),
+                        overflow: TextOverflow.ellipsis,
                       ),
                     ),
                   ],
-                ),
-                Wrap(
+                );
+
+                final buttonsWrap = Wrap(
                   spacing: 8,
                   runSpacing: 8,
                   crossAxisAlignment: WrapCrossAlignment.center,
@@ -1599,8 +1677,27 @@ class _AdminAllCustomersPageState extends State<AdminAllCustomersPage> {
                       ),
                     ),
                   ],
-                ),
-              ],
+                );
+
+                if (constraints.maxWidth < 960) {
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      titleWidget,
+                      const SizedBox(height: 12),
+                      buttonsWrap,
+                    ],
+                  );
+                } else {
+                  return Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      titleWidget,
+                      Flexible(child: buttonsWrap),
+                    ],
+                  );
+                }
+              },
             ),
           ),
 
@@ -1617,22 +1714,26 @@ class _AdminAllCustomersPageState extends State<AdminAllCustomersPage> {
               children: [
                 const Icon(Icons.pan_tool_alt_outlined, size: 15, color: Color(0xFF1A3FC4)),
                 const SizedBox(width: 8),
-                const Text(
-                  'Horizontal & Vertical Scrolling: Click and drag with mouse, use trackpad, or use the scrollbar below to scroll columns.',
-                  style: TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                    color: Color(0xFF1E3A8A),
+                const Expanded(
+                  child: Text(
+                    'Horizontal & Vertical Scrolling: Click and drag with mouse, use trackpad, or use the scrollbar below to scroll columns.',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: Color(0xFF1E3A8A),
+                    ),
                   ),
                 ),
-                const Spacer(),
+                const SizedBox(width: 8),
                 InkWell(
                   onTap: () {
-                    _horizontalScrollController.animateTo(
-                      _horizontalScrollController.position.maxScrollExtent,
-                      duration: const Duration(milliseconds: 300),
-                      curve: Curves.easeOut,
-                    );
+                    if (_horizontalScrollController.hasClients) {
+                      _horizontalScrollController.animateTo(
+                        _horizontalScrollController.position.maxScrollExtent,
+                        duration: const Duration(milliseconds: 300),
+                        curve: Curves.easeOut,
+                      );
+                    }
                   },
                   child: const Row(
                     mainAxisSize: MainAxisSize.min,
@@ -1713,13 +1814,31 @@ class _AdminAllCustomersPageState extends State<AdminAllCustomersPage> {
                     trackColor: const Color(0xFFE2E8F0),
                     trackRadius: const Radius.circular(5),
                     scrollbarOrientation: ScrollbarOrientation.bottom,
-                    child: SingleChildScrollView(
-                      controller: _horizontalScrollController,
-                      scrollDirection: Axis.horizontal,
-                      physics: const BouncingScrollPhysics(),
-                      child: ConstrainedBox(
-                        constraints: const BoxConstraints(minWidth: 1200),
-                        child: MouseRegion(
+                    child: RawScrollbar(
+                      controller: _verticalScrollController,
+                      thumbVisibility: true,
+                      trackVisibility: true,
+                      thickness: 10,
+                      radius: const Radius.circular(5),
+                      thumbColor: const Color(0xFF0F2557),
+                      trackColor: const Color(0xFFE2E8F0),
+                      trackRadius: const Radius.circular(5),
+                      scrollbarOrientation: ScrollbarOrientation.right,
+                      child: SingleChildScrollView(
+                        controller: _horizontalScrollController,
+                        scrollDirection: Axis.horizontal,
+                        physics: const BouncingScrollPhysics(),
+                        child: SingleChildScrollView(
+                          controller: _verticalScrollController,
+                          scrollDirection: Axis.vertical,
+                          physics: const BouncingScrollPhysics(),
+                          child: ConstrainedBox(
+                            constraints: BoxConstraints(
+                              minWidth: MediaQuery.of(context).size.width < 600
+                                  ? 900
+                                  : (MediaQuery.of(context).size.width < 1024 ? 1100 : 1200),
+                            ),
+                            child: MouseRegion(
                           cursor: SystemMouseCursors.grab,
                           child: DataTable(
                             border: const TableBorder(
@@ -2070,10 +2189,12 @@ class _AdminAllCustomersPageState extends State<AdminAllCustomersPage> {
                         ),      // DataTable
                       ),        // MouseRegion
                     ),          // ConstrainedBox
-                  ),              // SingleChildScrollView (horizontal)
-                ),                  // RawScrollbar (horizontal)
-              ),                    // ScrollConfiguration
-            ),                      // Container
+                  ),              // SingleChildScrollView (vertical)
+                ),                  // SingleChildScrollView (horizontal)
+              ),                      // RawScrollbar (vertical)
+            ),                          // RawScrollbar (horizontal)
+          ),                              // ScrollConfiguration
+        ),                                  // Container
 
           if (totalItems > 0)
             _buildPaginationBar(

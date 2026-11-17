@@ -610,14 +610,46 @@ class _CustomersListPageState extends State<CustomersListPage> {
             Align(alignment: Alignment.centerRight, child: clearBtn),
           ]);
         }
-        return Row(children: [
-          const Text('Filters:', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: _navy)),
-          const SizedBox(width: 12),
-          Expanded(child: typeDD), const SizedBox(width: 10),
-          Expanded(child: statusDD), const SizedBox(width: 10),
-          Expanded(child: tierDD), const SizedBox(width: 10),
-          if (_hasAnyFilter) clearBtn,
-        ]);
+        return LayoutBuilder(
+          builder: (context, constraints) {
+            if (constraints.maxWidth < 850) {
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text('Filters:', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: _navy)),
+                      if (_hasAnyFilter) clearBtn,
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      Expanded(child: typeDD),
+                      const SizedBox(width: 10),
+                      Expanded(child: statusDD),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      Expanded(child: tierDD),
+                    ],
+                  ),
+                ],
+              );
+            }
+            return Row(children: [
+              const Text('Filters:', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: _navy)),
+              const SizedBox(width: 12),
+              Expanded(child: typeDD), const SizedBox(width: 10),
+              Expanded(child: statusDD), const SizedBox(width: 10),
+              Expanded(child: tierDD), const SizedBox(width: 10),
+              if (_hasAnyFilter) clearBtn,
+            ]);
+          },
+        );
       }),
     );
   }
@@ -761,6 +793,26 @@ class _CustomersListPageState extends State<CustomersListPage> {
               width: 160, margin: EdgeInsets.only(right: e.key < cards.length - 1 ? 10 : 0),
               child: _buildStatCard(e.value, compact: true),
             )).toList()),
+          );
+        } else if (c.maxWidth < 950) {
+          return Column(
+            children: [
+              Row(
+                children: [
+                  Expanded(child: _buildStatCard(cards[0], compact: true)),
+                  const SizedBox(width: 10),
+                  Expanded(child: _buildStatCard(cards[1], compact: true)),
+                ],
+              ),
+              const SizedBox(height: 10),
+              Row(
+                children: [
+                  Expanded(child: _buildStatCard(cards[2], compact: true)),
+                  const SizedBox(width: 10),
+                  Expanded(child: _buildStatCard(cards[3], compact: true)),
+                ],
+              ),
+            ],
           );
         }
         return Row(children: cards.asMap().entries.map((e) => Expanded(
@@ -1323,7 +1375,8 @@ class _BulkImportCustomersDialogState extends State<BulkImportCustomersDialog> {
     return Dialog(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
       child: Container(
-        width: 560,
+        constraints: const BoxConstraints(maxWidth: 560),
+        width: MediaQuery.of(context).size.width > 600 ? 560 : MediaQuery.of(context).size.width * 0.9,
         padding: const EdgeInsets.all(28),
         child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
           Row(children: [

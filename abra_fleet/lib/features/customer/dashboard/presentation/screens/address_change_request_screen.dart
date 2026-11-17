@@ -75,6 +75,7 @@ class _AddressChangeRequestScreenState extends State<AddressChangeRequestScreen>
       ),
     );
 
+    if (mounted) { final _m = ScaffoldMessenger.of(context); _m.clearSnackBars(); _m.removeCurrentSnackBar(); } // picker's messages must not linger on this page
     if (result != null) {
       setState(() {
         if (isPickup) {

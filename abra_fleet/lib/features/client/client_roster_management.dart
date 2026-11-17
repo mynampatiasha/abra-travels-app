@@ -562,64 +562,87 @@ class _ClientRosterManagementPageState extends State<ClientRosterManagementPage>
           
           const SizedBox(height: 12),
           
-          Row(
-            children: [
-              Expanded(
-                child: InkWell(
-                  onTap: () => _showTripsInline('assigned'),
-                  borderRadius: BorderRadius.circular(12),
-                  child: _buildTripStatCard(
-                    icon: Icons.assignment,
-                    color: const Color(0xFF2563EB),
-                    value: _assignedTripsCount.toString(),
-                    label: 'Assigned',
-                    isSelected: _selectedTripStatus == 'assigned',
-                  ),
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final cardAssigned = InkWell(
+                onTap: () => _showTripsInline('assigned'),
+                borderRadius: BorderRadius.circular(12),
+                child: _buildTripStatCard(
+                  icon: Icons.assignment,
+                  color: const Color(0xFF2563EB),
+                  value: _assignedTripsCount.toString(),
+                  label: 'Assigned',
+                  isSelected: _selectedTripStatus == 'assigned',
                 ),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: InkWell(
-                  onTap: () => _showTripsInline('ongoing'),
-                  borderRadius: BorderRadius.circular(12),
-                  child: _buildTripStatCard(
-                    icon: Icons.directions_car,
-                    color: const Color(0xFFF59E0B),
-                    value: _ongoingTripsCount.toString(),
-                    label: 'Ongoing',
-                    isSelected: _selectedTripStatus == 'ongoing',
-                  ),
+              );
+              final cardOngoing = InkWell(
+                onTap: () => _showTripsInline('ongoing'),
+                borderRadius: BorderRadius.circular(12),
+                child: _buildTripStatCard(
+                  icon: Icons.directions_car,
+                  color: const Color(0xFFF59E0B),
+                  value: _ongoingTripsCount.toString(),
+                  label: 'Ongoing',
+                  isSelected: _selectedTripStatus == 'ongoing',
                 ),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: InkWell(
-                  onTap: () => _showTripsInline('completed'),
-                  borderRadius: BorderRadius.circular(12),
-                  child: _buildTripStatCard(
-                    icon: Icons.check_circle,
-                    color: const Color(0xFF10B981),
-                    value: _completedTripsCount.toString(),
-                    label: 'Completed',
-                    isSelected: _selectedTripStatus == 'completed',
-                  ),
+              );
+              final cardCompleted = InkWell(
+                onTap: () => _showTripsInline('completed'),
+                borderRadius: BorderRadius.circular(12),
+                child: _buildTripStatCard(
+                  icon: Icons.check_circle,
+                  color: const Color(0xFF10B981),
+                  value: _completedTripsCount.toString(),
+                  label: 'Completed',
+                  isSelected: _selectedTripStatus == 'completed',
                 ),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: InkWell(
-                  onTap: () => _showTripsInline('cancelled'),
-                  borderRadius: BorderRadius.circular(12),
-                  child: _buildTripStatCard(
-                    icon: Icons.cancel,
-                    color: const Color(0xFFEF4444),
-                    value: _cancelledTripsCount.toString(),
-                    label: 'Cancelled',
-                    isSelected: _selectedTripStatus == 'cancelled',
-                  ),
+              );
+              final cardCancelled = InkWell(
+                onTap: () => _showTripsInline('cancelled'),
+                borderRadius: BorderRadius.circular(12),
+                child: _buildTripStatCard(
+                  icon: Icons.cancel,
+                  color: const Color(0xFFEF4444),
+                  value: _cancelledTripsCount.toString(),
+                  label: 'Cancelled',
+                  isSelected: _selectedTripStatus == 'cancelled',
                 ),
-              ),
-            ],
+              );
+
+              if (constraints.maxWidth < 600) {
+                return Column(
+                  children: [
+                    Row(
+                      children: [
+                        Expanded(child: cardAssigned),
+                        const SizedBox(width: 8),
+                        Expanded(child: cardOngoing),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        Expanded(child: cardCompleted),
+                        const SizedBox(width: 8),
+                        Expanded(child: cardCancelled),
+                      ],
+                    ),
+                  ],
+                );
+              }
+
+              return Row(
+                children: [
+                  Expanded(child: cardAssigned),
+                  const SizedBox(width: 8),
+                  Expanded(child: cardOngoing),
+                  const SizedBox(width: 8),
+                  Expanded(child: cardCompleted),
+                  const SizedBox(width: 8),
+                  Expanded(child: cardCancelled),
+                ],
+              );
+            },
           ),
         ],
       ),
@@ -2479,33 +2502,47 @@ class _ClientRosterManagementPageState extends State<ClientRosterManagementPage>
               ),
               const SizedBox(height: 12),
 
-              Row(
-                children: [
-                  Expanded(
-                    child: _buildInfoItem(
-                      icon: Icons.route,
-                      label: 'Routes',
-                      value: roster.routeCount.toString(),
-                      color: const Color(0xFF2563EB),
-                    ),
-                  ),
-                  Expanded(
-                    child: _buildInfoItem(
-                      icon: Icons.people,
-                      label: 'Employees',
-                      value: roster.employeeCount.toString(),
-                      color: const Color(0xFF10B981),
-                    ),
-                  ),
-                  Expanded(
-                    child: _buildInfoItem(
-                      icon: Icons.directions_bus,
-                      label: 'Vehicles',
-                      value: roster.vehicleCount.toString(),
-                      color: const Color(0xFFF59E0B),
-                    ),
-                  ),
-                ],
+              LayoutBuilder(
+                builder: (context, constraints) {
+                  final routesItem = _buildInfoItem(
+                    icon: Icons.route,
+                    label: 'Routes',
+                    value: roster.routeCount.toString(),
+                    color: const Color(0xFF2563EB),
+                  );
+                  final employeesItem = _buildInfoItem(
+                    icon: Icons.people,
+                    label: 'Employees',
+                    value: roster.employeeCount.toString(),
+                    color: const Color(0xFF10B981),
+                  );
+                  final vehiclesItem = _buildInfoItem(
+                    icon: Icons.directions_bus,
+                    label: 'Vehicles',
+                    value: roster.vehicleCount.toString(),
+                    color: const Color(0xFFF59E0B),
+                  );
+
+                  if (constraints.maxWidth < 320) {
+                    return Column(
+                      children: [
+                        routesItem,
+                        const SizedBox(height: 8),
+                        employeesItem,
+                        const SizedBox(height: 8),
+                        vehiclesItem,
+                      ],
+                    );
+                  }
+
+                  return Row(
+                    children: [
+                      Expanded(child: routesItem),
+                      Expanded(child: employeesItem),
+                      Expanded(child: vehiclesItem),
+                    ],
+                  );
+                },
               ),
               const SizedBox(height: 12),
 
@@ -2565,35 +2602,32 @@ class _ClientRosterManagementPageState extends State<ClientRosterManagementPage>
               ),
 
               const SizedBox(height: 12),
-              Row(
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
                 children: [
-                  Expanded(
-                    child: OutlinedButton.icon(
-                      onPressed: () => _viewRosterDetails(roster),
-                      icon: const Icon(Icons.visibility, size: 18),
-                      label: const Text('View Details'),
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: const Color(0xFF2563EB),
-                        side: const BorderSide(color: Color(0xFF2563EB)),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(8),
-                        ),
+                  OutlinedButton.icon(
+                    onPressed: () => _viewRosterDetails(roster),
+                    icon: const Icon(Icons.visibility, size: 18),
+                    label: const Text('View Details'),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: const Color(0xFF2563EB),
+                      side: const BorderSide(color: Color(0xFF2563EB)),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
                       ),
                     ),
                   ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: ElevatedButton.icon(
-                      onPressed: () => _editRoster(roster),
-                      icon: const Icon(Icons.edit, size: 18),
-                      label: const Text('Edit'),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFF2563EB),
-                        foregroundColor: Colors.white,
-                        elevation: 0,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(8),
-                        ),
+                  ElevatedButton.icon(
+                    onPressed: () => _editRoster(roster),
+                    icon: const Icon(Icons.edit, size: 18),
+                    label: const Text('Edit'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF2563EB),
+                      foregroundColor: Colors.white,
+                      elevation: 0,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
                       ),
                     ),
                   ),
@@ -3192,14 +3226,16 @@ class _ClientRosterManagementPageState extends State<ClientRosterManagementPage>
               const Spacer(),
               
               // Actions
-              Row(
-                mainAxisAlignment: MainAxisAlignment.end,
+              Wrap(
+                alignment: WrapAlignment.end,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                spacing: 12,
+                runSpacing: 8,
                 children: [
                   TextButton(
                     onPressed: () => Navigator.pop(context),
                     child: const Text('Cancel'),
                   ),
-                  const SizedBox(width: 12),
                   ElevatedButton.icon(
                     onPressed: () {
                       Navigator.pop(context);
