@@ -3,11 +3,13 @@ workflows:
     name: iOS Workflow
     max_build_duration: 120
     integrations:
-      app_store_connect: Codemagic
+      app_store_connect: abra-admin
     environment:
       flutter: stable
       xcode: latest
       cocoapods: default
+      vars:
+        APP_STORE_CONNECT_ALTOOL_ADDITIONAL_ARGUMENTS: "--use-old-altool"
       ios_signing:
         distribution_type: app_store
         bundle_identifier: com.abralogistic.abratravels
@@ -25,6 +27,7 @@ workflows:
       - name: Flutter build IPA
         script: |
           flutter build ipa --release \
+            --build-number=$PROJECT_BUILD_NUMBER \
             --export-options-plist=/Users/builder/export_options.plist
     artifacts:
       - build/ios/ipa/*.ipa
