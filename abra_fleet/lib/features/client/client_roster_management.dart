@@ -15,6 +15,7 @@ import 'package:abra_fleet/core/services/api_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'client_pending_assignment_tab.dart';
 import 'package:abra_fleet/core/widgets/responsive/responsive.dart';
+import 'package:abra_fleet/core/utils/client_data_rules.dart';
 
 class ClientRosterManagementPage extends StatefulWidget {
   const ClientRosterManagementPage({Key? key}) : super(key: key);
@@ -167,10 +168,28 @@ class _ClientRosterManagementPageState extends State<ClientRosterManagementPage>
   
   // ✅ NEW: Calculate trip statistics
   void _calculateTripStats() {
-    _assignedTripsCount = _allTrips.where((t) => _safeGetString(t, 'status', '') == 'assigned').length;
-    _ongoingTripsCount = _allTrips.where((t) => _safeGetString(t, 'status', '') == 'ongoing').length;
-    _completedTripsCount = _allTrips.where((t) => _safeGetString(t, 'status', '') == 'completed').length;
-    _cancelledTripsCount = _allTrips.where((t) => _safeGetString(t, 'status', '') == 'cancelled').length;
+    _assignedTripsCount = _allTrips.where((t) => _tripMatchesStatus(t, 'assigned')).length;
+    _ongoingTripsCount = _allTrips.where((t) => _tripMatchesStatus(t, 'ongoing')).length;
+    _completedTripsCount = _allTrips.where((t) => _tripMatchesStatus(t, 'completed')).length;
+    _cancelledTripsCount = _allTrips.where((t) => _tripMatchesStatus(t, 'cancelled')).length;
+  }
+
+  // Shared status rules (started / in_progress count as ongoing, etc.), so the
+  // card counts and the trips listed when a card is tapped always agree.
+  bool _tripMatchesStatus(Map<String, dynamic> trip, String status) {
+    final s = _safeGetString(trip, 'status', '');
+    switch (status) {
+      case 'assigned':
+        return isTripAssigned(s);
+      case 'ongoing':
+        return isTripOngoing(s);
+      case 'completed':
+        return isTripCompleted(s);
+      case 'cancelled':
+        return isTripCancelled(s);
+      default:
+        return s == status;
+    }
   }
   
   // ✅ NEW: Helper method to safely extract string values from JSON
@@ -193,7 +212,7 @@ class _ClientRosterManagementPageState extends State<ClientRosterManagementPage>
   // ✅ NEW: Show trips inline instead of dialog
   void _showTripsInline(String status) {
     final filteredTrips = _allTrips.where((trip) {
-      return _safeGetString(trip, 'status', '') == status;
+      return _tripMatchesStatus(trip, status);
     }).toList();
     
     setState(() {

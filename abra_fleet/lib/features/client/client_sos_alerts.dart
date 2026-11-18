@@ -17,6 +17,7 @@ import 'package:latlong2/latlong.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:abra_fleet/core/services/api_service.dart';
 import 'package:abra_fleet/core/widgets/responsive/responsive.dart';
+import 'package:abra_fleet/core/utils/client_data_rules.dart';
 
 class ClientSOSAlerts extends StatefulWidget {
   const ClientSOSAlerts({Key? key}) : super(key: key);
@@ -42,6 +43,8 @@ class _ClientSOSAlertsState extends State<ClientSOSAlerts> with SingleTickerProv
   List<ResolvedSOSAlert> _resolvedAlerts = [];
   
   bool _isLoadingActive = true;
+  // True when the last poll failed; previous lists are kept on screen.
+  bool _activeFetchFailed = false;
   bool _isLoadingResolved = true;
   StreamSubscription? _sosSubscription;
 
@@ -99,16 +102,26 @@ void _setupActiveSOSListener() {
       return response;
     } catch (e) {
       debugPrint('❌ Error fetching active SOS alerts: $e');
-      return {'success': false, 'data': []};
+      return {'success': false, '__failed': true};
     }
   }).listen((response) {
     if (!mounted) return;
+
+    // Failed request: keep the previous list, just show a small hint.
+    if (response['__failed'] == true || response['success'] == false) {
+      setState(() {
+        _activeFetchFailed = true;
+        _isLoadingActive = false;
+      });
+      return;
+    }
     
     final List<dynamic>? data = response['data'] as List<dynamic>?;
 
     if (data == null || data.isEmpty) {
       setState(() {
         _activeAlerts = [];
+        _activeFetchFailed = false;
         _isLoadingActive = false;
       });
       return;
@@ -126,7 +139,7 @@ void _setupActiveSOSListener() {
           if (customerEmail != null && 
               _clientOrganizationDomain != null &&
               customerEmail.endsWith(_clientOrganizationDomain!) &&
-              (status == 'ACTIVE' || status == 'Pending')) {
+              isSosActive(status)) {
             final id = alertData['_id'] ?? alertData['id'] ?? '';
             alerts.add(SOSAlert.fromMap(id, alertData));
           }
@@ -141,6 +154,7 @@ void _setupActiveSOSListener() {
 
     setState(() {
       _activeAlerts = alerts;
+      _activeFetchFailed = false;
       _isLoadingActive = false;
     });
     
@@ -180,6 +194,7 @@ void _setupActiveSOSListener() {
           
           // Filter by organization domain
           final List<ResolvedSOSAlert> organizationAlerts = alertsJson
+              .where((json) => isSosResolved(json['status']?.toString()))
               .map((json) => ResolvedSOSAlert.fromJson(json))
               .where((alert) => _clientOrganizationDomain != null && 
                                alert.customerEmail.endsWith(_clientOrganizationDomain!))
@@ -423,6 +438,14 @@ void _setupActiveSOSListener() {
                             ],
                           ),
                   ),
+                  if (_activeFetchFailed)
+                    const Padding(
+                      padding: EdgeInsets.fromLTRB(16, 0, 16, 8),
+                      child: Text(
+                        'Could not refresh SOS alerts. Showing last known data.',
+                        style: TextStyle(fontSize: 12, color: Color(0xFFB45309)),
+                      ),
+                    ),
                   // Tab Bar
                   TabBar(
                     controller: _tabController,
@@ -502,7 +525,7 @@ void _setupActiveSOSListener() {
   }
 
   Widget _buildStatsGrid() {
-    final activeAlerts = _activeAlerts.where((a) => a.status == 'ACTIVE' || a.status == 'Pending').length;
+    final activeAlerts = _activeAlerts.where((a) => isSosActive(a.status)).length;
     final resolvedAlerts = _resolvedAlerts.length;
 
     return LayoutBuilder(

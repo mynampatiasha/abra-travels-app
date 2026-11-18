@@ -6,6 +6,21 @@
 
 const express = require('express');
 const router = express.Router();
+
+// Real driven distance first (end odometer - start odometer), then the older planned/estimated fields.
+function tripDistance(t) {
+  return Number(t.actualDistance) || Number(t.distance) || Number(t.totalDistance) || 0;
+}
+// A trip counts for hours/distance only once it has actually finished (any collection / status wording).
+function isFinishedTrip(t) {
+  return !!t.actualEndTime || /complet/i.test(String(t.status || ''));
+}
+function isCancelledTrip(t) {
+  return /cancel/i.test(String(t.status || ''));
+}
+function localDateStr(d) {
+  return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+}
 const { ObjectId } = require('mongodb');
 const PDFDocument = require('pdfkit');
 const fs = require('fs');
@@ -213,7 +228,7 @@ router.get('/performance-summary', async (req, res) => {
 
     // ✅ TOTAL DISTANCE (use totalDistance OR actualDistance)
     const totalDistance = completedTrips.reduce((sum, t) => {
-      const distance = Number(t.totalDistance) || Number(t.actualDistance) || Number(t.distance) || 0;
+      const distance = tripDistance(t);
       return sum + distance;
     }, 0);
 
@@ -283,13 +298,17 @@ router.get('/daily-analytics', async (req, res) => {
     const driverEmail = jwtUser.email;
     const driverIdFromToken = jwtUser.driverId || jwtUser.id || jwtUser.uid;
 
-    console.log(`📊 [DAILY] Fetching for: ${driverEmail} on ${targetDate.toISOString().split('T')[0]}`);
+    console.log(`📊 [DAILY] Fetching for: ${driverEmail} on ${req.query.date || localDateStr(targetDate)}`);
 
     const driverQuery = await buildDriverQuery(db, driverEmail, driverIdFromToken);
     const driverMongoId = driverQuery.driverMongoId;
 
     // Date string for today (YYYY-MM-DD)
-    const today = targetDate.toISOString().split('T')[0];
+    const qd = String(req.query.date || '');
+    const today = /^\d{4}-\d{2}-\d{2}$/.test(qd) ? qd : localDateStr(targetDate);
+    const [dy, dm, dd] = today.split('-').map(Number);
+    const dayStart = new Date(dy, dm - 1, dd, 0, 0, 0, 0);
+    const dayEnd = new Date(dy, dm - 1, dd + 1, 0, 0, 0, 0);
 
     // ── 1. ORIGINAL: roster trips today ─────────────────────────────────────
     const rosterTripsToday = await db.collection('roster-assigned-trips').find({
@@ -303,14 +322,14 @@ router.get('/daily-analytics', async (req, res) => {
       $or: [
         {
           scheduledPickupTime: {
-            $gte: new Date(today + 'T00:00:00.000Z'),
-            $lt: new Date(today + 'T23:59:59.999Z')
+            $gte: dayStart,
+            $lt: dayEnd
           }
         },
         {
           actualStartTime: {
-            $gte: new Date(today + 'T00:00:00.000Z'),
-            $lt: new Date(today + 'T23:59:59.999Z')
+            $gte: dayStart,
+            $lt: dayEnd
           }
         }
       ]
@@ -324,14 +343,14 @@ router.get('/daily-analytics', async (req, res) => {
         $or: [
           {
             scheduledPickupTime: {
-              $gte: new Date(today + 'T00:00:00.000Z'),
-              $lt: new Date(today + 'T23:59:59.999Z')
+              $gte: dayStart,
+              $lt: dayEnd
             }
           },
           {
             actualStartTime: {
-              $gte: new Date(today + 'T00:00:00.000Z'),
-              $lt: new Date(today + 'T23:59:59.999Z')
+              $gte: dayStart,
+              $lt: dayEnd
             }
           }
         ]
@@ -341,14 +360,14 @@ router.get('/daily-analytics', async (req, res) => {
       console.error('   ⚠️  client_created_trips daily query failed:', e.message);
     }
 
-    const todayTrips = [...rosterTripsToday, ...manualTripsToday, ...clientTripsToday];
+    const todayTrips = [...rosterTripsToday, ...manualTripsToday, ...clientTripsToday].filter(t => !isCancelledTrip(t));
 
     console.log(`   Found ${todayTrips.length} trips for today (${rosterTripsToday.length} roster + ${manualTripsToday.length} manual + ${clientTripsToday.length} client)`);
 
     // ✅ Calculate working hours (from actualStartTime to actualEndTime)
     let totalWorkingMinutes = 0;
     todayTrips.forEach(trip => {
-      if (trip.actualStartTime && trip.actualEndTime) {
+      if (trip.actualStartTime && trip.actualEndTime && isFinishedTrip(trip)) {
         const start = new Date(trip.actualStartTime);
         const end = new Date(trip.actualEndTime);
         const minutes = (end - start) / (1000 * 60);
@@ -361,10 +380,7 @@ router.get('/daily-analytics', async (req, res) => {
     const workingHours = `${hours}h ${minutes}min`;
 
     // ✅ Calculate distance (use totalDistance OR actualDistance OR distance)
-    const totalDistance = todayTrips.reduce((sum, t) => {
-      const distance = Number(t.totalDistance) || Number(t.actualDistance) || Number(t.distance) || 0;
-      return sum + distance;
-    }, 0);
+    const totalDistance = todayTrips.filter(isFinishedTrip).reduce((sum, t) => sum + tripDistance(t), 0);
 
     console.log(`\n📊 DAILY ANALYTICS:`);
     console.log(`   Working Hours: ${workingHours}`);
@@ -544,7 +560,7 @@ router.get('/trips', async (req, res) => {
         }
 
         // ✅ Get proper distance
-        const distance = Number(trip.totalDistance) || Number(trip.actualDistance) || Number(trip.distance) || 0;
+        const distance = tripDistance(trip);
 
         // ✅ Get trip number
         const tripNumber = trip.tripNumber || trip.tripGroupId || `TRIP-${trip._id.toString().slice(-8)}`;
@@ -757,7 +773,7 @@ router.post('/generate', async (req, res) => {
 
     // ✅ Calculations
     const totalDistance = completedTrips.reduce((sum, t) => {
-      const distance = Number(t.totalDistance) || Number(t.actualDistance) || Number(t.distance) || 0;
+      const distance = tripDistance(t);
       return sum + distance;
     }, 0);
 
@@ -837,7 +853,7 @@ router.post('/generate', async (req, res) => {
           customerNames = 'N/A';
         }
 
-        const distance = Number(t.totalDistance) || Number(t.actualDistance) || Number(t.distance) || 0;
+        const distance = tripDistance(t);
         const tripNumber = t.tripNumber || t.tripGroupId || `TRIP-${t._id.toString().slice(-8)}`;
 
         return {

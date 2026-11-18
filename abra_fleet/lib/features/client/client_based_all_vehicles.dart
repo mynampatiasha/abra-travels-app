@@ -603,17 +603,10 @@ void _centerOnVehicle(Map<String, dynamic> vehicle) {
                   ),
                 ),
                 if (_vehicles.isEmpty)
-                  const SliverToBoxAdapter(
+                  SliverToBoxAdapter(
                     child: Padding(
-                      padding: EdgeInsets.all(32),
-                      child: Column(
-                        children: [
-                          Icon(Icons.directions_car_outlined,
-                              size: 48, color: Colors.grey),
-                          SizedBox(height: 16),
-                          Text('No vehicles found'),
-                        ],
-                      ),
+                      padding: const EdgeInsets.all(32),
+                      child: _buildEmptyVehiclesState(),
                     ),
                   )
                 else
@@ -999,15 +992,10 @@ onTap: () {
             // Vehicle list
             Expanded(
               child: _vehicles.isEmpty
-                  ? const Center(
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(Icons.directions_car_outlined,
-                              size: 48, color: Colors.grey),
-                          SizedBox(height: 16),
-                          Text('No vehicles found'),
-                        ],
+                  ? Center(
+                      child: SingleChildScrollView(
+                        padding: const EdgeInsets.all(24),
+                        child: _buildEmptyVehiclesState(),
                       ),
                     )
                   : ListView.builder(
@@ -1524,7 +1512,9 @@ const SizedBox(height: 16),
             ),
           ],
         ),
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        // phone: 12 px labels need a little more height than the 60 px bar leaves with 8 px padding
+        padding: EdgeInsets.symmetric(
+            horizontal: 16, vertical: isPhone(context) ? 4 : 8),
         child: Row(
           children: [
             _buildStatItem(
@@ -1587,6 +1577,37 @@ const SizedBox(height: 16),
   // ========================================================================
   // DIALOG METHODS
   // ========================================================================
+
+  // Empty state. With the default 'active' filter only trips already started
+  // are listed, so explain that and offer a one-tap switch to 'all'.
+  Widget _buildEmptyVehiclesState() {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        const Icon(Icons.directions_car_outlined, size: 48, color: Colors.grey),
+        const SizedBox(height: 16),
+        const Text('No vehicles found'),
+        if (_statusFilter == 'active') ...[
+          const SizedBox(height: 8),
+          Text(
+            'No vehicles are moving right now. Tap Filters and choose status All to see assigned trips.',
+            textAlign: TextAlign.center,
+            style: TextStyle(fontSize: 13, color: Colors.grey.shade600),
+          ),
+          const SizedBox(height: 12),
+          OutlinedButton(
+            onPressed: () {
+              setState(() {
+                _statusFilter = 'all';
+              });
+              _loadLiveVehicles();
+            },
+            child: const Text('Show all'),
+          ),
+        ],
+      ],
+    );
+  }
 
   void _showFiltersDialog() {
     showDialog(

@@ -25,6 +25,7 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:universal_html/html.dart' as html;
 import 'client_trip_dashboard_part2.dart';
 import 'package:abra_fleet/core/widgets/responsive/responsive.dart';
+import 'package:abra_fleet/core/utils/client_data_rules.dart';
 
 // ✅ Import the country/state/city filter widget
 import 'package:abra_fleet/features/admin/widgets/country_state_city_filter.dart';
@@ -137,35 +138,19 @@ class ClientTripDashboardState extends State<ClientTripDashboard> {
 
   // ─── Status helpers ───────────────────────────────────────────────────────
   Color getStatusColor(String status) {
-    switch (status.toLowerCase()) {
-      case 'started':
-      case 'in_progress':
-        return const Color(0xFF00C853);
-      case 'assigned':
-        return const Color(0xFF2979FF);
-      case 'completed':
-        return const Color(0xFF607D8B);
-      case 'cancelled':
-        return const Color(0xFFFF1744);
-      default:
-        return Colors.grey;
-    }
+    if (isTripOngoing(status)) return const Color(0xFF00C853);
+    if (isTripAssigned(status)) return const Color(0xFF2979FF);
+    if (isTripCompleted(status)) return const Color(0xFF607D8B);
+    if (isTripCancelled(status)) return const Color(0xFFFF1744);
+    return Colors.grey;
   }
 
   String getStatusText(String status) {
-    switch (status.toLowerCase()) {
-      case 'started':
-      case 'in_progress':
-        return 'ONGOING';
-      case 'assigned':
-        return 'SCHEDULED';
-      case 'completed':
-        return 'COMPLETED';
-      case 'cancelled':
-        return 'CANCELLED';
-      default:
-        return status.toUpperCase();
-    }
+    if (isTripOngoing(status)) return 'ONGOING';
+    if (isTripAssigned(status)) return 'SCHEDULED';
+    if (isTripCompleted(status)) return 'COMPLETED';
+    if (isTripCancelled(status)) return 'CANCELLED';
+    return status.toUpperCase();
   }
 
   // ============================================================================
@@ -1171,11 +1156,11 @@ class ClientTripDashboardState extends State<ClientTripDashboard> {
         children: [
           const Text('Fleet Statistics', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Color(0xFF1A237E))),
           const SizedBox(height: 16),
-          _buildBarRow('Vehicles', vehicles, maxVal, const Color(0xFF1E88E5)),
+          _buildBarRow('Vehicles used', vehicles, maxVal, const Color(0xFF1E88E5)),
           const SizedBox(height: 12),
-          _buildBarRow('Drivers', drivers, maxVal, const Color(0xFFFF6F00)),
+          _buildBarRow('Drivers used', drivers, maxVal, const Color(0xFFFF6F00)),
           const SizedBox(height: 12),
-          _buildBarRow('Customers', customers, maxVal, const Color(0xFF8E24AA)),
+          _buildBarRow('Passengers on trips', customers, maxVal, const Color(0xFF8E24AA)),
           const SizedBox(height: 12),
           _buildBarRow('Delayed', delayed, maxVal, const Color(0xFFE53935)),
         ],
@@ -1222,13 +1207,13 @@ class ClientTripDashboardState extends State<ClientTripDashboard> {
           ? Column(
               children: [
                 Row(children: [
-                  _buildStatCard(Icons.directions_car, 'Vehicles', summary['totalVehicles'] ?? 0, const Color(0xFF1E88E5)),
+                  _buildStatCard(Icons.directions_car, 'Vehicles used', summary['totalVehicles'] ?? 0, const Color(0xFF1E88E5)),
                   const SizedBox(width: 10),
-                  _buildStatCard(Icons.person, 'Drivers', summary['totalDrivers'] ?? 0, const Color(0xFFFF6F00)),
+                  _buildStatCard(Icons.person, 'Drivers used', summary['totalDrivers'] ?? 0, const Color(0xFFFF6F00)),
                 ]),
                 const SizedBox(height: 10),
                 Row(children: [
-                  _buildStatCard(Icons.people, 'Customers', summary['totalCustomers'] ?? 0, const Color(0xFF8E24AA)),
+                  _buildStatCard(Icons.people, 'Passengers on trips', summary['totalCustomers'] ?? 0, const Color(0xFF8E24AA)),
                   const SizedBox(width: 10),
                   _buildStatCard(Icons.warning, 'Delayed', summary['delayed'] ?? 0, const Color(0xFFE53935)),
                 ]),
@@ -1236,11 +1221,11 @@ class ClientTripDashboardState extends State<ClientTripDashboard> {
             )
           : Row(
         children: [
-          _buildStatCard(Icons.directions_car, 'Vehicles', summary['totalVehicles'] ?? 0, const Color(0xFF1E88E5)),
+          _buildStatCard(Icons.directions_car, 'Vehicles used', summary['totalVehicles'] ?? 0, const Color(0xFF1E88E5)),
           const SizedBox(width: 10),
-          _buildStatCard(Icons.person, 'Drivers', summary['totalDrivers'] ?? 0, const Color(0xFFFF6F00)),
+          _buildStatCard(Icons.person, 'Drivers used', summary['totalDrivers'] ?? 0, const Color(0xFFFF6F00)),
           const SizedBox(width: 10),
-          _buildStatCard(Icons.people, 'Customers', summary['totalCustomers'] ?? 0, const Color(0xFF8E24AA)),
+          _buildStatCard(Icons.people, 'Passengers on trips', summary['totalCustomers'] ?? 0, const Color(0xFF8E24AA)),
           const SizedBox(width: 10),
           _buildStatCard(Icons.warning, 'Delayed', summary['delayed'] ?? 0, const Color(0xFFE53935)),
         ],

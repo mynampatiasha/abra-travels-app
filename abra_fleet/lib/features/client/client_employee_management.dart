@@ -14,6 +14,7 @@ import 'package:abra_fleet/features/admin/customer_management/customer_form_over
 import 'package:abra_fleet/features/admin/customer_management/bulk_import_overlay.dart';
 import 'package:abra_fleet/features/auth/domain/repositories/auth_repository.dart';
 import 'package:abra_fleet/core/widgets/responsive/responsive.dart';
+import 'package:abra_fleet/core/utils/client_data_rules.dart';
 
 class ClientEmployeeManagement extends StatefulWidget {
   const ClientEmployeeManagement({Key? key}) : super(key: key);
@@ -229,13 +230,23 @@ Future<void> _fetchOrganizationEmployees() async {
   }
 
   Widget _buildStatsGrid(List<CustomerEntity> employees) {
-    final activeEmployees = employees.where((e) => e.status.toLowerCase() == 'active').length;
-    final inactiveEmployees = employees.where((e) => e.status.toLowerCase() == 'inactive').length;
+    final activeEmployees = employees.where((e) => employeeStatusBucket(e.status) == 'active').length;
+    final inactiveEmployees = employees.where((e) => employeeStatusBucket(e.status) == 'inactive').length;
+    // Pending / suspended / blank etc., so Active + Inactive + Other = Total.
+    final otherEmployees = employees.where((e) => employeeStatusBucket(e.status) == 'other').length;
 
     return LayoutBuilder(
       builder: (context, constraints) {
         final phone = isPhone(context);
-        final cardWidth = phone ? (constraints.maxWidth - 12) / 2 : (constraints.maxWidth - 40) / 3;
+        // Tablet: 4 cards fit in one row from ~900 px; below that use 2 per row
+        // so there is no lonely orphan card.
+        final int cols = phone
+            ? 2
+            : (otherEmployees > 0
+                ? (constraints.maxWidth >= 900 ? 4 : 2)
+                : 3);
+        final double gap = phone ? 12 : 20;
+        final cardWidth = (constraints.maxWidth - gap * (cols - 1) - 1) / cols;
         return Wrap(
           spacing: phone ? 12 : 20,
           runSpacing: phone ? 12 : 20,
@@ -264,6 +275,15 @@ Future<void> _fetchOrganizationEmployees() async {
               label: 'Inactive',
               width: cardWidth,
             ),
+            if (otherEmployees > 0)
+              _buildStatCard(
+                icon: Icons.help_outline,
+                iconColor: const Color(0xFFF59E0B),
+                iconBgColor: const Color(0xFFF59E0B).withOpacity(0.1),
+                value: otherEmployees.toString(),
+                label: 'Other (pending/suspended)',
+                width: cardWidth,
+              ),
           ],
         );
       },
@@ -355,7 +375,7 @@ Future<void> _fetchOrganizationEmployees() async {
                 : Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Column(
+                Flexible(child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
@@ -376,9 +396,12 @@ Future<void> _fetchOrganizationEmployees() async {
                         ),
                       ),
                   ],
-                ),
-                Wrap(
+                )),
+                const SizedBox(width: 16),
+                Flexible(flex: 2, child: Wrap(
                   spacing: 8,
+                  runSpacing: 8,
+                  alignment: WrapAlignment.end,
                   children: [
                     // _buildActionButton(
                     //   icon: Icons.cleaning_services,
@@ -422,7 +445,7 @@ Future<void> _fetchOrganizationEmployees() async {
                       },
                     ),
                   ],
-                ),
+                )),
               ],
             ),
           ),

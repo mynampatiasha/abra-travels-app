@@ -18,7 +18,10 @@ import 'dart:ui_web' as ui_web;
 // ============================================================================
 
 // URL fragments whose pages need the camera -> must open top-level, not iframe.
-const _cameraPages = <String>['hr-attendance-list'];
+// NOTE: 'hr-attendance-list' was removed so Attendance now loads inside the
+// app iframe (which already sets allow="camera *"). If the camera is blocked
+// in the browser, restore it here to fall back to the new-tab behaviour.
+const _cameraPages = <String>[];
 
 bool _needsTopLevel(String url) => _cameraPages.any((p) => url.contains(p));
 

@@ -25,7 +25,12 @@ class ToursTravelsWebViewScreen extends StatefulWidget {
 }
 
 class _ToursTravelsWebViewScreenState extends State<ToursTravelsWebViewScreen> {
-  late final WebViewController? _controller;
+  // ✅ Was `late final` with no initializer: build() reads it before the
+  // permission prompts finish and the controller is assigned, which throws a
+  // LateInitializationError and replaces the whole screen with Flutter's
+  // blank error box (the black/grey flash before every WebView page). A
+  // plain nullable lets build() show the white loading overlay immediately.
+  WebViewController? _controller;
   bool _isLoading = true;
   String? _errorMessage;
   late String _iframeId;
@@ -163,7 +168,7 @@ class _ToursTravelsWebViewScreenState extends State<ToursTravelsWebViewScreen> {
 
     controller
       ..setJavaScriptMode(JavaScriptMode.unrestricted)
-      ..setBackgroundColor(const Color(0x00000000))
+      ..setBackgroundColor(Colors.white)
       ..setNavigationDelegate(
         NavigationDelegate(
           onProgress: (int progress) {
@@ -235,7 +240,10 @@ class _ToursTravelsWebViewScreenState extends State<ToursTravelsWebViewScreen> {
       // No additional configuration needed here
     }
 
-    _controller = controller;
+    if (!mounted) return;
+    setState(() {
+      _controller = controller;
+    });
   }
 
   @override

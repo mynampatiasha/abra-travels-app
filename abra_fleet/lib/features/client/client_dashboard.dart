@@ -17,6 +17,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'package:abra_fleet/app/config/api_config.dart';
+import 'package:abra_fleet/core/utils/client_data_rules.dart';
+import 'package:abra_fleet/core/services/customer_service.dart';
 
 // ─────────────────────────────────────────────────────────────
 // LOCAL EDS
@@ -84,11 +86,13 @@ class _EDS {
 // DATA MODELS
 // ─────────────────────────────────────────────────────────────
 class _TripStats {
-  final int completed, ongoing, cancelled;
+  final int completed, ongoing, cancelled, scheduled;
   final List<_DayCount> last7Days;
   _TripStats({required this.completed, required this.ongoing,
-      required this.cancelled, required this.last7Days});
-  int get total => completed + ongoing + cancelled;
+      required this.cancelled, required this.last7Days,
+      this.scheduled = 0});
+  // All trips: scheduled (assigned) trips are included.
+  int get total => completed + ongoing + cancelled + scheduled;
 }
 
 class _DayCount {
@@ -129,6 +133,11 @@ class _ClientDashboardAnalyticsState extends State<ClientDashboardAnalytics>
   _AnalyticsData? _data;
   bool _loading = true;
   String? _error;
+
+  // Real employee status counts (active / inactive / other); null until loaded.
+  Map<String, int>? _empCounts;
+  bool _empFailed = false;
+  int _empReq = 0;
 
   late AnimationController _animCtrl;
   late Animation<double> _fadeAnim;
@@ -229,7 +238,7 @@ class _ClientDashboardAnalyticsState extends State<ClientDashboardAnalytics>
 
       debugPrint('📊 Dashboard response: ${dashRes.statusCode}');
 
-      int completed = 0, ongoing = 0, cancelled = 0;
+      int completed = 0, ongoing = 0, cancelled = 0, scheduled = 0;
 
       if (dashRes.statusCode == 200) {
         final body    = json.decode(dashRes.body);
@@ -237,6 +246,7 @@ class _ClientDashboardAnalyticsState extends State<ClientDashboardAnalytics>
         ongoing   = (summary['ongoing']   ?? 0) as int;
         completed = (summary['completed'] ?? 0) as int;
         cancelled = (summary['cancelled'] ?? 0) as int;
+        scheduled = (summary['scheduled'] ?? 0) as int;
         debugPrint('📊 Counts — ongoing: $ongoing, completed: $completed, cancelled: $cancelled');
       } else if (dashRes.statusCode == 401) {
         throw Exception('Session expired (401). Please log out and log in again.');
@@ -347,8 +357,8 @@ class _ClientDashboardAnalyticsState extends State<ClientDashboardAnalytics>
         sosTotal     = (body['pagination']?['total'] ?? alerts.length) as int;
 
         for (final a in alerts) {
-          final status = (a['status'] ?? '').toString().toUpperCase();
-          if (status == 'RESOLVED' || status == 'CLOSED' || status == 'COMPLETED') {
+          final status = (a is Map ? a['status'] : null)?.toString();
+          if (isSosResolved(status)) {
             sosResolved++;
           } else {
             sosActive++;
@@ -366,6 +376,7 @@ class _ClientDashboardAnalyticsState extends State<ClientDashboardAnalytics>
             completed: completed,
             ongoing:   ongoing,
             cancelled: cancelled,
+            scheduled: scheduled,
             last7Days: last7,
           ),
           sos: _SOSStats(
@@ -378,11 +389,44 @@ class _ClientDashboardAnalyticsState extends State<ClientDashboardAnalytics>
         _loading = false;
       });
       _animCtrl.forward(from: 0);
+      _loadEmployeeStatus(domain);
 
     } catch (e) {
       debugPrint('📊 Analytics fetch error: $e');
       if (!mounted) return;
       setState(() { _error = e.toString(); _loading = false; });
+    }
+  }
+
+  /// Real employee status counts, same data source as Employee Management
+  /// (CustomerService.getCustomersByDomain). Never blocks the dashboard.
+  Future<void> _loadEmployeeStatus(String domain) async {
+    if (domain.isEmpty) return;
+    final req = ++_empReq;
+    try {
+      final customers = await CustomerService().getCustomersByDomain(domain);
+      if (!mounted || req != _empReq) return;
+      int active = 0, inactive = 0, other = 0;
+      for (final c in customers) {
+        switch (employeeStatusBucket(c.status)) {
+          case 'active':
+            active++;
+            break;
+          case 'inactive':
+            inactive++;
+            break;
+          default:
+            other++;
+        }
+      }
+      setState(() {
+        _empCounts = {'active': active, 'inactive': inactive, 'other': other};
+        _empFailed = false;
+      });
+    } catch (e) {
+      debugPrint('📊 Employee status fetch failed (non-fatal): $e');
+      if (!mounted || req != _empReq) return;
+      setState(() => _empFailed = true);
     }
   }
 
@@ -591,7 +635,7 @@ class _ClientDashboardAnalyticsState extends State<ClientDashboardAnalytics>
 
     return _ChartCard(
       title: 'Daily Trips',
-      subtitle: 'Last 7 days — ${_data!.trips.total} total',
+      subtitle: 'All time — ${_data!.trips.total} total',
       icon: Icons.bar_chart_rounded,
       iconColor: _EDS.blue,
       iconBg: const Color(0xFFEFF6FF),
@@ -685,18 +729,21 @@ class _ClientDashboardAnalyticsState extends State<ClientDashboardAnalytics>
   // CHART 2 — EMPLOYEE / CUSTOMER DONUT PIE CHART
   // ═════════════════════════════════════════════════════════════
   Widget _buildEmployeeDonutCard() {
-    final count    = _data!.employeeCount;
-    final active   = (count * 0.82).round();
-    final inactive = count - active;
+    final emp      = _empCounts;
+    final active   = emp?['active']   ?? 0;
+    final inactive = emp?['inactive'] ?? 0;
+    final other    = emp?['other']    ?? 0;
+    // Until the status breakdown loads, show the total only.
+    final count    = emp != null ? active + inactive + other : _data!.employeeCount;
 
     return _ChartCard(
-      title: 'Customers',
+      title: 'Employees',
       subtitle: 'Registered in portal',
       icon: Icons.people_alt_rounded,
       iconColor: _EDS.purple,
       iconBg: _EDS.purpleLight,
       child: count == 0
-          ? _emptyState('No customers registered yet')
+          ? _emptyState('No employees registered yet')
           : Column(children: [
               SizedBox(
                 height: 200,
@@ -707,20 +754,36 @@ class _ClientDashboardAnalyticsState extends State<ClientDashboardAnalytics>
                       PieChartData(
                         sectionsSpace: 3,
                         centerSpaceRadius: 58,
-                        sections: [
-                          PieChartSectionData(
-                            value: active.toDouble(),
-                            color: _EDS.purple,
-                            radius: 48,
-                            title: '',
-                          ),
-                          PieChartSectionData(
-                            value: inactive > 0 ? inactive.toDouble() : 0.001,
-                            color: _EDS.purpleLight,
-                            radius: 44,
-                            title: '',
-                          ),
-                        ],
+                        sections: emp == null
+                            ? [
+                                PieChartSectionData(
+                                  value: count.toDouble(),
+                                  color: _EDS.purpleLight,
+                                  radius: 46,
+                                  title: '',
+                                ),
+                              ]
+                            : [
+                                PieChartSectionData(
+                                  value: active.toDouble(),
+                                  color: _EDS.purple,
+                                  radius: 48,
+                                  title: '',
+                                ),
+                                PieChartSectionData(
+                                  value: inactive > 0 ? inactive.toDouble() : 0.001,
+                                  color: _EDS.purpleLight,
+                                  radius: 44,
+                                  title: '',
+                                ),
+                                if (other > 0)
+                                  PieChartSectionData(
+                                    value: other.toDouble(),
+                                    color: _EDS.textTer,
+                                    radius: 44,
+                                    title: '',
+                                  ),
+                              ],
                       ),
                       swapAnimationDuration: const Duration(milliseconds: 400),
                       swapAnimationCurve: Curves.easeInOut,
@@ -735,15 +798,26 @@ class _ClientDashboardAnalyticsState extends State<ClientDashboardAnalytics>
                 ),
               ),
               const SizedBox(height: 16),
-              Wrap(
-                alignment: WrapAlignment.center,
-                crossAxisAlignment: WrapCrossAlignment.center,
-                spacing: 20,
-                runSpacing: 8,
-                children: [
-                _legendDot(_EDS.purple, 'Active', active, count),
-                _legendDot(_EDS.purpleLight, 'Inactive', inactive, count),
-              ]),
+              if (emp != null)
+                Wrap(
+                  alignment: WrapAlignment.center,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  spacing: 20,
+                  runSpacing: 8,
+                  children: [
+                    _legendDot(_EDS.purple, 'Active', active, count),
+                    _legendDot(_EDS.purpleLight, 'Inactive', inactive, count),
+                    if (other > 0) _legendDot(_EDS.textTer, 'Other', other, count),
+                  ],
+                )
+              else
+                Text(
+                  _empFailed
+                      ? 'Status breakdown unavailable'
+                      : 'Loading status breakdown…',
+                  style: _EDS.body(12, color: _EDS.textTer),
+                  textAlign: TextAlign.center,
+                ),
             ]),
     );
   }

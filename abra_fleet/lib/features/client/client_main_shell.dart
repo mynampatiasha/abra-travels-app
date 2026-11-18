@@ -17,6 +17,7 @@ import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'dart:math' as math;
 import 'package:abra_fleet/app/config/api_config.dart';
+import 'package:abra_fleet/core/utils/client_data_rules.dart';
 // import 'client_dashboard.dart'; // Removed - using ClientDashboardAnalytics directly
 import 'client_dashboard_analytics.dart';
 import 'client_employee_management.dart';
@@ -195,6 +196,9 @@ class _ClientMainShellState extends State<ClientMainShell>
   late Animation<double> _fadeAnim;
 
   int _notificationCount = 0;
+  // True when the last KPI refresh failed; the last good counts stay shown.
+  bool _kpiFailed = false;
+
   final Map<String, int> _liveCounts = {
     // 'employees': 0,
     // 'sos': 0,
@@ -401,54 +405,91 @@ class _ClientMainShellState extends State<ClientMainShell>
       };
       final baseUrl = ApiConfig.baseUrl;
 
-      final analyticsRes = await http.get(
-        Uri.parse('$baseUrl/api/admin/client-analytics/trip-stats?limit=50'),
-        headers: headers,
-      ).timeout(const Duration(seconds: 30));
+      // Each call is independent: a failed call keeps the last good value
+      // (never resets to 0) and flags the refresh as failed.
+      bool failed = false;
+      int? employeeCount;
+      int? sosCount;
+      int? rosterPending;
 
-      int employeeCount = 0;
-      if (analyticsRes.statusCode == 200) {
-        final body = json.decode(analyticsRes.body);
-        final clients = body['data']?['clients'] as List? ?? [];
-        for (final c in clients) {
-          if ((c['domain'] ?? '').toString().toLowerCase() == domain.toLowerCase()) {
-            employeeCount = (c['customerCount'] ?? 0) as int;
-            break;
+      try {
+        final analyticsRes = await http.get(
+          Uri.parse('$baseUrl/api/admin/client-analytics/trip-stats?limit=50'),
+          headers: headers,
+        ).timeout(const Duration(seconds: 30));
+
+        if (analyticsRes.statusCode == 200) {
+          employeeCount = 0;
+          final body = json.decode(analyticsRes.body);
+          final clients = body['data']?['clients'] as List? ?? [];
+          for (final c in clients) {
+            if ((c['domain'] ?? '').toString().toLowerCase() == domain.toLowerCase()) {
+              employeeCount = (c['customerCount'] ?? 0) as int;
+              break;
+            }
           }
+        } else {
+          failed = true;
         }
+      } catch (e) {
+        failed = true;
+        debugPrint('KPI employees fetch error: $e');
       }
 
-      final sosRes = await http.get(
-        Uri.parse('$baseUrl/api/sos?status=ACTIVE&organizationDomain=$domain&limit=500'),
-        headers: headers,
-      ).timeout(const Duration(seconds: 30));
+      try {
+        final sosRes = await http.get(
+          Uri.parse('$baseUrl/api/sos?status=ACTIVE&organizationDomain=$domain&limit=500'),
+          headers: headers,
+        ).timeout(const Duration(seconds: 30));
 
-      int sosCount = 0;
-      if (sosRes.statusCode == 200) {
-        final body = json.decode(sosRes.body);
-        sosCount = (body['pagination']?['total'] ?? (body['data'] as List? ?? []).length) as int;
+        if (sosRes.statusCode == 200) {
+          final body = json.decode(sosRes.body);
+          final rows = body['data'] as List? ?? [];
+          final total = (body['pagination']?['total'] ?? rows.length) as int;
+          if (rows.length >= total) {
+            // Full list returned: count with the shared "active" rule.
+            sosCount = rows
+                .where((a) => isSosActive(a is Map ? a['status']?.toString() : null))
+                .length;
+          } else {
+            sosCount = total; // list was truncated, trust the server total
+          }
+        } else {
+          failed = true;
+        }
+      } catch (e) {
+        failed = true;
+        debugPrint('KPI sos fetch error: $e');
       }
 
-      final rosterRes = await http.get(
-        Uri.parse('$baseUrl/api/roster/admin/pending'),
-        headers: headers,
-      ).timeout(const Duration(seconds: 30));
+      try {
+        final rosterRes = await http.get(
+          Uri.parse('$baseUrl/api/roster/admin/pending'),
+          headers: headers,
+        ).timeout(const Duration(seconds: 30));
 
-      int rosterPending = 0;
-      if (rosterRes.statusCode == 200) {
-        final body = json.decode(rosterRes.body);
-        rosterPending = (body['count'] ?? (body['data'] as List? ?? []).length) as int;
+        if (rosterRes.statusCode == 200) {
+          final body = json.decode(rosterRes.body);
+          rosterPending = (body['count'] ?? (body['data'] as List? ?? []).length) as int;
+        } else {
+          failed = true;
+        }
+      } catch (e) {
+        failed = true;
+        debugPrint('KPI roster fetch error: $e');
       }
 
       if (mounted) {
         setState(() {
-          _liveCounts['employees']      = employeeCount;
-          _liveCounts['sos']            = sosCount;
-          _liveCounts['roster_pending'] = rosterPending;
+          if (employeeCount != null) _liveCounts['employees']      = employeeCount;
+          if (sosCount != null)      _liveCounts['sos']            = sosCount;
+          if (rosterPending != null) _liveCounts['roster_pending'] = rosterPending;
+          _kpiFailed = failed;
         });
       }
     } catch (e) {
       debugPrint('KPI fetch error: $e');
+      if (mounted) setState(() => _kpiFailed = true);
     }
   }
 
@@ -593,6 +634,9 @@ class _ClientMainShellState extends State<ClientMainShell>
   // DESKTOP TOP NAVIGATION BAR  — increased from 68 → 76px height
   // ─────────────────────────────────────────────────────────────
   Widget _buildDesktopNavBar() {
+    // Tablet / small laptop (768-1100 px): tighter padding, capped brand width,
+    // user pill collapses to avatar + logout so nothing overflows.
+    final bool tight = MediaQuery.of(context).size.width < 1100;
     return Container(
       height: 76,   // ↑ was 68
       decoration: BoxDecoration(
@@ -606,17 +650,19 @@ class _ClientMainShellState extends State<ClientMainShell>
         ],
       ),
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 32),
+        padding: EdgeInsets.symmetric(horizontal: tight ? 16 : 32),
         child: Row(
           children: [
             // ── Brand pill ─────────────────────────────────────
-            GestureDetector(
+            ConstrainedBox(
+              constraints: BoxConstraints(maxWidth: tight ? 230 : 420),
+              child: GestureDetector(
               onTap: _goHome,
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                  Flexible(child: Container(
+                    padding: EdgeInsets.symmetric(horizontal: tight ? 10 : 16, vertical: 10),
                     decoration: BoxDecoration(
                       color: Colors.white.withOpacity(0.12),
                       borderRadius: EDS.radiusMd,
@@ -645,12 +691,14 @@ class _ClientMainShellState extends State<ClientMainShell>
                           ),
                         ),
                         const SizedBox(width: 12),
-                        Column(
+                        Flexible(child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           mainAxisSize: MainAxisSize.min,
                           children: [
                             Text(
                               _clientOrgName ?? 'Organization',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
                               style: const TextStyle(
                                 color: Colors.white,
                                 fontSize: 17,   // ↑ was 15
@@ -660,6 +708,8 @@ class _ClientMainShellState extends State<ClientMainShell>
                             ),
                             Text(
                               'Corporate Travels',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
                               style: TextStyle(
                                 color: Colors.white.withOpacity(0.55),
                                 fontSize: 13,   // ↑ was 10
@@ -668,40 +718,49 @@ class _ClientMainShellState extends State<ClientMainShell>
                               ),
                             ),
                           ],
-                        ),
+                        )),
                       ],
                     ),
-                  ),
+                  )),
                 ],
               ),
             ),
+            ),
 
-            const SizedBox(width: 24),
+            SizedBox(width: tight ? 12 : 24),
 
             // ── Breadcrumb ──────────────────────────────────────
-            if (_activeScreen != -1) ...[
-              Icon(Icons.chevron_right,
-                  color: Colors.white.withOpacity(0.35), size: 18),
-              const SizedBox(width: 8),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
-                decoration: BoxDecoration(
-                  color: EDS.blue.withOpacity(0.25),
-                  borderRadius: EDS.radiusSm,
-                  border: Border.all(color: EDS.blueLight.withOpacity(0.4)),
-                ),
-                child: Text(
-                  _modules[_activeScreen].label,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 15,   // ↑ was 13
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ),
-            ],
-
-            const Spacer(),
+            Expanded(
+              child: _activeScreen == -1
+                  ? const SizedBox.shrink()
+                  : Row(
+                      children: [
+                        Icon(Icons.chevron_right,
+                            color: Colors.white.withOpacity(0.35), size: 18),
+                        const SizedBox(width: 8),
+                        Flexible(
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                            decoration: BoxDecoration(
+                              color: EDS.blue.withOpacity(0.25),
+                              borderRadius: EDS.radiusSm,
+                              border: Border.all(color: EDS.blueLight.withOpacity(0.4)),
+                            ),
+                            child: Text(
+                              _modules[_activeScreen].label,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 15,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+            ),
 
             if (_activeScreen != -1)
               _navIconBtn(
@@ -762,7 +821,7 @@ class _ClientMainShellState extends State<ClientMainShell>
 
             // ── User pill ─────────────────────────────────────
             Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+              padding: EdgeInsets.symmetric(horizontal: tight ? 10 : 16, vertical: 10),
               decoration: BoxDecoration(
                 color: Colors.white.withOpacity(0.1),
                 borderRadius: EDS.radiusFull,
@@ -783,8 +842,8 @@ class _ClientMainShellState extends State<ClientMainShell>
                       ),
                     ),
                   ),
-                  const SizedBox(width: 10),
-                  Column(
+                  if (!tight) const SizedBox(width: 10),
+                  if (!tight) Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     mainAxisSize: MainAxisSize.min,
                     children: [
@@ -807,6 +866,7 @@ class _ClientMainShellState extends State<ClientMainShell>
                   ),
                   const SizedBox(width: 10),
                   GestureDetector(
+                    behavior: HitTestBehavior.opaque,
                     onTap: _showLogoutDialog,
                     child: Tooltip(
                       message: 'Logout',
@@ -1144,6 +1204,15 @@ class _ClientMainShellState extends State<ClientMainShell>
                       isAlert: true,
                       isMobile: isMobile,
                     ),
+                  if (_kpiFailed)
+                    GestureDetector(
+                      onTap: _fetchKpiCounts,
+                      child: _bannerChip(
+                        icon: Icons.sync_problem_rounded,
+                        label: 'Counts not updated · Retry',
+                        isMobile: isMobile,
+                      ),
+                    ),
                 ],
               ),
             ],
@@ -1206,18 +1275,25 @@ class _ClientMainShellState extends State<ClientMainShell>
   // MODULE GRID — DESKTOP
   // ─────────────────────────────────────────────────────────────
   Widget _buildDesktopModuleGrid() {
-    return GridView.builder(
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: 4,
-        childAspectRatio: 1.05,   // slightly taller for bigger text
-        crossAxisSpacing: 16,
-        mainAxisSpacing: 16,
-      ),
-      itemCount: _modules.length,
-      itemBuilder: (_, i) => _buildModuleCard(_modules[i], compact: false),
-    );
+    // Cards need about 280 px of width to fit their text. On tablets (768-1000 px)
+    // 4 fixed columns made each card too small and overflowed, so: under 1000 px use
+    // the compact full-width list, 1000-1280 px 3 columns, wider screens 4 (as before).
+    return LayoutBuilder(builder: (context, constraints) {
+      final w = constraints.maxWidth;
+      if (w < 1000) return _buildMobileModuleList();
+      return GridView.builder(
+        shrinkWrap: true,
+        physics: const NeverScrollableScrollPhysics(),
+        gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+          crossAxisCount: w < 1280 ? 3 : 4,
+          childAspectRatio: 1.05,   // slightly taller for bigger text
+          crossAxisSpacing: 16,
+          mainAxisSpacing: 16,
+        ),
+        itemCount: _modules.length,
+        itemBuilder: (_, i) => _buildModuleCard(_modules[i], compact: false),
+      );
+    });
   }
 
   Widget _buildMobileModuleList() {
@@ -1299,8 +1375,12 @@ class _ClientMainShellState extends State<ClientMainShell>
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Text(module.liveLabel,
-                    style: EDS.body(13, w: FontWeight.w600, color: module.accent)),
+                Flexible(
+                  child: Text(module.liveLabel,
+                      style: EDS.body(13, w: FontWeight.w600, color: module.accent),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis),
+                ),
                     // ↑ was body(11)
                 const SizedBox(width: 5),
                 Icon(Icons.chevron_right, color: module.accent, size: 16),

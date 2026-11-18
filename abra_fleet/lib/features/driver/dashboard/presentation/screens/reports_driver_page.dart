@@ -761,12 +761,13 @@ class _ReportsDriverPageState extends State<ReportsDriverPage> {
           icon: '📊',
           child: Column(
             children: [
-              _buildReadOnlyField(
-                label: 'Working Hours Today',
-                value: analytics.workingHours,
-                icon: Icons.access_time,
-              ),
-              const SizedBox(height: 12),
+              // Working Hours Today hidden (commented out on request)
+              // _buildReadOnlyField(
+              //   label: 'Working Hours Today',
+              //   value: analytics.workingHours,
+              //   icon: Icons.access_time,
+              // ),
+              // const SizedBox(height: 12),
               _buildReadOnlyField(
                 label: 'Trips Today',
                 value: analytics.tripsToday.toString(),

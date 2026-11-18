@@ -17,6 +17,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'package:abra_fleet/app/config/api_config.dart';
+import 'package:abra_fleet/core/utils/client_data_rules.dart';
+import 'package:abra_fleet/core/services/customer_service.dart';
 
 // ─────────────────────────────────────────────────────────────
 // LOCAL EDS
@@ -139,6 +141,12 @@ class _ClientDashboardAnalyticsState extends State<ClientDashboardAnalytics>
   bool _loading = true;
   String? _error;
 
+  // Employee status counts (active / inactive / other). null until loaded.
+  Map<String, int>? _empCounts;
+  int _empReq = 0;
+  // Which parts failed to load on the last refresh: trips, sos, employees, refresh
+  final Set<String> _warnings = {};
+
   late AnimationController _animCtrl;
   late Animation<double> _fadeAnim;
 
@@ -211,6 +219,7 @@ class _ClientDashboardAnalyticsState extends State<ClientDashboardAnalytics>
   Future<void> _fetchAll() async {
     if (!mounted) return;
     setState(() { _loading = true; _error = null; });
+    final warn = <String>{};
 
     try {
       final auth   = await _getAuthDetails();
@@ -254,69 +263,76 @@ class _ClientDashboardAnalyticsState extends State<ClientDashboardAnalytics>
       }
 
       // ══════════════════════════════════════════════════════════
-      // CALL 2: All trips — for daily bar chart
-      // /api/client-trips/my-trips fetches from BOTH collections:
-      //   client_created_trips  → scheduledPickupTime (ISO timestamp)
-      //   roster-assigned-trips → scheduledDate (yyyy-MM-dd string)
-      // We filter to last 7 days IN FLUTTER after fetching
+      // CALL 2: Operational trips — daily bar chart
+      // /api/client/trips/list (same endpoint as the Reports / trip
+      // dashboard, domain-filtered server-side, roster-assigned-trips).
+      // Trips are bucketed by their scheduled date in LOCAL time.
+      // If the call fails the last good chart is kept and a hint shown.
       // ══════════════════════════════════════════════════════════
-      final myTripsRes = await http.get(
-        Uri.parse('$base/api/client-trips/my-trips'),
-        headers: headers,
-      ).timeout(const Duration(seconds: 30));
+      List<_DayCount>? last7;
+      try {
+        final now = DateTime.now();
+        final last7Keys = List.generate(
+            7, (i) => _dayKey(DateTime(now.year, now.month, now.day - (6 - i)))).toSet();
+        // Query one day wider on each side; exact bucketing is done below.
+        final tripsUri = Uri.parse('$base/api/client/trips/list').replace(
+          queryParameters: {
+            'fromDate': _dayKey(DateTime(now.year, now.month, now.day - 7)),
+            'toDate':   _dayKey(DateTime(now.year, now.month, now.day + 1)),
+            'page':     '1',
+            'limit':    '500',
+          },
+        );
+        final myTripsRes = await http.get(tripsUri, headers: headers)
+            .timeout(const Duration(seconds: 30));
 
-      debugPrint('📊 My-trips response: ${myTripsRes.statusCode}');
+        debugPrint('📊 Trips-list response: ${myTripsRes.statusCode}');
 
-      // status breakdown maps per day
-      final Map<String, int> mapCompleted = {};
-      final Map<String, int> mapScheduled = {};
-      final Map<String, int> mapActive    = {};
-      final Map<String, int> mapCancelled = {};
+        if (myTripsRes.statusCode != 200) {
+          throw Exception('HTTP ${myTripsRes.statusCode}');
+        }
+        final body = json.decode(myTripsRes.body);
+        if (body['success'] != true) {
+          throw Exception(body['message'] ?? 'trips list failed');
+        }
+        final trips = (body['data']?['trips'] as List?) ?? [];
 
-      if (myTripsRes.statusCode == 200) {
-        final body  = json.decode(myTripsRes.body);
-        final trips = body['data'] as List? ?? [];
-
-        debugPrint('📊 Total trips from my-trips: ${trips.length}');
-
-        final today = DateTime.now();
-        final last7Keys = List.generate(7, (i) {
-          final d = today.subtract(Duration(days: 6 - i));
-          return '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
-        }).toSet();
+        final Map<String, int> mapCompleted = {};
+        final Map<String, int> mapScheduled = {};
+        final Map<String, int> mapActive    = {};
+        final Map<String, int> mapCancelled = {};
 
         for (final t in trips) {
-          final raw = (t['scheduledPickupTime'] ?? t['scheduledDate'] ?? '')
-              .toString().trim();
-          if (raw.length < 10) continue;
-          final key    = raw.substring(0, 10);
-          if (!last7Keys.contains(key)) continue;
+          if (t is! Map) continue;
+          final key = _localDayKey(t['scheduledDate'] ?? t['scheduledPickupTime']);
+          if (key == null || !last7Keys.contains(key)) continue;
 
-          final status = (t['status'] ?? '').toString().toLowerCase();
-
-          if (status == 'completed' || status == 'done') {
+          final status = t['status']?.toString();
+          if (isTripCompleted(status)) {
             mapCompleted[key] = (mapCompleted[key] ?? 0) + 1;
-          } else if (status == 'started' || status == 'in_progress') {
+          } else if (isTripOngoing(status)) {
             mapActive[key] = (mapActive[key] ?? 0) + 1;
-          } else if (status == 'cancelled' || status == 'canceled') {
+          } else if (isTripCancelled(status) ||
+              (status ?? '').trim().toLowerCase() == 'canceled') {
             mapCancelled[key] = (mapCancelled[key] ?? 0) + 1;
           } else {
-            // assigned, accepted, pending_assignment → Scheduled
+            // assigned, scheduled, pending... → Scheduled
             mapScheduled[key] = (mapScheduled[key] ?? 0) + 1;
           }
         }
-
-        debugPrint('📊 Daily breakdown built');
+        last7 = _buildLast7Days(mapCompleted, mapScheduled, mapActive, mapCancelled);
+      } catch (e) {
+        debugPrint('📊 Daily trips fetch failed (non-fatal): $e');
+        warn.add('trips');
       }
-
-      final last7 = _buildLast7Days(mapCompleted, mapScheduled, mapActive, mapCancelled);
+      last7 ??= _data?.trips.last7Days ?? _buildLast7Days({}, {}, {}, {});
 
       // ══════════════════════════════════════════════════════════
       // CALL 3: Customers count
       // /api/admin/client-analytics/trip-stats — same source
       // as the original working code that gave 46
       // ══════════════════════════════════════════════════════════
-      int employeeCount = 0;
+      int employeeCount = _data?.employeeCount ?? 0; // keep last good value on failure
       try {
         final custRes = await http.get(
           Uri.parse('$base/api/admin/client-analytics/trip-stats?limit=200'),
@@ -324,6 +340,7 @@ class _ClientDashboardAnalyticsState extends State<ClientDashboardAnalytics>
         ).timeout(const Duration(seconds: 30));
 
         debugPrint('📊 Customer count response: ${custRes.statusCode}');
+        if (custRes.statusCode != 200) warn.add('employees');
 
         if (custRes.statusCode == 200) {
           final body    = json.decode(custRes.body);
@@ -338,7 +355,8 @@ class _ClientDashboardAnalyticsState extends State<ClientDashboardAnalytics>
         }
       } catch (e) {
         debugPrint('📊 Customer count fetch failed (non-fatal): $e');
-        // Non-fatal — customers will show 0 but trips and SOS still work
+        // Non-fatal — keep the last count and show a hint
+        warn.add('employees');
       }
 
       // ══════════════════════════════════════════════════════════
@@ -355,16 +373,21 @@ class _ClientDashboardAnalyticsState extends State<ClientDashboardAnalytics>
 
       debugPrint('📊 SOS response: ${sosRes.statusCode}');
 
-      int sosActive = 0, sosResolved = 0, sosTotal = 0;
+      // Keep the last good values if this call fails
+      int sosActive   = _data?.sos.active   ?? 0;
+      int sosResolved = _data?.sos.resolved ?? 0;
+      int sosTotal    = _data?.sos.total    ?? 0;
 
       if (sosRes.statusCode == 200) {
+        sosActive = 0;
+        sosResolved = 0;
         final body   = json.decode(sosRes.body);
         final alerts = body['data'] as List? ?? [];
         sosTotal     = (body['pagination']?['total'] ?? alerts.length) as int;
 
         for (final a in alerts) {
-          final status = (a['status'] ?? '').toString().toUpperCase();
-          if (status == 'RESOLVED' || status == 'CLOSED' || status == 'COMPLETED') {
+          final status = (a is Map ? a['status'] : null)?.toString();
+          if (isSosResolved(status)) {
             sosResolved++;
           } else {
             sosActive++;
@@ -373,6 +396,8 @@ class _ClientDashboardAnalyticsState extends State<ClientDashboardAnalytics>
         if (sosActive == 0 && sosResolved == 0 && sosTotal > 0) {
           sosActive = sosTotal;
         }
+      } else {
+        warn.add('sos');
       }
 
       if (!mounted) return;
@@ -382,7 +407,7 @@ class _ClientDashboardAnalyticsState extends State<ClientDashboardAnalytics>
             completed: completed,
             ongoing:   ongoing,
             cancelled: cancelled,
-            last7Days: last7,
+            last7Days: last7!,
           ),
           sos: _SOSStats(
             active:   sosActive,
@@ -392,14 +417,78 @@ class _ClientDashboardAnalyticsState extends State<ClientDashboardAnalytics>
           employeeCount: employeeCount,
         );
         _loading = false;
+        _warnings
+          ..clear()
+          ..addAll(warn);
       });
       _animCtrl.forward(from: 0);
+      // Employee status breakdown loads separately so a slow API never
+      // blocks the rest of the dashboard.
+      _loadEmployeeStatus(domain);
 
     } catch (e) {
       debugPrint('📊 Analytics fetch error: $e');
       if (!mounted) return;
-      setState(() { _error = e.toString(); _loading = false; });
+      final msg = e.toString();
+      final authProblem = msg.contains('401') || msg.contains('Authentication');
+      if (_data != null && !authProblem) {
+        // Keep the last good numbers on screen and show a retry hint.
+        setState(() {
+          _loading = false;
+          _warnings
+            ..clear()
+            ..add('refresh');
+        });
+        _animCtrl.forward(from: 0);
+      } else {
+        setState(() { _error = msg; _loading = false; });
+      }
     }
+  }
+
+  /// Real employee status counts, same data source as Employee Management
+  /// (CustomerService.getCustomersByDomain). Never blocks the dashboard.
+  Future<void> _loadEmployeeStatus(String domain) async {
+    if (domain.isEmpty) return;
+    final req = ++_empReq;
+    try {
+      final customers = await CustomerService().getCustomersByDomain(domain);
+      if (!mounted || req != _empReq) return;
+      int active = 0, inactive = 0, other = 0;
+      for (final c in customers) {
+        switch (employeeStatusBucket(c.status)) {
+          case 'active':
+            active++;
+            break;
+          case 'inactive':
+            inactive++;
+            break;
+          default:
+            other++;
+        }
+      }
+      setState(() {
+        _empCounts = {'active': active, 'inactive': inactive, 'other': other};
+        _warnings.remove('employees');
+      });
+    } catch (e) {
+      debugPrint('📊 Employee status fetch failed (non-fatal): $e');
+      if (!mounted || req != _empReq) return;
+      setState(() => _warnings.add('employees'));
+    }
+  }
+
+  static String _dayKey(DateTime d) =>
+      '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
+
+  /// yyyy-MM-dd as-is (already a calendar date); anything with a time part
+  /// is converted to LOCAL time first.
+  String? _localDayKey(dynamic raw) {
+    final str = (raw ?? '').toString().trim();
+    if (str.isEmpty) return null;
+    if (RegExp(r'^\d{4}-\d{2}-\d{2}$').hasMatch(str)) return str;
+    final dt = DateTime.tryParse(str);
+    return dt == null ? null : _dayKey(dt.toLocal());
   }
 
   List<_DayCount> _buildLast7Days(
@@ -411,8 +500,8 @@ class _ClientDashboardAnalyticsState extends State<ClientDashboardAnalytics>
     const dayLabels = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
     final today = DateTime.now();
     return List.generate(7, (i) {
-      final d   = today.subtract(Duration(days: 6 - i));
-      final key = '${d.year}-${d.month.toString().padLeft(2,'0')}-${d.day.toString().padLeft(2,'0')}';
+      final d   = DateTime(today.year, today.month, today.day - (6 - i));
+      final key = _dayKey(d);
       final label = i == 6 ? 'Today' : dayLabels[d.weekday - 1];
       final c = mapCompleted[key] ?? 0;
       final s = mapScheduled[key] ?? 0;
@@ -498,9 +587,51 @@ class _ClientDashboardAnalyticsState extends State<ClientDashboardAnalytics>
               ),
             ],
           ),
+          if (_warnings.isNotEmpty) ...[
+            SizedBox(height: isMobile ? 10 : 12),
+            _buildWarningBar(),
+          ],
           SizedBox(height: isMobile ? 14 : 18),
-          isMobile ? _buildMobileLayout() : _buildDesktopLayout(),
+          (isMobile || MediaQuery.of(context).size.width < 1100)
+              ? _buildMobileLayout()
+              : _buildDesktopLayout(),
         ],
+      ),
+    );
+  }
+
+  /// Small hint shown when part of the data could not be loaded; the last
+  /// good values stay on screen. Tap to retry.
+  Widget _buildWarningBar() {
+    final parts = <String>[
+      if (_warnings.contains('trips')) 'daily trips',
+      if (_warnings.contains('sos')) 'SOS alerts',
+      if (_warnings.contains('employees')) 'employee counts',
+    ];
+    final text = _warnings.contains('refresh') || parts.isEmpty
+        ? 'Could not refresh. Showing the last loaded numbers.'
+        : 'Could not load ${parts.join(', ')}. Showing the last loaded numbers.';
+    return InkWell(
+      onTap: _fetchAll,
+      borderRadius: _EDS.radiusSm,
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        decoration: BoxDecoration(
+          color: _EDS.amberLight,
+          borderRadius: _EDS.radiusSm,
+        ),
+        child: Row(children: [
+          Icon(Icons.info_outline_rounded, color: _EDS.amber, size: 16),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(text,
+                style: _EDS.body(12, w: FontWeight.w500, color: _EDS.amber)),
+          ),
+          const SizedBox(width: 8),
+          Text('Retry',
+              style: _EDS.body(12, w: FontWeight.w700, color: _EDS.amber)),
+        ]),
       ),
     );
   }
@@ -603,7 +734,7 @@ class _ClientDashboardAnalyticsState extends State<ClientDashboardAnalytics>
 
     return _ChartCard(
       title: 'Daily Trips',
-      subtitle: 'Last 7 days — ${_data!.trips.last7Days.fold(0, (sum, d) => sum + d.count)} trips',
+      subtitle: 'Last 7 days — ${_data!.trips.last7Days.fold(0, (sum, d) => sum + d.count)} trips${_warnings.contains('trips') ? ' (could not load)' : ''}',
       icon: Icons.bar_chart_rounded,
       iconColor: _EDS.blue,
       iconBg: const Color(0xFFEFF6FF),
@@ -738,18 +869,21 @@ class _ClientDashboardAnalyticsState extends State<ClientDashboardAnalytics>
   // CHART 2 — EMPLOYEE / CUSTOMER DONUT PIE CHART
   // ═════════════════════════════════════════════════════════════
   Widget _buildEmployeeDonutCard() {
-    final count    = _data!.employeeCount;
-    final active   = (count * 0.82).round();
-    final inactive = count - active;
+    final emp      = _empCounts;
+    final active   = emp?['active']   ?? 0;
+    final inactive = emp?['inactive'] ?? 0;
+    final other    = emp?['other']    ?? 0;
+    // Until the status breakdown loads, show the total only.
+    final count    = emp != null ? active + inactive + other : _data!.employeeCount;
 
     return _ChartCard(
-      title: 'Customers',
+      title: 'Employees',
       subtitle: 'Registered in portal',
       icon: Icons.people_alt_rounded,
       iconColor: _EDS.purple,
       iconBg: _EDS.purpleLight,
       child: count == 0
-          ? _emptyState('No customers registered yet')
+          ? _emptyState('No employees registered yet')
           : Column(children: [
               SizedBox(
                 height: 200,
@@ -760,20 +894,36 @@ class _ClientDashboardAnalyticsState extends State<ClientDashboardAnalytics>
                       PieChartData(
                         sectionsSpace: 3,
                         centerSpaceRadius: 58,
-                        sections: [
-                          PieChartSectionData(
-                            value: active.toDouble(),
-                            color: _EDS.purple,
-                            radius: 48,
-                            title: '',
-                          ),
-                          PieChartSectionData(
-                            value: inactive > 0 ? inactive.toDouble() : 0.001,
-                            color: _EDS.purpleLight,
-                            radius: 44,
-                            title: '',
-                          ),
-                        ],
+                        sections: emp == null
+                            ? [
+                                PieChartSectionData(
+                                  value: count.toDouble(),
+                                  color: _EDS.purpleLight,
+                                  radius: 46,
+                                  title: '',
+                                ),
+                              ]
+                            : [
+                                PieChartSectionData(
+                                  value: active.toDouble(),
+                                  color: _EDS.purple,
+                                  radius: 48,
+                                  title: '',
+                                ),
+                                PieChartSectionData(
+                                  value: inactive > 0 ? inactive.toDouble() : 0.001,
+                                  color: _EDS.purpleLight,
+                                  radius: 44,
+                                  title: '',
+                                ),
+                                if (other > 0)
+                                  PieChartSectionData(
+                                    value: other.toDouble(),
+                                    color: _EDS.textTer,
+                                    radius: 44,
+                                    title: '',
+                                  ),
+                              ],
                       ),
                       swapAnimationDuration: const Duration(milliseconds: 400),
                       swapAnimationCurve: Curves.easeInOut,
@@ -788,15 +938,26 @@ class _ClientDashboardAnalyticsState extends State<ClientDashboardAnalytics>
                 ),
               ),
               const SizedBox(height: 16),
-              Wrap(
-                alignment: WrapAlignment.center,
-                crossAxisAlignment: WrapCrossAlignment.center,
-                spacing: 20,
-                runSpacing: 8,
-                children: [
-                _legendDot(_EDS.purple, 'Active', active, count),
-                _legendDot(_EDS.purpleLight, 'Inactive', inactive, count),
-              ]),
+              if (emp != null)
+                Wrap(
+                  alignment: WrapAlignment.center,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  spacing: 20,
+                  runSpacing: 8,
+                  children: [
+                    _legendDot(_EDS.purple, 'Active', active, count),
+                    _legendDot(_EDS.purpleLight, 'Inactive', inactive, count),
+                    if (other > 0) _legendDot(_EDS.textTer, 'Other', other, count),
+                  ],
+                )
+              else
+                Text(
+                  _warnings.contains('employees')
+                      ? 'Status breakdown unavailable'
+                      : 'Loading status breakdown…',
+                  style: _EDS.body(12, color: _EDS.textTer),
+                  textAlign: TextAlign.center,
+                ),
             ]),
     );
   }

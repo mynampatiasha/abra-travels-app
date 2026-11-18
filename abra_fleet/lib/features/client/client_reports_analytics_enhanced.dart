@@ -21,6 +21,7 @@ import 'package:abra_fleet/core/utils/export_helper.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:abra_fleet/core/widgets/responsive/responsive.dart';
+import 'package:abra_fleet/core/utils/client_data_rules.dart';
 
 class ClientReportsAnalyticsEnhanced extends StatefulWidget {
   const ClientReportsAnalyticsEnhanced({Key? key}) : super(key: key);
@@ -76,6 +77,7 @@ class _ClientReportsAnalyticsEnhancedState
   List<dynamic> _employees = [];
   int _activeEmployees = 0;
   int _inactiveEmployees = 0;
+  int _otherEmployees = 0;
 
   // ─── DATA: ROSTERS ──────────────────────────────────────────────────────────
   List<dynamic> _pendingRosters = [];
@@ -253,13 +255,17 @@ class _ClientReportsAnalyticsEnhancedState
           final customers = List<Map<String, dynamic>>.from(data['data'] ?? []);
           int activeCount = 0;
           int inactiveCount = 0;
+          int otherCount = 0;
 
           for (final customer in customers) {
-            final status = customer['status']?.toLowerCase() ?? 'unknown';
-            if (status == 'active') {
+            final bucket =
+                employeeStatusBucket(customer['status']?.toString());
+            if (bucket == 'active') {
               activeCount++;
-            } else {
+            } else if (bucket == 'inactive') {
               inactiveCount++;
+            } else {
+              otherCount++;
             }
           }
 
@@ -267,6 +273,7 @@ class _ClientReportsAnalyticsEnhancedState
             _employees = customers;
             _activeEmployees = activeCount;
             _inactiveEmployees = inactiveCount;
+            _otherEmployees = otherCount;
           });
           
           debugPrint('✅ Employees loaded: ${customers.length} total, $activeCount active');
@@ -343,6 +350,7 @@ class _ClientReportsAnalyticsEnhancedState
         final filteredActive = allActiveSOS.where((alert) {
           final email = alert['customerEmail'];
           return email != null &&
+              isSosActive(alert['status']?.toString()) &&
               _clientOrganizationDomain != null &&
               email.endsWith(_clientOrganizationDomain!);
         }).toList();
@@ -352,6 +360,7 @@ class _ClientReportsAnalyticsEnhancedState
         final filteredResolved = allResolvedSOS.where((alert) {
           final email = alert['customerEmail'];
           return email != null &&
+              isSosResolved(alert['status']?.toString()) &&
               _clientOrganizationDomain != null &&
               email.endsWith(_clientOrganizationDomain!);
         }).toList();
@@ -1264,6 +1273,9 @@ class _ClientReportsAnalyticsEnhancedState
                     Icons.person, Colors.green),
           _statCard('Inactive', '$_inactiveEmployees',
                     Icons.person_off, Colors.orange),
+          if (_otherEmployees > 0)
+            _statCard('Other', '$_otherEmployees',
+                      Icons.person_outline, Colors.blueGrey),
           _statCard('Departments',
                     '${_getDepartmentCount()}', Icons.business, Colors.purple),
         ]),
@@ -1753,11 +1765,11 @@ class _ClientReportsAnalyticsEnhancedState
         children: [
           const Text('Fleet Statistics', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Color(0xFF1A237E))),
           const SizedBox(height: 16),
-          _buildBarRow('Vehicles', vehicles, maxVal, const Color(0xFF1E88E5)),
+          _buildBarRow('Vehicles used', vehicles, maxVal, const Color(0xFF1E88E5)),
           const SizedBox(height: 12),
-          _buildBarRow('Drivers', drivers, maxVal, const Color(0xFFFF6F00)),
+          _buildBarRow('Drivers used', drivers, maxVal, const Color(0xFFFF6F00)),
           const SizedBox(height: 12),
-          _buildBarRow('Customers', customers, maxVal, const Color(0xFF8E24AA)),
+          _buildBarRow('Passengers on trips', customers, maxVal, const Color(0xFF8E24AA)),
           const SizedBox(height: 12),
           _buildBarRow('Delayed', delayed, maxVal, const Color(0xFFE53935)),
         ],

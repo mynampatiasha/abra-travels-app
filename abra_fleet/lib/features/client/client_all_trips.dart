@@ -567,7 +567,7 @@ class _ClientAllTripsPageState extends State<ClientAllTripsPage> {
         elevation: 0,
         backgroundColor: const Color(0xFF1A237E),
         title: const Text(
-          'My Trip Requests',
+          'Trips I requested',
           style: TextStyle(
               fontSize: 18, fontWeight: FontWeight.w600, letterSpacing: 0.3),
         ),
@@ -1207,9 +1207,13 @@ class _ClientAllTripsPageState extends State<ClientAllTripsPage> {
     return Container(
       color: Colors.white,
       padding: const EdgeInsets.all(16),
-      child: LayoutBuilder(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+      LayoutBuilder(
         builder: (context, constraints) {
-          final totalCard = _statCard('Total', total.toString(),
+          final totalCard = _statCard('Requested by me', total.toString(),
               Icons.local_taxi, Colors.blue);
           final pendingCard = _statCard('Pending', pending.toString(),
               Icons.pending_actions, Colors.orange);
@@ -1252,6 +1256,16 @@ class _ClientAllTripsPageState extends State<ClientAllTripsPage> {
             ],
           );
         },
+      ),
+      if (total == 0)
+        Padding(
+          padding: const EdgeInsets.only(top: 10),
+          child: Text(
+            'These are trips you requested here. All scheduled trips for your organisation are under Trips > Organization Trip History.',
+            style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+          ),
+        ),
+        ],
       ),
     );
   }
