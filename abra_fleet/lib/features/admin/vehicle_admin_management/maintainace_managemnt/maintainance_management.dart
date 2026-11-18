@@ -686,6 +686,7 @@ class _MaintenanceManagementScreenState
                       _buildQuickActionCards(),
                       _buildMaintenanceTable(),
                       if (_filteredMaintenances.isNotEmpty) _buildPagination(),
+                      const SizedBox(height: 24),
                     ],
                   ),
                 ),

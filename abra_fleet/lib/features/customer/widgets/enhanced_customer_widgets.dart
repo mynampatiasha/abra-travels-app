@@ -186,35 +186,47 @@ class CustomerTripCard extends StatelessWidget {
               // Action Buttons
               if (status == 'scheduled' || status == 'in_progress') ...[
                 const SizedBox(height: 16),
-                Row(
-                  children: [
-                    if (onTrack != null)
-                      Expanded(
-                        child: OutlinedButton.icon(
-                          onPressed: onTrack,
-                          icon: const Icon(Icons.location_on, size: 16),
-                          label: const Text('Track'),
-                          style: OutlinedButton.styleFrom(
-                            padding: const EdgeInsets.symmetric(vertical: 12),
+                LayoutBuilder(
+                  builder: (context, constraints) {
+                    final bool hasTrack = onTrack != null;
+                    final bool hasCancel = onCancel != null && status == 'scheduled';
+                    final int count = (hasTrack ? 1 : 0) + (hasCancel ? 1 : 0);
+                    final bool isNarrow = constraints.maxWidth < 280 || count == 1;
+                    final double buttonWidth = isNarrow ? double.infinity : (constraints.maxWidth - 8) / 2;
+
+                    return Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: [
+                        if (hasTrack)
+                          SizedBox(
+                            width: buttonWidth,
+                            child: OutlinedButton.icon(
+                              onPressed: onTrack,
+                              icon: const Icon(Icons.location_on, size: 16),
+                              label: const Text('Track'),
+                              style: OutlinedButton.styleFrom(
+                                padding: const EdgeInsets.symmetric(vertical: 12),
+                              ),
+                            ),
                           ),
-                        ),
-                      ),
-                    if (onTrack != null && onCancel != null)
-                      const SizedBox(width: 12),
-                    if (onCancel != null && status == 'scheduled')
-                      Expanded(
-                        child: OutlinedButton.icon(
-                          onPressed: onCancel,
-                          icon: const Icon(Icons.cancel, size: 16),
-                          label: const Text('Cancel'),
-                          style: OutlinedButton.styleFrom(
-                            foregroundColor: Colors.red,
-                            side: const BorderSide(color: Colors.red),
-                            padding: const EdgeInsets.symmetric(vertical: 12),
+                        if (hasCancel)
+                          SizedBox(
+                            width: buttonWidth,
+                            child: OutlinedButton.icon(
+                              onPressed: onCancel,
+                              icon: const Icon(Icons.cancel, size: 16),
+                              label: const Text('Cancel'),
+                              style: OutlinedButton.styleFrom(
+                                foregroundColor: Colors.red,
+                                side: const BorderSide(color: Colors.red),
+                                padding: const EdgeInsets.symmetric(vertical: 12),
+                              ),
+                            ),
                           ),
-                        ),
-                      ),
-                  ],
+                      ],
+                    );
+                  },
                 ),
               ],
             ],

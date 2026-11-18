@@ -283,6 +283,7 @@ class _VehicleChecklistDialogState extends State<VehicleChecklistDialog> {
       final proceed = await showDialog<bool>(
         context: context,
         builder: (ctx) => AlertDialog(
+          actionsOverflowButtonSpacing: 8,
           title: const Row(children: [
             Icon(Icons.warning_amber_rounded, color: Colors.orange),
             SizedBox(width: 8),
@@ -350,8 +351,10 @@ class _VehicleChecklistDialogState extends State<VehicleChecklistDialog> {
     return Dialog(
       insetPadding: const EdgeInsets.all(12),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      child: SizedBox(
-        width: double.maxFinite,
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 700),
+        child: SizedBox(
+          width: double.maxFinite,
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -363,6 +366,7 @@ class _VehicleChecklistDialogState extends State<VehicleChecklistDialog> {
             _buildFooter(),
           ],
         ),
+      ),
       ),
     );
   }
@@ -609,46 +613,103 @@ class _VehicleChecklistDialogState extends State<VehicleChecklistDialog> {
               offset: const Offset(0, -2))
         ],
       ),
-      child: Row(children: [
-        if (_currentCategoryIndex > 0)
-          Expanded(
-            child: OutlinedButton.icon(
-              onPressed: () => setState(() => _currentCategoryIndex--),
-              icon: const Icon(Icons.arrow_back, size: 16),
-              label: const Text('Back'),
-              style: OutlinedButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(vertical: 12)),
-            ),
-          ),
-        if (_currentCategoryIndex > 0) const SizedBox(width: 12),
-        Expanded(
-          flex: 2,
-          child: _currentCategoryIndex < _categories.length - 1
-              ? ElevatedButton.icon(
-                  onPressed: () => setState(() => _currentCategoryIndex++),
-                  icon: const Icon(Icons.arrow_forward, size: 16),
-                  label: Text('Next: ${_categories[_currentCategoryIndex + 1]}'),
-                  style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF0D47A1),
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(vertical: 12)),
-                )
-              : ElevatedButton.icon(
-                  onPressed: _isSubmitting ? null : _submit,
-                  icon: _isSubmitting
-                      ? const SizedBox(
-                          width: 16, height: 16,
-                          child: CircularProgressIndicator(
-                              color: Colors.white, strokeWidth: 2))
-                      : const Icon(Icons.check_circle, size: 18),
-                  label: Text(_isSubmitting ? 'Saving...' : 'Submit Checklist'),
-                  style: ElevatedButton.styleFrom(
-                      backgroundColor: _allChecked ? Colors.green : Colors.orange,
-                      foregroundColor: Colors.white,
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final isNarrow = constraints.maxWidth < 360;
+          if (isNarrow && _currentCategoryIndex > 0) {
+            return Column(
+              children: [
+                SizedBox(
+                  width: double.infinity,
+                  child: _currentCategoryIndex < _categories.length - 1
+                      ? ElevatedButton.icon(
+                          onPressed: () => setState(() => _currentCategoryIndex++),
+                          icon: const Icon(Icons.arrow_forward, size: 16),
+                          label: Text(
+                            'Next: ${_categories[_currentCategoryIndex + 1]}',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          style: ElevatedButton.styleFrom(
+                              backgroundColor: const Color(0xFF0D47A1),
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(vertical: 12)),
+                        )
+                      : ElevatedButton.icon(
+                          onPressed: _isSubmitting ? null : _submit,
+                          icon: _isSubmitting
+                              ? const SizedBox(
+                                  width: 16, height: 16,
+                                  child: CircularProgressIndicator(
+                                      color: Colors.white, strokeWidth: 2))
+                              : const Icon(Icons.check_circle, size: 18),
+                          label: Text(_isSubmitting ? 'Saving...' : 'Submit Checklist'),
+                          style: ElevatedButton.styleFrom(
+                              backgroundColor: _allChecked ? Colors.green : Colors.orange,
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(vertical: 12)),
+                        ),
+                ),
+                const SizedBox(height: 8),
+                SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton.icon(
+                    onPressed: () => setState(() => _currentCategoryIndex--),
+                    icon: const Icon(Icons.arrow_back, size: 16),
+                    label: const Text('Back'),
+                    style: OutlinedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 12)),
+                  ),
+                ),
+              ],
+            );
+          }
+          return Row(children: [
+            if (_currentCategoryIndex > 0)
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: () => setState(() => _currentCategoryIndex--),
+                  icon: const Icon(Icons.arrow_back, size: 16),
+                  label: const Text('Back'),
+                  style: OutlinedButton.styleFrom(
                       padding: const EdgeInsets.symmetric(vertical: 12)),
                 ),
-        ),
-      ]),
+              ),
+            if (_currentCategoryIndex > 0) const SizedBox(width: 12),
+            Expanded(
+              flex: 2,
+              child: _currentCategoryIndex < _categories.length - 1
+                  ? ElevatedButton.icon(
+                      onPressed: () => setState(() => _currentCategoryIndex++),
+                      icon: const Icon(Icons.arrow_forward, size: 16),
+                      label: Text(
+                        'Next: ${_categories[_currentCategoryIndex + 1]}',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFF0D47A1),
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(vertical: 12)),
+                    )
+                  : ElevatedButton.icon(
+                      onPressed: _isSubmitting ? null : _submit,
+                      icon: _isSubmitting
+                          ? const SizedBox(
+                              width: 16, height: 16,
+                              child: CircularProgressIndicator(
+                                  color: Colors.white, strokeWidth: 2))
+                          : const Icon(Icons.check_circle, size: 18),
+                      label: Text(_isSubmitting ? 'Saving...' : 'Submit Checklist'),
+                      style: ElevatedButton.styleFrom(
+                          backgroundColor: _allChecked ? Colors.green : Colors.orange,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(vertical: 12)),
+                    ),
+            ),
+          ]);
+        },
+      ),
     );
   }
 }

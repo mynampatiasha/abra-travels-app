@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:abra_fleet/features/customer/dashboard/data/repositories/roster_repository.dart';
 import 'package:abra_fleet/core/services/backend_connection_manager.dart';
+import 'package:abra_fleet/core/widgets/responsive/responsive.dart';
 
 class ClientPendingAssignmentTab extends StatefulWidget {
   final VoidCallback onImportPressed;
@@ -566,11 +567,11 @@ class _ClientPendingAssignmentTabState extends State<ClientPendingAssignmentTab>
           backgroundColor: Colors.white,
           insetPadding: const EdgeInsets.all(20),
           child: Container(
-            width: 500,
+            width: MediaQuery.of(context).size.width > 550 ? 500 : MediaQuery.of(context).size.width * 0.9,
             constraints: BoxConstraints(
               maxHeight: MediaQuery.of(context).size.height * 0.85, 
             ),
-            padding: const EdgeInsets.all(24),
+            padding: EdgeInsets.all(isPhone(context) ? 16 : 24),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
@@ -644,36 +645,34 @@ class _ClientPendingAssignmentTabState extends State<ClientPendingAssignmentTab>
                 const SizedBox(height: 24),
                 
                 // Footer Buttons
-                Row(
+                Wrap(
+                  spacing: 12,
+                  runSpacing: 12,
+                  alignment: WrapAlignment.end,
                   children: [
-                    Expanded(
-                      child: OutlinedButton.icon(
-                        onPressed: () => Navigator.pop(context),
-                        icon: const Icon(Icons.close, size: 18),
-                        label: const Text('Close'),
-                        style: OutlinedButton.styleFrom(
-                          foregroundColor: const Color(0xFF64748B),
-                          side: const BorderSide(color: Color(0xFF64748B)),
-                          padding: const EdgeInsets.symmetric(vertical: 16),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                        ),
+                    OutlinedButton.icon(
+                      onPressed: () => Navigator.pop(context),
+                      icon: const Icon(Icons.close, size: 18),
+                      label: const Text('Close'),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: const Color(0xFF64748B),
+                        side: const BorderSide(color: Color(0xFF64748B)),
+                        padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 20),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                       ),
                     ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: ElevatedButton.icon(
-                        onPressed: () {
-                          Navigator.pop(context);
-                          _editRoster(context, roster);
-                        },
-                        icon: const Icon(Icons.edit, size: 18),
-                        label: const Text('Edit Roster'),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFF2563EB),
-                          foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(vertical: 16),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                        ),
+                    ElevatedButton.icon(
+                      onPressed: () {
+                        Navigator.pop(context);
+                        _editRoster(context, roster);
+                      },
+                      icon: const Icon(Icons.edit, size: 18),
+                      label: const Text('Edit Roster'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF2563EB),
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 20),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                       ),
                     ),
                   ],
@@ -702,12 +701,14 @@ class _ClientPendingAssignmentTabState extends State<ClientPendingAssignmentTab>
             color: const Color(0xFF2563EB),
           ),
           const SizedBox(width: 8),
-          Text(
-            title,
-            style: const TextStyle(
-              fontSize: 14,
-              fontWeight: FontWeight.w600,
-              color: Color(0xFF2563EB),
+          Flexible(
+            child: Text(
+              title,
+              style: const TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+                color: Color(0xFF2563EB),
+              ),
             ),
           ),
         ],
@@ -760,11 +761,11 @@ class _ClientPendingAssignmentTabState extends State<ClientPendingAssignmentTab>
           backgroundColor: Colors.white,
           insetPadding: const EdgeInsets.all(20),
           child: Container(
-            width: 500,
+            width: MediaQuery.of(context).size.width > 550 ? 500 : MediaQuery.of(context).size.width * 0.9,
             constraints: BoxConstraints(
               maxHeight: MediaQuery.of(context).size.height * 0.9,
             ),
-            padding: const EdgeInsets.all(24),
+            padding: EdgeInsets.all(isPhone(context) ? 16 : 24),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
@@ -893,36 +894,34 @@ class _ClientPendingAssignmentTabState extends State<ClientPendingAssignmentTab>
                 const SizedBox(height: 24),
                 
                 // Footer Buttons
-                Row(
+                Wrap(
+                  spacing: 12,
+                  runSpacing: 12,
+                  alignment: WrapAlignment.end,
                   children: [
-                    Expanded(
-                      child: OutlinedButton.icon(
-                        onPressed: () => Navigator.pop(context),
-                        icon: const Icon(Icons.close, size: 18),
-                        label: const Text('Close'),
-                        style: OutlinedButton.styleFrom(
-                          foregroundColor: const Color(0xFF64748B),
-                          side: const BorderSide(color: Color(0xFF64748B)),
-                          padding: const EdgeInsets.symmetric(vertical: 16),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                        ),
+                    OutlinedButton.icon(
+                      onPressed: () => Navigator.pop(context),
+                      icon: const Icon(Icons.close, size: 18),
+                      label: const Text('Close'),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: const Color(0xFF64748B),
+                        side: const BorderSide(color: Color(0xFF64748B)),
+                        padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 20),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                       ),
                     ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: ElevatedButton.icon(
-                        onPressed: () {
-                          Navigator.pop(context);
-                          _showContactAdminDialog(context);
-                        },
-                        icon: const Icon(Icons.contact_support, size: 18),
-                        label: const Text('Contact Admin'),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFF2563EB),
-                          foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(vertical: 16),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                        ),
+                    ElevatedButton.icon(
+                      onPressed: () {
+                        Navigator.pop(context);
+                        _showContactAdminDialog(context);
+                      },
+                      icon: const Icon(Icons.contact_support, size: 18),
+                      label: const Text('Contact Admin'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF2563EB),
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 20),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                       ),
                     ),
                   ],
@@ -946,7 +945,7 @@ class _ClientPendingAssignmentTabState extends State<ClientPendingAssignmentTab>
       child: Row(
         children: [
           SizedBox(
-            width: 120,
+            width: isPhone(context) ? 96 : 120,
             child: Text(
               label,
               style: const TextStyle(
@@ -1093,7 +1092,7 @@ class _ClientPendingAssignmentTabState extends State<ClientPendingAssignmentTab>
                       fontWeight: FontWeight.w600, 
                       color: Color(0xFF1E293B)
                     ),
-                    maxLines: 1, 
+                    maxLines: isPhone(context) ? 2 : 1, 
                     overflow: TextOverflow.ellipsis,
                   ),
                   const SizedBox(height: 4),
@@ -1115,6 +1114,7 @@ class _ClientPendingAssignmentTabState extends State<ClientPendingAssignmentTab>
               style: TextButton.styleFrom(
                 foregroundColor: const Color(0xFF2563EB),
                 backgroundColor: const Color(0xFF2563EB).withOpacity(0.05),
+                minimumSize: isPhone(context) ? const Size(0, 44) : null,
               ),
               child: const Text('View Details'),
             ),

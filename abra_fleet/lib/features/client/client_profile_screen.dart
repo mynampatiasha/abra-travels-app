@@ -502,9 +502,12 @@ class _ClientProfileScreenState extends State<ClientProfileScreen> {
     return RefreshIndicator(
       onRefresh: _fetchProfileData,
       color: kPrimaryColor,
-      child: SingleChildScrollView(
-        padding: const EdgeInsets.all(24),
-        child: Column(
+      child: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 1100),
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(24),
+            child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             // Header
@@ -735,41 +738,55 @@ class _ClientProfileScreenState extends State<ClientProfileScreen> {
                 ),
               )
             else
-              Row(
-                children: [
-                  Expanded(
-                    child: ElevatedButton.icon(
-                      onPressed: _saveProfile,
-                      icon: const Icon(Icons.check),
-                      label: const Text('Save Changes'),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.green,
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(vertical: 16),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        elevation: 2,
+              LayoutBuilder(
+                builder: (context, constraints) {
+                  final saveBtn = ElevatedButton.icon(
+                    onPressed: _saveProfile,
+                    icon: const Icon(Icons.check),
+                    label: const Text('Save Changes'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.green,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 20),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      elevation: 2,
+                    ),
+                  );
+
+                  final cancelBtn = OutlinedButton.icon(
+                    onPressed: _cancelEdit,
+                    icon: const Icon(Icons.close),
+                    label: const Text('Cancel'),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: Colors.grey[700],
+                      side: BorderSide(color: Colors.grey[400]!),
+                      padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 20),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
                       ),
                     ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: OutlinedButton.icon(
-                      onPressed: _cancelEdit,
-                      icon: const Icon(Icons.close),
-                      label: const Text('Cancel'),
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: Colors.grey[700],
-                        side: BorderSide(color: Colors.grey[400]!),
-                        padding: const EdgeInsets.symmetric(vertical: 16),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
+                  );
+
+                  if (constraints.maxWidth < 450) {
+                    return Column(
+                      children: [
+                        SizedBox(width: double.infinity, child: saveBtn),
+                        const SizedBox(height: 12),
+                        SizedBox(width: double.infinity, child: cancelBtn),
+                      ],
+                    );
+                  }
+
+                  return Row(
+                    children: [
+                      Expanded(child: saveBtn),
+                      const SizedBox(width: 12),
+                      Expanded(child: cancelBtn),
+                    ],
+                  );
+                },
               ),
 
             const SizedBox(height: 24),
@@ -838,6 +855,8 @@ class _ClientProfileScreenState extends State<ClientProfileScreen> {
 
             const SizedBox(height: 40),
           ],
+        ),
+      ),
         ),
       ),
     );

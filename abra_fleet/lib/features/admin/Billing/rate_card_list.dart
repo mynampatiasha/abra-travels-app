@@ -13,6 +13,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../../core/services/create_rate_card_service.dart';
 import 'create_rate_card.dart' as CreateRateCardModule;
 import 'pages/rate_card_detail_screen.dart';
+import 'package:abra_fleet/core/widgets/responsive/responsive.dart';
 
 // Colors
 const kPrimary   = Color(0xFF2C3E50);
@@ -256,8 +257,17 @@ class _RateCardListScreenState extends State<RateCardListScreen> {
 
   // ─── App Bar ─────────────────────────────────────────────────────────────────
   AppBar _buildAppBar() {
+    final phone = isPhone(context);
     return AppBar(
-      title: const Column(
+      title: phone
+          ? const Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Rate Cards', maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                Text('Corporate Travels — Trip Pricing Core', maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: Colors.white60, fontSize: 12)),
+              ],
+            )
+          : const Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text('Rate Cards', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
@@ -297,6 +307,19 @@ class _RateCardListScreenState extends State<RateCardListScreen> {
         ),
 
         // Create new
+        if (phone)
+          Padding(
+            padding: const EdgeInsets.only(right: 4),
+            child: IconButton(
+              icon: const Icon(Icons.add_circle, color: kGreen),
+              tooltip: 'New Rate Card',
+              onPressed: () async {
+                final result = await Navigator.push(context, MaterialPageRoute(builder: (_) => const CreateRateCardModule.CreateRateCardScreen()));
+                if (result == true) _loadRateCards();
+              },
+            ),
+          )
+        else
         Padding(
           padding: const EdgeInsets.only(right: 16, left: 4),
           child: ElevatedButton.icon(
@@ -328,11 +351,21 @@ class _RateCardListScreenState extends State<RateCardListScreen> {
       {'label': 'Expired', 'value': (_stats['Expired'] ?? 0).toString(), 'color': kRed},
     ];
 
+    // Phone: 3 tiles per row (two rows) instead of six squeezed tiles.
+    final phoneStats = isPhone(context);
+    Widget statsWrap(List<Widget> tiles) {
+      if (!phoneStats) return Row(children: tiles);
+      return Column(children: [
+        Row(children: tiles.sublist(0, 3)),
+        const SizedBox(height: 8),
+        Row(children: tiles.sublist(3)),
+      ]);
+    }
     return Container(
       color: Colors.white,
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-      child: Row(
-        children: statItems.map((s) {
+      child: statsWrap(
+        statItems.map((s) {
           final color = s['color'] as Color;
           return Expanded(
             child: Container(
@@ -346,7 +379,7 @@ class _RateCardListScreenState extends State<RateCardListScreen> {
               child: Column(
                 children: [
                   Text(s['value']!.toString(), style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: color)),
-                  Text(s['label']!.toString(), style: TextStyle(fontSize: 11, color: color.withOpacity(0.8))),
+                  Text(s['label']!.toString(), style: TextStyle(fontSize: phoneStats ? 12 : 11, color: color.withOpacity(0.8))),
                 ],
               ),
             ),
@@ -358,6 +391,69 @@ class _RateCardListScreenState extends State<RateCardListScreen> {
 
   // ─── Filter Bar ─────────────────────────────────────────────────────────────
   Widget _buildFilterBar() {
+    final phoneFilters = isPhone(context);
+    final searchField = TextField(
+      controller: _searchCtrl,
+      decoration: InputDecoration(
+        hintText: 'Search by ID, organization, route...',
+        prefixIcon: const Icon(Icons.search, size: 20),
+        suffixIcon: _searchCtrl.text.isNotEmpty
+            ? IconButton(icon: const Icon(Icons.clear, size: 18), onPressed: () { _searchCtrl.clear(); _loadRateCards(); })
+            : null,
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+        contentPadding: const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
+        isDense: true,
+      ),
+    );
+
+    final filterWidgets = <Widget>[
+      // Status filter
+      _filterDropdown('Status', _filterStatus,
+        ['Active', 'Draft', 'Inactive', 'Expired', 'Pending Approval'],
+        (v) { setState(() => _filterStatus = v); _currentPage = 1; _loadRateCards(); }),
+
+      // Billing Model filter
+      _filterDropdown('Billing Model', _filterBillingModel,
+        ['Dedicated Monthly', 'Per Trip', 'Hybrid'],
+        (v) { setState(() => _filterBillingModel = v); _currentPage = 1; _loadRateCards(); }),
+
+      // Vehicle Type filter
+      _filterDropdown('Vehicle', _filterVehicleType,
+        ['Sedan', 'Innova', 'Crysta', 'Tempo Traveller', 'Mini Bus', 'Large Bus'],
+        (v) { setState(() => _filterVehicleType = v); _currentPage = 1; _loadRateCards(); }),
+
+      // Industry filter
+      _filterDropdown('Industry', _filterIndustry,
+        ['IT', 'BPO', 'Hospital', 'Manufacturing', 'School', 'Finance', 'Retail', 'Other'],
+        (v) { setState(() => _filterIndustry = v); _currentPage = 1; _loadRateCards(); }),
+
+      // Date range
+      OutlinedButton.icon(
+        onPressed: _showDateRangePicker,
+        icon: const Icon(Icons.date_range, size: 16),
+        label: Text(
+          _fromDate != null ? '${DateFormat('dd/MM').format(_fromDate!)} - ${DateFormat('dd/MM').format(_toDate!)}' : 'Date Range',
+          style: const TextStyle(fontSize: 12),
+        ),
+        style: OutlinedButton.styleFrom(
+          foregroundColor: _fromDate != null ? kBlue : kGrey,
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+          minimumSize: phoneFilters ? const Size(0, 44) : null,
+        ),
+      ),
+    ];
+    final clearButton = _hasFilters
+        ? OutlinedButton.icon(
+            onPressed: _clearFilters,
+            icon: const Icon(Icons.clear_all, size: 16),
+            label: const Text('Clear', style: TextStyle(fontSize: 12)),
+            style: OutlinedButton.styleFrom(
+              foregroundColor: kRed,
+              minimumSize: phoneFilters ? const Size(0, 44) : null,
+            ),
+          )
+        : null;
+
     return Container(
       color: Colors.white,
       padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
@@ -365,74 +461,34 @@ class _RateCardListScreenState extends State<RateCardListScreen> {
         children: [
           const Divider(height: 1),
           const SizedBox(height: 10),
+          if (phoneFilters) ...[
+            // Phone: full-width search, then the filters wrap onto new lines.
+            searchField,
+            const SizedBox(height: 10),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                children: [...filterWidgets, if (clearButton != null) clearButton],
+              ),
+            ),
+          ] else
           Row(
             children: [
               // Search
               Expanded(
                 flex: 2,
-                child: TextField(
-                  controller: _searchCtrl,
-                  decoration: InputDecoration(
-                    hintText: 'Search by ID, organization, route...',
-                    prefixIcon: const Icon(Icons.search, size: 20),
-                    suffixIcon: _searchCtrl.text.isNotEmpty
-                        ? IconButton(icon: const Icon(Icons.clear, size: 18), onPressed: () { _searchCtrl.clear(); _loadRateCards(); })
-                        : null,
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-                    contentPadding: const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
-                    isDense: true,
-                  ),
-                ),
+                child: searchField,
               ),
               const SizedBox(width: 10),
-
-              // Status filter
-              _filterDropdown('Status', _filterStatus,
-                ['Active', 'Draft', 'Inactive', 'Expired', 'Pending Approval'],
-                (v) { setState(() => _filterStatus = v); _currentPage = 1; _loadRateCards(); }),
-              const SizedBox(width: 8),
-
-              // Billing Model filter
-              _filterDropdown('Billing Model', _filterBillingModel,
-                ['Dedicated Monthly', 'Per Trip', 'Hybrid'],
-                (v) { setState(() => _filterBillingModel = v); _currentPage = 1; _loadRateCards(); }),
-              const SizedBox(width: 8),
-
-              // Vehicle Type filter
-              _filterDropdown('Vehicle', _filterVehicleType,
-                ['Sedan', 'Innova', 'Crysta', 'Tempo Traveller', 'Mini Bus', 'Large Bus'],
-                (v) { setState(() => _filterVehicleType = v); _currentPage = 1; _loadRateCards(); }),
-              const SizedBox(width: 8),
-
-              // Industry filter
-              _filterDropdown('Industry', _filterIndustry,
-                ['IT', 'BPO', 'Hospital', 'Manufacturing', 'School', 'Finance', 'Retail', 'Other'],
-                (v) { setState(() => _filterIndustry = v); _currentPage = 1; _loadRateCards(); }),
-              const SizedBox(width: 8),
-
-              // Date range
-              OutlinedButton.icon(
-                onPressed: _showDateRangePicker,
-                icon: const Icon(Icons.date_range, size: 16),
-                label: Text(
-                  _fromDate != null ? '${DateFormat('dd/MM').format(_fromDate!)} - ${DateFormat('dd/MM').format(_toDate!)}' : 'Date Range',
-                  style: const TextStyle(fontSize: 12),
-                ),
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: _fromDate != null ? kBlue : kGrey,
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
-                ),
-              ),
-              const SizedBox(width: 8),
-
+              for (final w in filterWidgets) ...[
+                w,
+                const SizedBox(width: 8),
+              ],
               // Clear filters
-              if (_hasFilters)
-                OutlinedButton.icon(
-                  onPressed: _clearFilters,
-                  icon: const Icon(Icons.clear_all, size: 16),
-                  label: const Text('Clear', style: TextStyle(fontSize: 12)),
-                  style: OutlinedButton.styleFrom(foregroundColor: kRed),
-                ),
+              if (clearButton != null) clearButton,
             ],
           ),
         ],
@@ -633,6 +689,8 @@ class _RateCardListScreenState extends State<RateCardListScreen> {
       );
     }
 
+    if (isPhone(context)) return _buildPhoneCardList();
+
     return Container(
       margin: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -667,6 +725,200 @@ class _RateCardListScreenState extends State<RateCardListScreen> {
                 ],
               ),
             ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  // ─── Phone card list (phone only; desktop keeps the wide table) ─────────────
+  Widget _buildPhoneCardList() {
+    final sortable = _columns.where((c) => c.key != 'actions' && c.key != 'docs').toList();
+    final matching = sortable.where((c) => c.key == _sortBy).toList();
+    final currentLabel = matching.isNotEmpty ? matching.first.label : 'Created';
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+          child: Row(
+            children: [
+              Expanded(
+                child: PopupMenuButton<String>(
+                  tooltip: 'Sort by',
+                  onSelected: (key) {
+                    setState(() {
+                      _sortBy = key;
+                      _sortOrder = 'asc';
+                    });
+                    _loadRateCards();
+                  },
+                  itemBuilder: (ctx) => sortable
+                      .map((c) => PopupMenuItem<String>(value: c.key, child: Text(c.label)))
+                      .toList(),
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(minHeight: 44),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.sort, size: 18, color: kGrey),
+                        const SizedBox(width: 6),
+                        Expanded(
+                          child: Text('Sort by: $currentLabel', style: const TextStyle(fontSize: 13, color: kPrimary, fontWeight: FontWeight.w600), overflow: TextOverflow.ellipsis),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+              IconButton(
+                tooltip: _sortOrder == 'asc' ? 'Ascending' : 'Descending',
+                icon: Icon(_sortOrder == 'asc' ? Icons.arrow_upward : Icons.arrow_downward, size: 20, color: kBlue),
+                onPressed: () {
+                  setState(() => _sortOrder = _sortOrder == 'asc' ? 'desc' : 'asc');
+                  _loadRateCards();
+                },
+              ),
+            ],
+          ),
+        ),
+        Expanded(
+          child: ListView.builder(
+            controller: _vertScrollCtrl,
+            padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
+            itemCount: _rateCards.length,
+            itemBuilder: (ctx, i) => _buildPhoneCard(_rateCards[i]),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _phoneStat(String label, String value) {
+    return Expanded(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(label, style: TextStyle(fontSize: 12, color: Colors.grey[600])),
+          const SizedBox(height: 2),
+          FitText(value, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: kPrimary)),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPhoneCard(RateCardModel rc) {
+    final docCount = rc.documents.length;
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: kBorder),
+        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 8, offset: const Offset(0, 2))],
+      ),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(12),
+        onTap: () => _showDetailSheet(rc),
+        child: Padding(
+          padding: const EdgeInsets.all(12),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(rc.rateCardId, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: kBlue), overflow: TextOverflow.ellipsis),
+                  ),
+                  _statusCell(rc.status, 126),
+                ],
+              ),
+              Text(rc.organization.organizationName, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: kPrimary), maxLines: 2, overflow: TextOverflow.ellipsis),
+              const SizedBox(height: 4),
+              Text('${rc.routeShift.routeCode} · ${rc.routeShift.routeName}', style: const TextStyle(fontSize: 13, color: kGrey), maxLines: 2, overflow: TextOverflow.ellipsis),
+              Text('${rc.organization.industryType} · ${rc.organization.contractType}', style: const TextStyle(fontSize: 13, color: kGrey), maxLines: 2, overflow: TextOverflow.ellipsis),
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 8,
+                runSpacing: 4,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                children: [
+                  Text('${rc.vehicle.vehicleType} × ${rc.vehicle.numberOfVehicles}', style: const TextStyle(fontSize: 13, color: kPrimary)),
+                  _billingModelCell(rc.pricing.billingModel, 150),
+                ],
+              ),
+              const SizedBox(height: 8),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _phoneStat('Monthly Rate', '₹${_fmt(rc.pricing.monthlyBaseRatePerVehicle)}'),
+                  _phoneStat('Extra KM', '₹${_fmt(rc.pricing.extraKmRate)}/km'),
+                  _phoneStat('GST', '${rc.pricing.gstPercent}%'),
+                ],
+              ),
+              const SizedBox(height: 8),
+              Text('Contract: ${_fmtDate(rc.organization.contractStartDate)} – ${_fmtDate(rc.organization.contractEndDate)}', style: TextStyle(fontSize: 12, color: Colors.grey[700])),
+              Text('Created: ${_fmtDate(rc.createdAt)}${rc.createdBy.isNotEmpty ? ' · ${rc.createdBy}' : ''}', style: TextStyle(fontSize: 12, color: Colors.grey[700]), maxLines: 2, overflow: TextOverflow.ellipsis),
+              const Divider(height: 16),
+              Row(
+                children: [
+                  InkWell(
+                    borderRadius: BorderRadius.circular(8),
+                    onTap: docCount > 0 ? () => _showDetailSheet(rc, initialTab: 1) : null,
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(minHeight: 44, minWidth: 44),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const SizedBox(width: 4),
+                          Icon(Icons.attach_file, size: 18, color: docCount > 0 ? kBlue : kGrey),
+                          const SizedBox(width: 4),
+                          Text('$docCount document${docCount == 1 ? '' : 's'}', style: TextStyle(fontSize: 13, color: docCount > 0 ? kBlue : kGrey, fontWeight: FontWeight.w600)),
+                          const SizedBox(width: 4),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const Spacer(),
+                  // View Detail
+                  IconButton(
+                    icon: const Icon(Icons.visibility, size: 20, color: kBlue),
+                    tooltip: 'View Details',
+                    onPressed: () => _showDetailSheet(rc),
+                  ),
+                  // Edit
+                  IconButton(
+                    icon: const Icon(Icons.edit, size: 20, color: kOrange),
+                    tooltip: 'Edit',
+                    onPressed: () async {
+                      final result = await Navigator.push(context, MaterialPageRoute(
+                        builder: (_) => CreateRateCardModule.CreateRateCardScreen(existingCard: rc.toJson()),
+                      ));
+                      if (result == true) _loadRateCards();
+                    },
+                  ),
+                  // More options
+                  PopupMenuButton<String>(
+                    icon: const Icon(Icons.more_vert, size: 20, color: kGrey),
+                    onSelected: (action) async {
+                      switch (action) {
+                        case 'activate':   await _updateStatus(rc, 'Active'); break;
+                        case 'deactivate': await _updateStatus(rc, 'Inactive'); break;
+                        case 'draft':      await _updateStatus(rc, 'Draft'); break;
+                        case 'delete':     await _deleteRateCard(rc); break;
+                      }
+                    },
+                    itemBuilder: (ctx) => [
+                      if (rc.status != 'Active')
+                        const PopupMenuItem(value: 'activate', child: Row(children: [Icon(Icons.check_circle, color: kGreen, size: 16), SizedBox(width: 8), Text('Set Active')])),
+                      if (rc.status == 'Active')
+                        const PopupMenuItem(value: 'deactivate', child: Row(children: [Icon(Icons.pause, color: kGrey, size: 16), SizedBox(width: 8), Text('Deactivate')])),
+                      if (rc.status != 'Draft')
+                        const PopupMenuItem(value: 'draft', child: Row(children: [Icon(Icons.edit, color: kOrange, size: 16), SizedBox(width: 8), Text('Move to Draft')])),
+                      const PopupMenuItem(value: 'delete', child: Row(children: [Icon(Icons.delete, color: kRed, size: 16), SizedBox(width: 8), Text('Delete', style: TextStyle(color: kRed))])),
+                    ],
+                  ),
+                ],
+              ),
+            ],
           ),
         ),
       ),
@@ -931,16 +1183,11 @@ class _RateCardListScreenState extends State<RateCardListScreen> {
 
   // ─── Pagination Bar ─────────────────────────────────────────────────────────
   Widget _buildPaginationBar() {
-    return Container(
-      color: Colors.white,
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-      child: Row(
-        children: [
-          Text(
-            'Showing ${(_currentPage - 1) * _limit + 1}–${(_currentPage * _limit).clamp(0, _total)} of $_total rate cards',
-            style: TextStyle(fontSize: 13, color: Colors.grey[600]),
-          ),
-          const Spacer(),
+    final showingText = Text(
+      'Showing ${(_currentPage - 1) * _limit + 1}–${(_currentPage * _limit).clamp(0, _total)} of $_total rate cards',
+      style: TextStyle(fontSize: isPhone(context) ? 12 : 13, color: Colors.grey[600]),
+    );
+    final pagerControls = <Widget>[
           IconButton(
             icon: const Icon(Icons.first_page),
             onPressed: _currentPage > 1 ? () { setState(() => _currentPage = 1); _loadRateCards(); } : null,
@@ -972,8 +1219,33 @@ class _RateCardListScreenState extends State<RateCardListScreen> {
             icon: const Icon(Icons.last_page),
             onPressed: _currentPage < _totalPages ? () { setState(() => _currentPage = _totalPages); _loadRateCards(); } : null,
           ),
-        ],
-      ),
+    ];
+    return Container(
+      color: Colors.white,
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+      child: isPhone(context)
+          ? Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                showingText,
+                Align(
+                  alignment: Alignment.center,
+                  child: Wrap(
+                    alignment: WrapAlignment.center,
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    children: pagerControls,
+                  ),
+                ),
+              ],
+            )
+          : Row(
+              children: [
+                showingText,
+                const Spacer(),
+                ...pagerControls,
+              ],
+            ),
     );
   }
 

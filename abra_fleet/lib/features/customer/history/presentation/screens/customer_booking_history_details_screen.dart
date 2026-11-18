@@ -77,82 +77,91 @@ class CustomerBookingHistoryDetailsScreen extends StatelessWidget {
         title: Text('Booking #${bookingItem.bookingId.substring(0,bookingItem.bookingId.length > 6 ? 6 : bookingItem.bookingId.length)}...'), // Shortened ID
         centerTitle: true,
       ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(20.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: <Widget>[
-            Center(
-              child: Hero(
-                tag: 'booking_history_icon_${bookingItem.bookingId}',
-                child: Icon(
-                  _getStatusIcon(bookingItem.status),
-                  size: 70,
-                  color: _getStatusColor(context, bookingItem.status),
+      body: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 800),
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(20.0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                Center(
+                  child: Hero(
+                    tag: 'booking_history_icon_${bookingItem.bookingId}',
+                    child: Icon(
+                      _getStatusIcon(bookingItem.status),
+                      size: 70,
+                      color: _getStatusColor(context, bookingItem.status),
+                    ),
+                  ),
                 ),
-              ),
-            ),
-            const SizedBox(height: 16),
-            Center(
-              child: Text(
-                bookingItem.serviceType,
-                style: textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold),
-                textAlign: TextAlign.center,
-              ),
-            ),
-            const SizedBox(height: 4),
-            Center(
-              child: Text(
-                'Status: ${bookingItem.status}',
-                style: textTheme.titleMedium?.copyWith(color: _getStatusColor(context, bookingItem.status)),
-              ),
-            ),
-            const SizedBox(height: 20.0),
-            const Divider(thickness: 1),
-
-            _buildDetailRow(context, 'Booking ID:', bookingItem.bookingId, icon: Icons.vpn_key_outlined),
-            _buildDetailRow(context, 'Date:', dateTimeFormat.format(bookingItem.bookingDate), icon: Icons.calendar_today_outlined),
-            const SizedBox(height: 10),
-
-            _buildDetailRow(context, 'Pickup:', bookingItem.pickupLocation, icon: Icons.my_location_outlined),
-            _buildDetailRow(context, 'Drop-off:', bookingItem.dropoffLocation, icon: Icons.flag_outlined),
-            const SizedBox(height: 10),
-
-            if (bookingItem.vehicleDetails != null && bookingItem.vehicleDetails!.isNotEmpty)
-              _buildDetailRow(context, 'Vehicle:', bookingItem.vehicleDetails, icon: Icons.directions_car_outlined),
-            if (bookingItem.driverName != null && bookingItem.driverName!.isNotEmpty)
-              _buildDetailRow(context, 'Driver:', bookingItem.driverName, icon: Icons.person_outline_rounded),
-
-            if (bookingItem.fare != null) ...[
-              const SizedBox(height: 10),
-              _buildDetailRow(context, 'Fare:', '\$${bookingItem.fare!.toStringAsFixed(2)}', icon: Icons.attach_money_rounded, isEmphasized: true),
-            ],
-
-            const SizedBox(height: 30),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-              children: [
-                OutlinedButton.icon(
-                  icon: const Icon(Icons.replay_rounded),
-                  label: const Text('Rebook'),
-                  onPressed: () {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Rebook this service (Placeholder)')),
-                    );
-                  },
+                const SizedBox(height: 16),
+                Center(
+                  child: Text(
+                    bookingItem.serviceType,
+                    style: textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold),
+                    textAlign: TextAlign.center,
+                  ),
                 ),
-                OutlinedButton.icon(
-                  icon: const Icon(Icons.rate_review_outlined),
-                  label: const Text('Feedback'),
-                  onPressed: () {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Leave feedback (Placeholder)')),
-                    );
-                  },
+                const SizedBox(height: 4),
+                Center(
+                  child: Text(
+                    'Status: ${bookingItem.status}',
+                    style: textTheme.titleMedium?.copyWith(color: _getStatusColor(context, bookingItem.status)),
+                  ),
+                ),
+                const SizedBox(height: 20.0),
+                const Divider(thickness: 1),
+
+                _buildDetailRow(context, 'Booking ID:', bookingItem.bookingId, icon: Icons.vpn_key_outlined),
+                _buildDetailRow(context, 'Date:', dateTimeFormat.format(bookingItem.bookingDate), icon: Icons.calendar_today_outlined),
+                const SizedBox(height: 10),
+
+                _buildDetailRow(context, 'Pickup:', bookingItem.pickupLocation, icon: Icons.my_location_outlined),
+                _buildDetailRow(context, 'Drop-off:', bookingItem.dropoffLocation, icon: Icons.flag_outlined),
+                const SizedBox(height: 10),
+
+                if (bookingItem.vehicleDetails != null && bookingItem.vehicleDetails!.isNotEmpty)
+                  _buildDetailRow(context, 'Vehicle:', bookingItem.vehicleDetails, icon: Icons.directions_car_outlined),
+                if (bookingItem.driverName != null && bookingItem.driverName!.isNotEmpty)
+                  _buildDetailRow(context, 'Driver:', bookingItem.driverName, icon: Icons.person_outline_rounded),
+
+                if (bookingItem.fare != null) ...[
+                  const SizedBox(height: 10),
+                  _buildDetailRow(context, 'Fare:', '\$${bookingItem.fare!.toStringAsFixed(2)}', icon: Icons.attach_money_rounded, isEmphasized: true),
+                ],
+
+                const SizedBox(height: 30),
+                Center(
+                  child: Wrap(
+                    spacing: 12,
+                    runSpacing: 12,
+                    alignment: WrapAlignment.center,
+                    children: [
+                      OutlinedButton.icon(
+                        icon: const Icon(Icons.replay_rounded),
+                        label: const Text('Rebook'),
+                        onPressed: () {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(content: Text('Rebook this service (Placeholder)')),
+                          );
+                        },
+                      ),
+                      OutlinedButton.icon(
+                        icon: const Icon(Icons.rate_review_outlined),
+                        label: const Text('Feedback'),
+                        onPressed: () {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(content: Text('Leave feedback (Placeholder)')),
+                          );
+                        },
+                      ),
+                    ],
+                  ),
                 ),
               ],
-            )
-          ],
+            ),
+          ),
         ),
       ),
     );

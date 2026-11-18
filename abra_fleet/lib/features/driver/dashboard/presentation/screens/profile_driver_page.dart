@@ -16,6 +16,7 @@ import 'package:http_parser/http_parser.dart';
 import 'package:abra_fleet/app/config/api_config.dart';
 import 'package:abra_fleet/core/services/api_service.dart';
 import 'package:abra_fleet/features/admin/hrm/hrm_feedback.dart';
+import 'package:abra_fleet/core/widgets/responsive/responsive.dart';
 
 // UI Constants
 const Color kPrimaryColor = Color(0xFF0D47A1);
@@ -810,27 +811,31 @@ class _ProfileDriverPageState extends State<ProfileDriverPage> {
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15.0)),
       color: kCardBackgroundColor,
       child: Padding(
-        padding: const EdgeInsets.all(20.0),
+        padding: EdgeInsets.all(isPhone(context) ? 16.0 : 20.0),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Row(
-                  children: [
-                    if (icon != null)
-                      Icon(icon, color: kPrimaryTextColor, size: 22),
-                    if (icon != null) const SizedBox(width: 8),
-                    Text(
-                      title,
-                      style: const TextStyle(
-                        fontSize: 18.0,
-                        fontWeight: FontWeight.bold,
-                        color: kPrimaryTextColor,
+                Flexible(
+                  child: Row(
+                    children: [
+                      if (icon != null)
+                        Icon(icon, color: kPrimaryTextColor, size: 22),
+                      if (icon != null) const SizedBox(width: 8),
+                      Flexible(
+                        child: Text(
+                          title,
+                          style: const TextStyle(
+                            fontSize: 18.0,
+                            fontWeight: FontWeight.bold,
+                            color: kPrimaryTextColor,
+                          ),
+                        ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
                 if (trailing != null) trailing,
               ],
@@ -1120,11 +1125,15 @@ class _ProfileDriverPageState extends State<ProfileDriverPage> {
               fontSize: 15,
             ),
           ),
-          Text(
-            value,
-            style: const TextStyle(
-              color: kSecondaryTextColor,
-              fontSize: 15,
+          const SizedBox(width: 12),
+          Flexible(
+            child: Text(
+              value,
+              textAlign: TextAlign.end,
+              style: const TextStyle(
+                color: kSecondaryTextColor,
+                fontSize: 15,
+              ),
             ),
           ),
         ],

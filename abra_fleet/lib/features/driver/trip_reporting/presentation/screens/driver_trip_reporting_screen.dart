@@ -581,7 +581,12 @@ class _DriverTripReportingScreenState extends State<DriverTripReportingScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: _isTripActive ? _buildEndTripUI(context) : _buildStartTripForm(context),
+      body: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 700),
+          child: _isTripActive ? _buildEndTripUI(context) : _buildStartTripForm(context),
+        ),
+      ),
     );
   }
 }

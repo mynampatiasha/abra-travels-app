@@ -188,10 +188,24 @@ class OTPService {
   }
 
   /**
+   * The driver app lists the passengers of an office-drop stop as "passenger_0", "passenger_1", ...
+   * (position in the trip). Translate that to the id the OTP records use: the pickup stop id of the N-th customer.
+   */
+  async normalizePassengerId(db, tripGroupId, passengerId) {
+    const m = /^passenger_(\d+)$/.exec(String(passengerId));
+    if (!m) return passengerId;
+    const trip = await db.collection('roster-assigned-trips').findOne({ tripGroupId, status: { $ne: 'cancelled' } });
+    const pickups = ((trip && trip.stops) || []).filter((st) => st.type === 'pickup' && st.customer);
+    const stop = pickups[Number(m[1])];
+    return stop ? String(stop.stopId) : passengerId;
+  }
+
+  /**
    * Verify OTP
    */
   async verifyOTP(db, tripGroupId, stopId, passengerId, enteredOTP) {
     try {
+      passengerId = await this.normalizePassengerId(db, tripGroupId, passengerId);
       console.log('\n' + '🔍' * 40);
       console.log('VERIFYING OTP');
       console.log('🔍' * 40);
@@ -207,12 +221,23 @@ class OTPService {
       }
 
       // Find the OTP record - no expiry check, valid for the entire trip stop duration
-      const otpRecord = await db.collection('trip_otps').findOne({
+      let otpRecord = await db.collection('trip_otps').findOne({
         tripGroupId,
         stopId,
         $or: passIdOr,
         verified: false,
       });
+
+      // The drop-off (step-out) OTP is created when the passenger boards (under the PICKUP stop),
+      // but the driver verifies it at the DROP stop. Fall back to the passenger's step-out OTP for this trip.
+      if (!otpRecord) {
+        otpRecord = await db.collection('trip_otps').findOne({
+          tripGroupId,
+          type: 'step_out',
+          $or: passIdOr,
+          verified: false,
+        });
+      }
 
       if (!otpRecord) {
         console.log('❌ OTP not found or expired');
@@ -300,6 +325,7 @@ class OTPService {
    */
   async resendOTP(db, tripGroupId, stopId, passengerId) {
     try {
+      passengerId = await this.normalizePassengerId(db, tripGroupId, passengerId);
       console.log('\n' + '🔄' * 40);
       console.log('RESENDING OTP');
       console.log('🔄' * 40);

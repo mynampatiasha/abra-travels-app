@@ -14,6 +14,7 @@ import 'package:abra_fleet/core/services/roster_service.dart';
 import 'package:abra_fleet/core/services/api_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'client_pending_assignment_tab.dart';
+import 'package:abra_fleet/core/widgets/responsive/responsive.dart';
 
 class ClientRosterManagementPage extends StatefulWidget {
   const ClientRosterManagementPage({Key? key}) : super(key: key);
@@ -321,9 +322,15 @@ class _ClientRosterManagementPageState extends State<ClientRosterManagementPage>
       color: Colors.black54,
       child: Center(
         child: Container(
-          width: width ?? MediaQuery.of(context).size.width * 0.9,
-          height: height ?? MediaQuery.of(context).size.height * 0.85,
-          margin: const EdgeInsets.all(20),
+          width: width ??
+              (isPhone(context)
+                  ? MediaQuery.of(context).size.width - 16
+                  : MediaQuery.of(context).size.width * 0.9),
+          height: height ??
+              (isPhone(context)
+                  ? MediaQuery.of(context).size.height * 0.92
+                  : MediaQuery.of(context).size.height * 0.85),
+          margin: EdgeInsets.all(isPhone(context) ? 8 : 20),
           decoration: BoxDecoration(
             color: Colors.white,
             borderRadius: BorderRadius.circular(16),
@@ -362,12 +369,15 @@ class _ClientRosterManagementPageState extends State<ClientRosterManagementPage>
                       tooltip: 'Back',
                     ),
                     const SizedBox(width: 12),
-                    Text(
-                      title,
-                      style: const TextStyle(
-                        color: Colors.black,
-                        fontSize: 20,
-                        fontWeight: FontWeight.bold,
+                    Flexible(
+                      child: Text(
+                        title,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          color: Colors.black,
+                          fontSize: 20,
+                          fontWeight: FontWeight.bold,
+                        ),
                       ),
                     ),
                     const Spacer(),
@@ -694,7 +704,7 @@ class _ClientRosterManagementPageState extends State<ClientRosterManagementPage>
           Text(
             label,
             style: TextStyle(
-              fontSize: 11,
+              fontSize: isPhone(context) ? 12 : 11,
               color: isSelected ? color : const Color(0xFF64748B),
               fontWeight: FontWeight.w500,
             ),
@@ -768,6 +778,90 @@ class _ClientRosterManagementPageState extends State<ClientRosterManagementPage>
 
   // --- SEARCH AND ACTIONS ---
   Widget _buildSearchAndActions() {
+    if (isPhone(context)) return _buildSearchAndActionsPhone();
+    return _buildSearchAndActionsWide();
+  }
+
+  // Phone only: search on its own line, the four actions in an even row below.
+  Widget _buildSearchAndActionsPhone() {
+    Widget action(Color c, Widget icon, VoidCallback? onPressed, String tip) {
+      return Expanded(
+        child: Container(
+          height: 48,
+          decoration: BoxDecoration(
+            color: c.withOpacity(0.1),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: c.withOpacity(0.2)),
+          ),
+          child: IconButton(icon: icon, onPressed: onPressed, tooltip: tip),
+        ),
+      );
+    }
+
+    return Container(
+      color: Colors.white,
+      padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+      child: Column(
+        children: [
+          TextField(
+            onChanged: (value) => setState(() => _searchQuery = value),
+            decoration: InputDecoration(
+              hintText: 'Search rosters...',
+              hintStyle: const TextStyle(color: Color(0xFF94A3B8)),
+              prefixIcon: const Icon(Icons.search, color: Color(0xFF64748B)),
+              suffixIcon: _searchQuery.isNotEmpty
+                  ? IconButton(
+                      icon: const Icon(Icons.clear, color: Color(0xFF64748B)),
+                      onPressed: () => setState(() => _searchQuery = ''),
+                    )
+                  : null,
+              filled: true,
+              fillColor: const Color(0xFFF1F5F9),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: BorderSide.none,
+              ),
+              contentPadding: const EdgeInsets.symmetric(vertical: 12),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              action(
+                const Color(0xFF8B5CF6),
+                _isRefreshing
+                    ? const SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF8B5CF6)),
+                        ),
+                      )
+                    : const Icon(Icons.refresh, color: Color(0xFF8B5CF6)),
+                _isRefreshing ? null : _refreshAllData,
+                'Refresh Data',
+              ),
+              const SizedBox(width: 8),
+              action(const Color(0xFF2563EB),
+                  const Icon(Icons.filter_list, color: Color(0xFF2563EB)),
+                  _showFilterDialog, 'Filters'),
+              const SizedBox(width: 8),
+              action(const Color(0xFF10B981),
+                  const Icon(Icons.file_upload, color: Color(0xFF10B981)),
+                  _importRoster, 'Import'),
+              const SizedBox(width: 8),
+              action(const Color(0xFFF59E0B),
+                  const Icon(Icons.file_download, color: Color(0xFFF59E0B)),
+                  _showExportDialog, 'Export'),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSearchAndActionsWide() {
     return Container(
       color: Colors.white,
       padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
@@ -1276,7 +1370,7 @@ class _ClientRosterManagementPageState extends State<ClientRosterManagementPage>
             children: [
               const Icon(Icons.filter_list, color: Color(0xFF2563EB)),
               const SizedBox(width: 12),
-              const Text('Filter Rosters'),
+              const Flexible(child: Text('Filter Rosters', overflow: TextOverflow.ellipsis)),
               const Spacer(),
               if (_hasActiveFilters())
                 TextButton(
@@ -2489,12 +2583,14 @@ class _ClientRosterManagementPageState extends State<ClientRosterManagementPage>
                     const Icon(Icons.access_time,
                         size: 18, color: Color(0xFF64748B)),
                     const SizedBox(width: 8),
-                    Text(
-                      roster.shift,
-                      style: const TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w600,
-                        color: Color(0xFF1E293B),
+                    Flexible(
+                      child: Text(
+                        roster.shift,
+                        style: const TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                          color: Color(0xFF1E293B),
+                        ),
                       ),
                     ),
                   ],
@@ -2558,14 +2654,28 @@ class _ClientRosterManagementPageState extends State<ClientRosterManagementPage>
                     const Icon(Icons.calendar_today,
                         size: 16, color: Color(0xFF64748B)),
                     const SizedBox(width: 8),
-                    Text(
-                      'Valid: ${_formatDate(roster.validFrom)} - ${_formatDate(roster.validTo)}',
-                      style: const TextStyle(
-                        fontSize: 13,
-                        color: Color(0xFF64748B),
+                    if (isPhone(context)) ...[
+                      // Phone: the validity text wraps instead of pushing the badge off-screen.
+                      Expanded(
+                        child: Text(
+                          'Valid: ${_formatDate(roster.validFrom)} - ${_formatDate(roster.validTo)}',
+                          style: const TextStyle(
+                            fontSize: 13,
+                            color: Color(0xFF64748B),
+                          ),
+                        ),
                       ),
-                    ),
-                    const Spacer(),
+                      const SizedBox(width: 8),
+                    ] else ...[
+                      Text(
+                        'Valid: ${_formatDate(roster.validFrom)} - ${_formatDate(roster.validTo)}',
+                        style: const TextStyle(
+                          fontSize: 13,
+                          color: Color(0xFF64748B),
+                        ),
+                      ),
+                      const Spacer(),
+                    ],
                     if (roster.status == 'active')
                       Container(
                         padding: const EdgeInsets.symmetric(
@@ -2613,6 +2723,7 @@ class _ClientRosterManagementPageState extends State<ClientRosterManagementPage>
                     style: OutlinedButton.styleFrom(
                       foregroundColor: const Color(0xFF2563EB),
                       side: const BorderSide(color: Color(0xFF2563EB)),
+                      minimumSize: isPhone(context) ? const Size(0, 44) : null,
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(8),
                       ),
@@ -2625,6 +2736,7 @@ class _ClientRosterManagementPageState extends State<ClientRosterManagementPage>
                     style: ElevatedButton.styleFrom(
                       backgroundColor: const Color(0xFF2563EB),
                       foregroundColor: Colors.white,
+                      minimumSize: isPhone(context) ? const Size(0, 44) : null,
                       elevation: 0,
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(8),
@@ -2660,9 +2772,9 @@ class _ClientRosterManagementPageState extends State<ClientRosterManagementPage>
         ),
         Text(
           label,
-          style: const TextStyle(
-            fontSize: 11,
-            color: Color(0xFF64748B),
+          style: TextStyle(
+            fontSize: isPhone(context) ? 12 : 11,
+            color: const Color(0xFF64748B),
           ),
         ),
       ],
@@ -3092,7 +3204,7 @@ class _ClientRosterManagementPageState extends State<ClientRosterManagementPage>
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           SizedBox(
-            width: 120,
+            width: isPhone(context) ? 100 : 120,
             child: Text(
               label,
               style: const TextStyle(

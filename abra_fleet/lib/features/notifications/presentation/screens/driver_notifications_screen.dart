@@ -2,6 +2,7 @@
 // Driver-specific notifications screen - FCM/Database Implementation
 
 import 'package:flutter/material.dart';
+import 'package:abra_fleet/core/widgets/responsive/responsive.dart';
 import 'package:intl/intl.dart';
 import 'dart:async';
 import 'dart:convert';
@@ -420,7 +421,7 @@ class _DriverNotificationsScreenState extends State<DriverNotificationsScreen> {
       appBar: AppBar(
         title: Row(
           children: [
-            const Text('Driver Notifications'),
+            const Flexible(child: Text('Driver Notifications', overflow: TextOverflow.ellipsis)),
             const SizedBox(width: 8),
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
@@ -624,7 +625,7 @@ class _DriverNotificationsScreenState extends State<DriverNotificationsScreen> {
                           ),
                         ],
                         const SizedBox(height: 6),
-                        Row(
+                        _AdaptiveRow(
                           children: [
                             Container(
                               padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
@@ -635,7 +636,7 @@ class _DriverNotificationsScreenState extends State<DriverNotificationsScreen> {
                               child: Text(
                                 priority.toUpperCase(),
                                 style: TextStyle(
-                                  fontSize: 10,
+                                  fontSize: isPhone(context) ? 12 : 10,
                                   fontWeight: FontWeight.bold,
                                   color: _getPriorityColor(priority),
                                 ),
@@ -645,7 +646,7 @@ class _DriverNotificationsScreenState extends State<DriverNotificationsScreen> {
                             if (dateTime != null)
                               Text(
                                 DateFormat('MMM dd, yyyy • hh:mm a').format(dateTime),
-                                style: TextStyle(fontSize: 11, color: Colors.grey[600]),
+                                style: TextStyle(fontSize: isPhone(context) ? 12 : 11, color: Colors.grey[600]),
                               ),
                           ],
                         ),
@@ -662,7 +663,9 @@ class _DriverNotificationsScreenState extends State<DriverNotificationsScreen> {
                         IconButton(
                           icon: const Icon(Icons.check, color: Colors.blue, size: 20),
                           padding: EdgeInsets.zero,
-                          constraints: const BoxConstraints(),
+                          constraints: isPhone(context)
+                              ? const BoxConstraints(minWidth: 44, minHeight: 44)
+                              : const BoxConstraints(),
                           onPressed: () => _markAsRead(notificationId),
                         ),
                       if (isTripAssignment) ...[
@@ -684,7 +687,7 @@ class _DriverNotificationsScreenState extends State<DriverNotificationsScreen> {
                             child: Text(
                               _respondedTrips[tripId] == 'accept' ? '✅ Accepted' : '❌ Declined',
                               style: TextStyle(
-                                fontSize: 10,
+                                fontSize: isPhone(context) ? 12 : 10,
                                 fontWeight: FontWeight.bold,
                                 color: _respondedTrips[tripId] == 'accept'
                                     ? Colors.green.shade800
@@ -729,7 +732,7 @@ class _DriverNotificationsScreenState extends State<DriverNotificationsScreen> {
                               );
                             },
                             child: Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                              padding: EdgeInsets.symmetric(horizontal: 8, vertical: isPhone(context) ? 12 : 4),
                               decoration: BoxDecoration(
                                 color: Colors.white,
                                 borderRadius: BorderRadius.circular(12),
@@ -738,12 +741,12 @@ class _DriverNotificationsScreenState extends State<DriverNotificationsScreen> {
                               child: Row(
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
-                                  Icon(Icons.edit, size: 10, color: Colors.blue.shade700),
+                                  Icon(Icons.edit, size: isPhone(context) ? 14 : 10, color: Colors.blue.shade700),
                                   const SizedBox(width: 3),
                                   Text(
                                     'Respond Again',
                                     style: TextStyle(
-                                      fontSize: 9,
+                                      fontSize: isPhone(context) ? 12 : 9,
                                       fontWeight: FontWeight.w600,
                                       color: Colors.blue.shade700,
                                     ),
@@ -762,7 +765,7 @@ class _DriverNotificationsScreenState extends State<DriverNotificationsScreen> {
                               });
                             },
                             child: Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                              padding: EdgeInsets.symmetric(horizontal: 10, vertical: isPhone(context) ? 14 : 6),
                               decoration: BoxDecoration(
                                 color: Colors.white,
                                 borderRadius: BorderRadius.circular(20),
@@ -799,7 +802,10 @@ class _DriverNotificationsScreenState extends State<DriverNotificationsScreen> {
                               _expandedResponsePanel[notificationId] = false;
                               _selectedResponse.remove(notificationId);
                             }),
-                            child: Icon(Icons.close, size: 20, color: Colors.grey.shade600),
+                            child: Padding(
+                              padding: EdgeInsets.all(isPhone(context) ? 12 : 0),
+                              child: Icon(Icons.close, size: 20, color: Colors.grey.shade600),
+                            ),
                           ),
                       ],
                     ],
@@ -1591,5 +1597,28 @@ class _DriverNotificationsScreenState extends State<DriverNotificationsScreen> {
       default:
         return Colors.blue;
     }
+  }
+}
+
+/// Phone-only helper: behaves exactly like [Row] at 600 px and wider; on a
+/// phone the children wrap onto further lines so nothing is cut off.
+class _AdaptiveRow extends StatelessWidget {
+  final List<Widget> children;
+
+  const _AdaptiveRow({required this.children});
+
+  @override
+  Widget build(BuildContext context) {
+    if (!isPhone(context)) {
+      return Row(children: children);
+    }
+    return Wrap(
+      crossAxisAlignment: WrapCrossAlignment.center,
+      spacing: 8,
+      runSpacing: 4,
+      children: children
+          .where((c) => !(c is SizedBox && c.child == null && c.height == null))
+          .toList(),
+    );
   }
 }

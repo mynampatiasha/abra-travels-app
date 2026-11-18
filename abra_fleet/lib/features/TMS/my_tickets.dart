@@ -4,6 +4,7 @@
 // ============================================================================
 
 import 'package:flutter/material.dart';
+import 'package:abra_fleet/core/widgets/responsive/responsive.dart';
 import 'package:intl/intl.dart';
 import 'package:share_plus/share_plus.dart';
 import '../../core/services/tms_service.dart';
@@ -746,14 +747,18 @@ class _MyTicketsScreenState extends State<MyTicketsScreen>
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.white,
-      body: Column(children: [
-        _buildTopBar(),
-        _buildStatCards(),
-        const SizedBox(height: 14),
-        _buildFilterRow(),
-        const SizedBox(height: 10),
-        Expanded(child: _isLoading ? _loader() : _buildBody()),
-      ]),
+      body: SingleChildScrollView(
+        scrollDirection: Axis.vertical,
+        child: Column(children: [
+          _buildTopBar(),
+          _buildStatCards(),
+          const SizedBox(height: 14),
+          _buildFilterRow(),
+          const SizedBox(height: 10),
+          _isLoading ? _loader() : _buildBody(),
+          const SizedBox(height: 24),
+        ]),
+      ),
     );
   }
 
@@ -769,7 +774,47 @@ class _MyTicketsScreenState extends State<MyTicketsScreen>
       bottom: false,
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-        child: Row(children: [
+        child: isPhone(context)
+        // Phone: title row, then the two tabs on their own full-width line.
+        ? Column(children: [
+          Row(children: [
+            GestureDetector(
+              onTap: () => Navigator.pop(context),
+              child: Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.15),
+                    borderRadius: BorderRadius.circular(10)),
+                child: const Icon(Icons.arrow_back_ios_new,
+                    color: Colors.white, size: 16),
+              ),
+            ),
+            const SizedBox(width: 10),
+            const Icon(Icons.confirmation_number_outlined,
+                color: Colors.white70, size: 20),
+            const SizedBox(width: 8),
+            const Flexible(child: Text('Tickets', maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(color: Colors.white,
+                    fontSize: 18, fontWeight: FontWeight.bold))),
+            const Spacer(),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+              decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.15),
+                  borderRadius: BorderRadius.circular(20)),
+              child: Text('${_filtered.length} records',
+                  style: const TextStyle(color: Colors.white70, fontSize: 12)),
+            ),
+          ]),
+          const SizedBox(height: 10),
+          Row(children: [
+            Expanded(child: _tabBtn('My Tickets', 0)),
+            const SizedBox(width: 8),
+            Expanded(child: _tabBtn('Raised by Me', 1)),
+          ]),
+        ])
+        : Row(children: [
           GestureDetector(
             onTap: () => Navigator.pop(context),
             child: Container(
@@ -811,7 +856,9 @@ class _MyTicketsScreenState extends State<MyTicketsScreen>
       onTap: () => setState(() { _activeTab = idx; _applyFilters(); }),
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 200),
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+        padding: EdgeInsets.symmetric(horizontal: 14,
+            vertical: isPhone(context) ? 12 : 7),
+        alignment: isPhone(context) ? Alignment.center : null,
         decoration: BoxDecoration(
           color: active ? Colors.white : Colors.white.withOpacity(0.12),
           borderRadius: BorderRadius.circular(20),
@@ -836,15 +883,25 @@ class _MyTicketsScreenState extends State<MyTicketsScreen>
       _SC('Reply',       isTab0 ? _myReply      : _rReply,      Icons.reply,                  cReply),
       _SC('Closed',      isTab0 ? _myClosed     : _rClosed,     Icons.lock_outline,           cClosed),
     ];
+    if (isPhone(context)) {
+      final cw = (MediaQuery.of(context).size.width - 32 - 8) / 2;
+      return Padding(
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+        child: Wrap(
+          spacing: 8, runSpacing: 8,
+          children: cards.map((c) => _statCard(c, width: cw)).toList(),
+        ),
+      );
+    }
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
       child: Center(
         child: SingleChildScrollView(
           scrollDirection: Axis.horizontal,
           child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: cards.asMap().entries.map((e) => Padding(
-              padding: EdgeInsets.only(left: e.key == 0 ? 0 : 12),
+              padding: EdgeInsets.only(left: e.key == 0 ? 0 : 8),
               child: _statCard(e.value),
             )).toList(),
           ),
@@ -853,31 +910,37 @@ class _MyTicketsScreenState extends State<MyTicketsScreen>
     );
   }
 
-  Widget _statCard(_SC d) => GestureDetector(
+  Widget _statCard(_SC d, {double width = 118}) => GestureDetector(
     onTap: () => setState(() {
       _statusFilter = d.label == 'Closed' ? 'closed' : d.label;
       _applyFilters();
     }),
     child: Container(
-      width: 155,
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
+      width: width,
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
       decoration: BoxDecoration(
         gradient: LinearGradient(
           colors: [d.color.withOpacity(0.18), d.color.withOpacity(0.06)],
           begin: Alignment.topLeft, end: Alignment.bottomRight,
         ),
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(12),
         border: Border.all(color: d.color.withOpacity(0.25)),
         boxShadow: [BoxShadow(color: d.color.withOpacity(0.10),
-            blurRadius: 10, offset: const Offset(0, 4))],
+            blurRadius: 8, offset: const Offset(0, 3))],
       ),
       child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-        Icon(d.icon, color: d.color, size: 28),
-        const SizedBox(height: 10),
-        Text('${d.count}', style: TextStyle(fontSize: 32,
-            fontWeight: FontWeight.bold, color: d.color)),
-        const SizedBox(height: 5),
-        Text(d.label, style: const TextStyle(fontSize: 13,
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(d.icon, color: d.color, size: 18),
+            const SizedBox(width: 6),
+            Text('${d.count}', style: TextStyle(fontSize: 20,
+                fontWeight: FontWeight.bold, color: d.color)),
+          ],
+        ),
+        const SizedBox(height: 4),
+        Text(d.label, style: const TextStyle(fontSize: 11,
             color: Color(0xFF64748B), fontWeight: FontWeight.w600),
             textAlign: TextAlign.center,
             maxLines: 1, overflow: TextOverflow.ellipsis),
@@ -886,7 +949,68 @@ class _MyTicketsScreenState extends State<MyTicketsScreen>
   );
 
   // ── Filter Row ─────────────────────────────────────────────────────────────
-  Widget _buildFilterRow() => Container(
+  Widget _buildFilterRow() {
+    if (isPhone(context)) return _buildPhoneFilterRow();
+    return _buildFilterRowWide();
+  }
+
+  // Phone: filters wrap onto several lines (nothing hidden sideways).
+  Widget _buildPhoneFilterRow() {
+    final full = MediaQuery.of(context).size.width - 24;
+    final half = (full - 8) / 2;
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 12),
+      child: Wrap(spacing: 8, runSpacing: 8, children: [
+        _searchBox(width: full),
+        _filterDropdown<String>(
+          value: _statusFilter,
+          width: half,
+          items: [
+            const DropdownMenuItem(value: 'all', child: Text('All Status')),
+            ..._allStatuses.map((s) => DropdownMenuItem(value: s,
+                child: Row(mainAxisSize: MainAxisSize.min, children: [
+                  Container(width: 7, height: 7,
+                      decoration: BoxDecoration(
+                          color: _sc(s), shape: BoxShape.circle)),
+                  const SizedBox(width: 5),
+                  Text(_sl(s)),
+                ]))),
+          ],
+          onChanged: (v) => setState(() { _statusFilter = v ?? 'all'; _applyFilters(); }),
+        ),
+        _filterDropdown<String>(
+          value: _priorityFilter,
+          width: half,
+          items: const [
+            DropdownMenuItem(value: 'all',    child: Text('All Priority')),
+            DropdownMenuItem(value: 'High',   child: Text('High')),
+            DropdownMenuItem(value: 'Medium', child: Text('Medium')),
+            DropdownMenuItem(value: 'Low',    child: Text('Low')),
+          ],
+          onChanged: (v) => setState(() { _priorityFilter = v ?? 'all'; _applyFilters(); }),
+        ),
+        SizedBox(width: half, child: _datePicker('From', _dateFrom,
+            (d) => setState(() { _dateFrom = d; _applyFilters(); }))),
+        SizedBox(width: half, child: _datePicker('To', _dateTo,
+            (d) => setState(() { _dateTo = d; _applyFilters(); }))),
+        SizedBox(width: half, child: _actionChip(
+          _isExporting
+              ? const SizedBox(width: 14, height: 14,
+                  child: CircularProgressIndicator(
+                      strokeWidth: 2, color: Colors.white))
+              : const Icon(Icons.download, size: 16, color: Colors.white),
+          'Export', navyDark, _isExporting ? null : _export,
+        )),
+        SizedBox(width: half, child: _actionChip(
+          const Icon(Icons.refresh, size: 16, color: Colors.white),
+          'Refresh', const Color(0xFF0EA5E9),
+          _isLoading ? null : _fetchTickets,
+        )),
+      ]),
+    );
+  }
+
+  Widget _buildFilterRowWide() => Container(
     height: 48,
     margin: const EdgeInsets.symmetric(horizontal: 12),
     child: SingleChildScrollView(
@@ -945,8 +1069,8 @@ class _MyTicketsScreenState extends State<MyTicketsScreen>
     ),
   );
 
-  Widget _searchBox() => Container(
-    width: 200, height: 40,
+  Widget _searchBox({double width = 200}) => Container(
+    width: width, height: isPhone(context) ? 44 : 40,
     decoration: BoxDecoration(color: Colors.white,
         borderRadius: BorderRadius.circular(10),
         border: Border.all(color: navyDark.withOpacity(0.15))),
@@ -976,8 +1100,10 @@ class _MyTicketsScreenState extends State<MyTicketsScreen>
     required T value,
     required List<DropdownMenuItem<T>> items,
     required ValueChanged<T?> onChanged,
+    double? width,
   }) => Container(
-    height: 40,
+    width: width,
+    height: isPhone(context) ? 44 : 40,
     padding: const EdgeInsets.symmetric(horizontal: 10),
     decoration: BoxDecoration(color: Colors.white,
         borderRadius: BorderRadius.circular(10),
@@ -1006,7 +1132,7 @@ class _MyTicketsScreenState extends State<MyTicketsScreen>
         if (p != null) onPick(p);
       },
       child: Container(
-        height: 40,
+        height: isPhone(context) ? 44 : 40,
         padding: const EdgeInsets.symmetric(horizontal: 12),
         decoration: BoxDecoration(
           color: date != null ? navyDark.withOpacity(0.08) : Colors.white,
@@ -1038,7 +1164,8 @@ class _MyTicketsScreenState extends State<MyTicketsScreen>
     GestureDetector(
       onTap: onTap,
       child: Container(
-        height: 40,
+        height: isPhone(context) ? 44 : 40,
+        alignment: isPhone(context) ? Alignment.center : null,
         padding: const EdgeInsets.symmetric(horizontal: 14),
         decoration: BoxDecoration(
           color: onTap != null ? color : color.withOpacity(0.5),
@@ -1054,14 +1181,25 @@ class _MyTicketsScreenState extends State<MyTicketsScreen>
 
   // ── Body ───────────────────────────────────────────────────────────────────
   Widget _loader() =>
-      const Center(child: CircularProgressIndicator(color: navyDark));
+      const Padding(
+        padding: EdgeInsets.symmetric(vertical: 40),
+        child: Center(child: CircularProgressIndicator(color: navyDark)),
+      );
 
   Widget _buildBody() {
-    if (_filtered.isEmpty) return _emptyState();
-    return Column(children: [
-      Expanded(child: _buildTable()),
-      _buildPagination(),
-    ]);
+    if (_filtered.isEmpty) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 40),
+        child: _emptyState(),
+      );
+    }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        isPhone(context) ? _buildPhoneCards() : _buildTable(),
+        _buildPagination(),
+      ],
+    );
   }
 
   // ==========================================================================
@@ -1070,7 +1208,6 @@ class _MyTicketsScreenState extends State<MyTicketsScreen>
   Widget _buildTable() {
     final isRaised = _activeTab == 1;
     final hScroll  = isRaised ? _hScroll2 : _hScroll;
-    final vScroll  = isRaised ? _vScroll2 : _vScroll;
     final tableWidth = isRaised ? 1270.0 : 1305.0;
 
     return Container(
@@ -1083,43 +1220,156 @@ class _MyTicketsScreenState extends State<MyTicketsScreen>
       ),
       child: ClipRRect(
         borderRadius: BorderRadius.circular(14),
-        child: LayoutBuilder(
-          builder: (context, constraints) => Scrollbar(
+        child: Scrollbar(
+          controller: hScroll,
+          thumbVisibility: true,
+          trackVisibility: true,
+          child: SingleChildScrollView(
             controller: hScroll,
-            thumbVisibility: true,
-            trackVisibility: true,
-            child: SingleChildScrollView(
-              controller: hScroll,
-              scrollDirection: Axis.horizontal,
-              child: SizedBox(
-                width: tableWidth,
-                height: constraints.maxHeight,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    _tableHeader(isRaised),
-                    Expanded(
-                      child: Scrollbar(
-                        controller: vScroll,
-                        thumbVisibility: true,
-                        trackVisibility: true,
-                        child: SingleChildScrollView(
-                          controller: vScroll,
-                          scrollDirection: Axis.vertical,
-                          child: Column(
-                            children: _paged.asMap().entries
-                                .map((e) => _buildRow(e.value, e.key.isEven, isRaised))
-                                .toList(),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
+            scrollDirection: Axis.horizontal,
+            child: SizedBox(
+              width: tableWidth,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _tableHeader(isRaised),
+                  Column(
+                    children: _paged.asMap().entries
+                        .map((e) => _buildRow(e.value, e.key.isEven, isRaised))
+                        .toList(),
+                  ),
+                ],
               ),
             ),
           ),
         ),
+      ),
+    );
+  }
+
+  // Phone: one card per ticket; every table column and row action is present.
+  Widget _buildPhoneCards() {
+    final isRaised = _activeTab == 1;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 4, 12, 0),
+      child: Column(
+        children: _paged.asMap().entries
+            .map((e) => _phoneCard(e.value, isRaised))
+            .toList(),
+      ),
+    );
+  }
+
+  Widget _phoneKv(String label, Widget value) => Padding(
+    padding: const EdgeInsets.only(top: 8),
+    child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      SizedBox(width: 92, child: Text(label, style: const TextStyle(
+          fontSize: 12, fontWeight: FontWeight.w600,
+          color: Color(0xFF64748B)))),
+      Expanded(child: Align(alignment: Alignment.centerLeft, child: value)),
+    ]),
+  );
+
+  Widget _phoneCard(Map<String, dynamic> ticket, bool isRaised) {
+    final idx       = (_currentPage - 1) * _perPage + _paged.indexOf(ticket) + 1;
+    final ticketNum = ticket['ticket_number'] ?? 'N/A';
+    final subject   = ticket['subject'] ?? 'No Subject';
+    final priority  = ticket['priority'] ?? 'medium';
+    final status    = ticket['status'] ?? 'Open';
+    final person    = isRaised
+        ? (ticket['assigned_to_name'] ?? 'Not Assigned')
+        : (ticket['name'] ?? ticket['created_by_name'] ?? 'System');
+    final personEmail = isRaised
+        ? (ticket['assigned_email'] ?? '')
+        : (ticket['creator_email'] ?? '');
+    final replyMessage = ticket['reply_message']?.toString() ?? '';
+    final repliedBy    = ticket['replied_by']?.toString() ?? '';
+    final hasReply     = isRaised && replyMessage.isNotEmpty &&
+        ['Approved', 'Rejected', 'Reply'].contains(status);
+
+    return GestureDetector(
+      onTap: () => _showDetailOverlay(ticket, isRaised),
+      child: Container(
+        width: double.infinity,
+        margin: const EdgeInsets.only(bottom: 12),
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(color: Colors.white,
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: const Color(0xFFE2E8F0)),
+            boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05),
+                blurRadius: 8, offset: const Offset(0, 3))]),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Row(children: [
+            Text('#$idx', style: const TextStyle(
+                fontSize: 12, color: Color(0xFF94A3B8))),
+            const SizedBox(width: 8),
+            Flexible(child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              decoration: BoxDecoration(
+                gradient: const LinearGradient(colors: [navyDark, navyMid]),
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: Text(ticketNum, maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(fontSize: 12,
+                      fontWeight: FontWeight.bold, color: Colors.white)),
+            )),
+            const Spacer(),
+            _priorityBadge(priority),
+          ]),
+          const SizedBox(height: 10),
+          Text(subject, style: const TextStyle(fontSize: 14,
+              fontWeight: FontWeight.w600, color: navyDark),
+              maxLines: 3, overflow: TextOverflow.ellipsis),
+          if (hasReply) ...[
+            const SizedBox(height: 6),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+              decoration: BoxDecoration(
+                color: _sc(status).withOpacity(0.08),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: _sc(status).withOpacity(0.25)),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  if (repliedBy.isNotEmpty)
+                    Text('By $repliedBy', style: TextStyle(
+                        fontSize: 12, fontWeight: FontWeight.bold,
+                        color: _sc(status))),
+                  Text(replyMessage, style: TextStyle(
+                      fontSize: 12, color: Colors.grey[700], height: 1.3),
+                      maxLines: 3, overflow: TextOverflow.ellipsis),
+                ],
+              ),
+            ),
+          ],
+          _phoneKv(isRaised ? 'Assigned To' : 'Raised By',
+              Column(crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min, children: [
+            Text(person, style: const TextStyle(fontSize: 13,
+                fontWeight: FontWeight.w600, color: navyDark),
+                maxLines: 1, overflow: TextOverflow.ellipsis),
+            if (personEmail.isNotEmpty)
+              Text(personEmail, style: const TextStyle(
+                  fontSize: 12, color: Color(0xFF94A3B8)),
+                  maxLines: 1, overflow: TextOverflow.ellipsis),
+          ])),
+          _phoneKv('Status', isRaised
+              ? _statusBadge(status)
+              : _statusDropdown(ticket, status)),
+          _phoneKv('Timeline', Text(_fmtTimeline(ticket['timeline']),
+              style: const TextStyle(fontSize: 13, color: Color(0xFF64748B)))),
+          _phoneKv('Deadline', _deadlineWidget(ticket['deadline'])),
+          _phoneKv('Created At', Text(_fmtDate(ticket['created_at']),
+              style: const TextStyle(fontSize: 13, color: Color(0xFF64748B)))),
+          const SizedBox(height: 12),
+          Row(mainAxisAlignment: MainAxisAlignment.end, children: [
+            _actionBtn(Icons.share, accentBlue,
+                () => _share(ticket), big: true),
+          ]),
+        ]),
       ),
     );
   }
@@ -1346,15 +1596,16 @@ class _MyTicketsScreenState extends State<MyTicketsScreen>
     return overdue ? FadeTransition(opacity: _pulseAnim, child: w) : w;
   }
 
-  Widget _actionBtn(IconData icon, Color color, VoidCallback onTap) =>
+  Widget _actionBtn(IconData icon, Color color, VoidCallback onTap,
+      {bool big = false}) =>
     GestureDetector(
       onTap: onTap,
       child: Container(
-        padding: const EdgeInsets.all(7),
+        padding: EdgeInsets.all(big ? 13 : 7),
         decoration: BoxDecoration(color: color.withOpacity(0.10),
             borderRadius: BorderRadius.circular(8),
             border: Border.all(color: color.withOpacity(0.3))),
-        child: Icon(icon, size: 15, color: color),
+        child: Icon(icon, size: big ? 18 : 15, color: color),
       ),
     );
 
@@ -1394,7 +1645,7 @@ class _MyTicketsScreenState extends State<MyTicketsScreen>
         onTap: () => setState(() => _currentPage = p),
         child: Container(
           margin: const EdgeInsets.symmetric(horizontal: 2),
-          width: 32, height: 32,
+          width: isPhone(context) ? 40 : 32, height: isPhone(context) ? 40 : 32,
           decoration: BoxDecoration(
             color: active ? navyDark : Colors.white,
             borderRadius: BorderRadius.circular(8),
@@ -1415,7 +1666,7 @@ class _MyTicketsScreenState extends State<MyTicketsScreen>
   Widget _pgBtn(IconData icon, VoidCallback? onTap) => GestureDetector(
     onTap: onTap,
     child: Container(
-      width: 32, height: 32,
+      width: isPhone(context) ? 40 : 32, height: isPhone(context) ? 40 : 32,
       decoration: BoxDecoration(
         color: onTap != null ? navyDark : const Color(0xFFF1F5F9),
         borderRadius: BorderRadius.circular(8),
@@ -1470,8 +1721,8 @@ class _MyTicketsScreenState extends State<MyTicketsScreen>
                     topLeft: Radius.circular(20),
                     topRight: Radius.circular(20)),
               ),
-              child: Row(children: [
-                Container(
+              child: Builder(builder: (hctx) {
+                final hdrBadge = Container(
                   padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                   decoration: BoxDecoration(
                       color: Colors.white.withOpacity(0.18),
@@ -1479,11 +1730,8 @@ class _MyTicketsScreenState extends State<MyTicketsScreen>
                   child: Text(ticket['ticket_number'] ?? 'N/A',
                       style: const TextStyle(color: Colors.white,
                           fontSize: 13, fontWeight: FontWeight.bold)),
-                ),
-                const SizedBox(width: 12),
-                const Expanded(child: Text('Ticket Details',
-                    style: TextStyle(color: Colors.white,
-                        fontSize: 17, fontWeight: FontWeight.bold))),
+                );
+                final hdrBtns = <Widget>[
                 _oBtn(Icons.share, () { Navigator.pop(context); _share(ticket); }),
                 const SizedBox(width: 6),
                 _oBtn(Icons.open_in_full, () async {
@@ -1495,7 +1743,17 @@ class _MyTicketsScreenState extends State<MyTicketsScreen>
                 }),
                 const SizedBox(width: 6),
                 _oBtn(Icons.close, () => Navigator.pop(context)),
-              ]),
+                ];
+                return Row(children: [
+                  Flexible(child: hdrBadge),
+                  const SizedBox(width: 12),
+                  const Expanded(child: Text('Ticket Details',
+                      maxLines: 1, overflow: TextOverflow.ellipsis,
+                      style: TextStyle(color: Colors.white,
+                          fontSize: 17, fontWeight: FontWeight.bold))),
+                  ...hdrBtns,
+                ]);
+              }),
             ),
 
             // Content
@@ -1504,6 +1762,16 @@ class _MyTicketsScreenState extends State<MyTicketsScreen>
               child: Column(crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                 // Subject + badges
+                if (isPhone(context)) ...[
+                  Text(ticket['subject'] ?? 'No Subject',
+                      style: const TextStyle(fontSize: 16,
+                          fontWeight: FontWeight.bold, color: navyDark)),
+                  const SizedBox(height: 8),
+                  Wrap(spacing: 6, runSpacing: 6, children: [
+                    _sBadgeLg(ticket['status'] ?? 'Open'),
+                    _pBadgeLg(ticket['priority'] ?? 'medium'),
+                  ]),
+                ] else ...[
                 Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
                   Expanded(child: Text(ticket['subject'] ?? 'No Subject',
                       style: const TextStyle(fontSize: 16,
@@ -1512,7 +1780,7 @@ class _MyTicketsScreenState extends State<MyTicketsScreen>
                   _sBadgeLg(ticket['status'] ?? 'Open'),
                   const SizedBox(width: 6),
                   _pBadgeLg(ticket['priority'] ?? 'medium'),
-                ]),
+                ])],
                 const SizedBox(height: 14),
 
                 // Message

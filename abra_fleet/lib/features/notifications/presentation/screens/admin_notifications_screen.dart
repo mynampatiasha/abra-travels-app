@@ -456,7 +456,7 @@ class _AdminNotificationsScreenState extends State<AdminNotificationsScreen> {
             ? Text('${_selectedNotifications.length} selected')
             : Row(
                 children: [
-                  const Text('Admin Notifications'),
+                  const Flexible(child: Text('Admin Notifications', overflow: TextOverflow.ellipsis)),
                   if (_unreadCount > 0) ...[
                     const SizedBox(width: 8),
                     Container(

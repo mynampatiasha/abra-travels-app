@@ -1608,40 +1608,93 @@ class _DriverIndividualTripsScreenState extends State<DriverIndividualTripsScree
             _buildInfoRow('Vehicle',  trip.vehicleNumber,  Colors.black87),
             const SizedBox(height: 16),
             // Buttons
-            Row(
-              children: [
-                // Show "Respond to Trip" only for unresponded (assigned) trips
-                if (!isAccepted) ...[
-                  Expanded(
-                    child: OutlinedButton.icon(
-                      onPressed: isLoading ? null : () => _navigateToTripResponse(tripData),
-                      icon: const Icon(Icons.reply, size: 18),
-                      label: const Text('RESPOND'),
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: kPrimaryColor,
-                        side: const BorderSide(color: kPrimaryColor),
-                        padding: const EdgeInsets.symmetric(vertical: 12),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            LayoutBuilder(
+              builder: (context, constraints) {
+                final isNarrow = constraints.maxWidth < 360;
+                if (!isAccepted) {
+                  if (isNarrow) {
+                    return Column(
+                      children: [
+                        SizedBox(
+                          width: double.infinity,
+                          child: OutlinedButton.icon(
+                            onPressed: isLoading ? null : () => _navigateToTripResponse(tripData),
+                            icon: const Icon(Icons.reply, size: 18),
+                            label: const Text('RESPOND'),
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: kPrimaryColor,
+                              side: const BorderSide(color: kPrimaryColor),
+                              padding: const EdgeInsets.symmetric(vertical: 12),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        SizedBox(
+                          width: double.infinity,
+                          child: ElevatedButton.icon(
+                            onPressed: isLoading ? null : () => _openTripInAcceptedTab(tripData),
+                            icon: const Icon(Icons.visibility, size: 18),
+                            label: const Text('VIEW DETAILS'),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: kPrimaryColor,
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(vertical: 12),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                            ),
+                          ),
+                        ),
+                      ],
+                    );
+                  }
+                  return Row(
+                    children: [
+                      Expanded(
+                        child: OutlinedButton.icon(
+                          onPressed: isLoading ? null : () => _navigateToTripResponse(tripData),
+                          icon: const Icon(Icons.reply, size: 18),
+                          label: const Text('RESPOND'),
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: kPrimaryColor,
+                            side: const BorderSide(color: kPrimaryColor),
+                            padding: const EdgeInsets.symmetric(vertical: 12),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                          ),
+                        ),
                       ),
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                ],
-                Expanded(
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: ElevatedButton.icon(
+                          onPressed: isLoading ? null : () => _openTripInAcceptedTab(tripData),
+                          icon: const Icon(Icons.visibility, size: 18),
+                          label: const Text('VIEW DETAILS'),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: kPrimaryColor,
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(vertical: 12),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                          ),
+                        ),
+                      ),
+                    ],
+                  );
+                }
+                return SizedBox(
+                  width: double.infinity,
                   child: ElevatedButton.icon(
                     onPressed: isLoading ? null : () => _openTripInAcceptedTab(tripData),
-                    icon: Icon(isAccepted ? Icons.play_arrow : Icons.visibility, size: 18),
-                    label: Text(isAccepted ? 'START TRIP' : 'VIEW DETAILS'),
+                    icon: const Icon(Icons.play_arrow, size: 18),
+                    label: const Text('START TRIP'),
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: isAccepted ? Colors.green : kPrimaryColor,
+                      backgroundColor: Colors.green,
                       foregroundColor: Colors.white,
                       padding: const EdgeInsets.symmetric(vertical: 12),
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                     ),
                   ),
-                ),
-              ],
-            ),
+                );
+              },
+            )
           ],
         ),
       ),

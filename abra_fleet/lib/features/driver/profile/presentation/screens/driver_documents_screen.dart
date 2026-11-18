@@ -311,7 +311,10 @@ class _DriverDocumentsScreenState extends State<DriverDocumentsScreen> {
           ? const Center(child: CircularProgressIndicator())
           : RefreshIndicator(
               onRefresh: _loadDocumentStatus,
-              child: SingleChildScrollView(
+              child: Center(
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 900),
+                  child: SingleChildScrollView(
                 physics: const AlwaysScrollableScrollPhysics(),
                 padding: const EdgeInsets.all(16.0),
                 child: Column(
@@ -385,6 +388,8 @@ class _DriverDocumentsScreenState extends State<DriverDocumentsScreen> {
                   ],
                 ),
               ),
+            ),
+            ),
             ),
     );
   }
@@ -473,16 +478,16 @@ class _DriverDocumentsScreenState extends State<DriverDocumentsScreen> {
             const SizedBox(height: 16),
 
             // Status Row
-            Row(
+            Wrap(
+              spacing: 8,
+              runSpacing: 4,
               children: [
                 _buildStatusChip(
                   isUploaded ? 'Uploaded' : 'Not Uploaded',
                   isUploaded ? Colors.green : Colors.red,
                 ),
-                if (isUploaded && isVerified) ...[
-                  const SizedBox(width: 8),
+                if (isUploaded && isVerified)
                   _buildStatusChip('Verified', Colors.blue),
-                ],
               ],
             ),
 
@@ -493,11 +498,14 @@ class _DriverDocumentsScreenState extends State<DriverDocumentsScreen> {
                 children: [
                   Icon(Icons.calendar_today, size: 16, color: Colors.grey[600]),
                   const SizedBox(width: 8),
-                  Text(
-                    'Expires: ${_formatDate(expiryDate)}',
-                    style: TextStyle(
-                      fontSize: 13,
-                      color: Colors.grey[700],
+                  Expanded(
+                    child: Text(
+                      'Expires: ${_formatDate(expiryDate)}',
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: Colors.grey[700],
+                      ),
+                      overflow: TextOverflow.ellipsis,
                     ),
                   ),
                 ],

@@ -14,6 +14,7 @@ import 'package:abra_fleet/core/services/api_service.dart';
 import 'package:abra_fleet/app/config/api_config.dart';
 import 'package:abra_fleet/features/auth/domain/repositories/auth_repository.dart';
 import 'package:abra_fleet/features/auth/presentation/screens/welcome_screen.dart';
+import 'package:abra_fleet/core/widgets/responsive/responsive.dart';
 
 // ── Color system matching careers page (blues + slate) ──────────────────────
 class ClientTheme {
@@ -620,7 +621,7 @@ class _ClientProfilePageState extends State<ClientProfilePage> {
       onRefresh: _fetchClientProfile,
       child: SingleChildScrollView(
         physics: const AlwaysScrollableScrollPhysics(),
-        padding: const EdgeInsets.all(20),
+        padding: EdgeInsets.all(isPhone(context) ? 16 : 20),
         // ✅ Centered, max-width — no full-stretch on wide screens
         child: Center(
           child: ConstrainedBox(
@@ -784,7 +785,7 @@ class _ClientProfilePageState extends State<ClientProfilePage> {
         ],
       ),
       child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 32, horizontal: 24),
+        padding: EdgeInsets.symmetric(vertical: 32, horizontal: isPhone(context) ? 16 : 24),
         child: Column(children: [
 
           // Avatar with camera overlay
@@ -823,10 +824,15 @@ class _ClientProfilePageState extends State<ClientProfilePage> {
               ),
             ),
             Positioned(
-              bottom: 0, right: 0,
+              bottom: isPhone(context) ? -5 : 0, right: isPhone(context) ? -5 : 0,
               child: GestureDetector(
                 onTap: _isUploading ? null : _pickImage,
+                // phone: transparent 44 px tap area around the 34 px button
+                behavior: HitTestBehavior.opaque,
                 child: Container(
+                  padding: isPhone(context) ? const EdgeInsets.all(5) : EdgeInsets.zero,
+                  color: Colors.transparent,
+                  child: Container(
                   width: 34, height: 34,
                   decoration: BoxDecoration(
                     shape: BoxShape.circle, color: Colors.white,
@@ -834,6 +840,7 @@ class _ClientProfilePageState extends State<ClientProfilePage> {
                     boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.2), blurRadius: 6)],
                   ),
                   child: const Icon(Icons.camera_alt, color: ClientTheme.primaryBlue, size: 16),
+                ),
                 ),
               ),
             ),
@@ -895,7 +902,7 @@ class _ClientProfilePageState extends State<ClientProfilePage> {
 
         // Header — light blue gradient bg + border-bottom (matches .cr-form-hdr)
         Container(
-          padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 16),
+          padding: EdgeInsets.symmetric(horizontal: isPhone(context) ? 16 : 22, vertical: 16),
           decoration: const BoxDecoration(
             gradient: LinearGradient(
               colors: [ClientTheme.cardHeaderBg, ClientTheme.cardHeaderBg2],
@@ -938,7 +945,7 @@ class _ClientProfilePageState extends State<ClientProfilePage> {
 
         // Body
         Padding(
-          padding: const EdgeInsets.all(22),
+          padding: EdgeInsets.all(isPhone(context) ? 16 : 22),
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: children),
         ),
       ]),
@@ -1107,9 +1114,8 @@ class _ClientProfilePageState extends State<ClientProfilePage> {
 
   /// Save Changes + Cancel buttons
   Widget _buildSaveCancelButtons() {
-    return Row(children: [
-      Expanded(
-        child: Container(
+    final phone = isPhone(context);
+    final saveBtn = Container(
           decoration: BoxDecoration(
             color: ClientTheme.successGreen,
             borderRadius: BorderRadius.circular(12),
@@ -1134,11 +1140,8 @@ class _ClientProfilePageState extends State<ClientProfilePage> {
               ),
             ),
           ),
-        ),
-      ),
-      const SizedBox(width: 12),
-      Expanded(
-        child: Container(
+        );
+    final cancelBtn = Container(
           decoration: BoxDecoration(
             color: Colors.white,
             borderRadius: BorderRadius.circular(12),
@@ -1160,9 +1163,14 @@ class _ClientProfilePageState extends State<ClientProfilePage> {
               ),
             ),
           ),
-        ),
-      ),
-    ]);
+        );
+    return phone
+        ? Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [saveBtn, const SizedBox(height: 12), cancelBtn])
+        : Row(children: [
+            Expanded(child: saveBtn),
+            const SizedBox(width: 12),
+            Expanded(child: cancelBtn),
+          ]);
   }
 
   /// Logout button — red outlined style

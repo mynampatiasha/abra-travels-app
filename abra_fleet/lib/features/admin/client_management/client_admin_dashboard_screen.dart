@@ -313,7 +313,9 @@ class _ClientAdminDashboardState extends State<ClientAdminDashboard> {
           ? const Center(child: CircularProgressIndicator())
           : SingleChildScrollView(
               controller: _verticalScroll,
-              padding: const EdgeInsets.all(20),
+              padding: EdgeInsets.all(
+                MediaQuery.of(context).size.width < 600 ? 12.0 : 20.0,
+              ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -354,6 +356,7 @@ class _ClientAdminDashboardState extends State<ClientAdminDashboard> {
                   _buildQuickSearchAndFilter(),
                   const SizedBox(height: 16),
                   _buildTable(),
+                  const SizedBox(height: 24),
                 ],
               ),
             ),

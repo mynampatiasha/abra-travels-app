@@ -13,6 +13,7 @@
 
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
+import 'package:abra_fleet/core/widgets/responsive/responsive.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:abra_fleet/features/auth/domain/repositories/auth_repository.dart';
@@ -348,7 +349,9 @@ class _LoginScreenState extends State<LoginScreen> with TickerProviderStateMixin
                 position: _entranceSlide,
                 child: Center(
                   child: SingleChildScrollView(
-                    padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 40),
+                    padding: isPhone(context)
+                        ? const EdgeInsets.symmetric(horizontal: 16, vertical: 24)
+                        : const EdgeInsets.symmetric(horizontal: 24, vertical: 40),
                     child: ConstrainedBox(
                       constraints: const BoxConstraints(maxWidth: 480),
                       child: Column(
@@ -356,11 +359,11 @@ class _LoginScreenState extends State<LoginScreen> with TickerProviderStateMixin
                         children: [
                           _buildLogoBadge(),
                           const SizedBox(height: 24),
-                          const Text(
+                          Text(
                             'Welcome Back.',
                             textAlign: TextAlign.center,
                             style: TextStyle(
-                              fontSize: 36,
+                              fontSize: isPhone(context) ? 28 : 36,
                               fontWeight: FontWeight.w900,
                               color: Colors.white,
                               height: 1.1,
@@ -419,19 +422,21 @@ class _LoginScreenState extends State<LoginScreen> with TickerProviderStateMixin
           ),
         ),
         const SizedBox(width: 14),
-        const Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              'CORPORATE TRAVELS',
-              style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 17,
-                  fontWeight: FontWeight.w800,
-                  letterSpacing: 2),
-            ),
-          ],
+        const Flexible(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                'CORPORATE TRAVELS',
+                style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 17,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 2),
+              ),
+            ],
+          ),
         ),
       ],
     );
@@ -445,6 +450,50 @@ class _LoginScreenState extends State<LoginScreen> with TickerProviderStateMixin
       (Icons.check_circle_outline,  '03', 'Access Granted'),
       (Icons.dashboard_rounded,     '04', 'Dashboard Ready'),
     ];
+
+    if (isPhone(context)) {
+      // Phone: four equal columns (no connector lines) so labels wrap, never overflow.
+      return Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          for (final s in steps)
+            Expanded(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    width: 38,
+                    height: 38,
+                    decoration: const BoxDecoration(
+                      shape: BoxShape.circle,
+                      gradient: const LinearGradient(
+                        colors: [_blueAccent, _blueLight],
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                      ),
+                    ),
+                    child: Icon(s.$1, color: Colors.white, size: 17),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(s.$2,
+                      style: const TextStyle(
+                          color: _blueAccent,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: 0.8)),
+                  const SizedBox(height: 3),
+                  Text(s.$3,
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w500)),
+                ],
+              ),
+            ),
+        ],
+      );
+    }
 
     return Row(
       mainAxisAlignment: MainAxisAlignment.center,
@@ -512,7 +561,7 @@ class _LoginScreenState extends State<LoginScreen> with TickerProviderStateMixin
   // ── Login card ─────────────────────────────────────────────────────────────
   Widget _buildLoginCard() {
     return Container(
-      padding: const EdgeInsets.all(32),
+      padding: EdgeInsets.all(isPhone(context) ? 20 : 32),
       decoration: BoxDecoration(
         color: Colors.white.withOpacity(0.07),
         borderRadius: BorderRadius.circular(24),
@@ -597,8 +646,10 @@ class _LoginScreenState extends State<LoginScreen> with TickerProviderStateMixin
                           builder: (_) => const ForgotPasswordScreen())),
                   style: TextButton.styleFrom(
                     foregroundColor: _blueAccent,
-                    padding: EdgeInsets.zero,
-                    minimumSize: Size.zero,
+                    padding: isPhone(context)
+                        ? const EdgeInsets.symmetric(horizontal: 8, vertical: 12)
+                        : EdgeInsets.zero,
+                    minimumSize: isPhone(context) ? const Size(44, 44) : Size.zero,
                     tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                   ),
                   child: const Text(
@@ -667,8 +718,9 @@ class _LoginScreenState extends State<LoginScreen> with TickerProviderStateMixin
                 ],
               ),
               const SizedBox(height: 20),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
+              Wrap(
+                alignment: WrapAlignment.center,
+                crossAxisAlignment: WrapCrossAlignment.center,
                 children: [
                   const Text(
                     "Don't have an account?",
@@ -680,8 +732,10 @@ class _LoginScreenState extends State<LoginScreen> with TickerProviderStateMixin
                         : () => Navigator.of(context).push(MaterialPageRoute(
                             builder: (_) => const RegistrationScreen())),
                     style: TextButton.styleFrom(
-                      padding: const EdgeInsets.only(left: 6),
-                      minimumSize: Size.zero,
+                      padding: isPhone(context)
+                          ? const EdgeInsets.fromLTRB(6, 12, 6, 12)
+                          : const EdgeInsets.only(left: 6),
+                      minimumSize: isPhone(context) ? const Size(44, 44) : Size.zero,
                       tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                     ),
                     child: const Text(
@@ -703,17 +757,19 @@ class _LoginScreenState extends State<LoginScreen> with TickerProviderStateMixin
                   borderRadius: BorderRadius.circular(10),
                   border: Border.all(color: Colors.white.withOpacity(0.08)),
                 ),
-                child: const Row(
+                child: Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Icon(Icons.shield_outlined, color: _blueAccent, size: 14),
-                    SizedBox(width: 8),
-                    Text(
-                      'Secured with JWT authentication',
-                      style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 11,
-                          letterSpacing: 0.3),
+                    const Icon(Icons.shield_outlined, color: _blueAccent, size: 14),
+                    const SizedBox(width: 8),
+                    Flexible(
+                      child: Text(
+                        'Secured with JWT authentication',
+                        style: TextStyle(
+                            color: Colors.white,
+                            fontSize: isPhone(context) ? 12 : 11,
+                            letterSpacing: 0.3),
+                      ),
                     ),
                   ],
                 ),

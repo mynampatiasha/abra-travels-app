@@ -4999,6 +4999,7 @@ Future<void> _confirmManualAssignment(
                           : _filteredRosters.isEmpty
                               ? _buildEmptyState()
                               : _buildRosterList(),
+                  const SizedBox(height: 24),
                 ],
               ),
             ),

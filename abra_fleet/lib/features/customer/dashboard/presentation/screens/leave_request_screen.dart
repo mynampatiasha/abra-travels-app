@@ -185,8 +185,11 @@ class _LeaveRequestScreenState extends State<LeaveRequestScreen> {
         backgroundColor: const Color(0xFF0D47A1), // App's specified primary color
         foregroundColor: Colors.white,
       ),
-      body: Form(
-        key: _formKey,
+      body: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 900),
+          child: Form(
+            key: _formKey,
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(16),
           child: Column(
@@ -430,6 +433,8 @@ class _LeaveRequestScreenState extends State<LeaveRequestScreen> {
               ),
             ],
           ),
+        ),
+      ),
         ),
       ),
     );

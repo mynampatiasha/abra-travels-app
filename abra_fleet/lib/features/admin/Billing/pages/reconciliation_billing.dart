@@ -20,6 +20,7 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'dart:typed_data'; 
 import 'package:abra_fleet/core/services/reconciliation_billing_service.dart';
 import 'package:abra_fleet/core/services/add_account_service.dart';
+import 'package:abra_fleet/core/widgets/responsive/responsive.dart';
 
 class ReconciliationBillingPage extends StatefulWidget {
   final String accountId;
@@ -368,8 +369,151 @@ class _ReconciliationBillingPageState extends State<ReconciliationBillingPage> {
     return _systemExpenses;
   }
 
+
+  // ============================================================================
+  // PHONE HELPERS (layout only; every one is a no-op at width >= 600)
+  // ============================================================================
+
+  /// Font size helper: on a phone nothing is smaller than 12 px.
+  double _pf(double size) => (isPhone(context) && size < 12) ? 12 : size;
+
+  /// Desktop / tablet: a normal Row (unchanged).
+  /// Phone: a Wrap, so the items flow onto the next line instead of being
+  /// cut off. Spacers are dropped, and with [dropSeparators] every odd item
+  /// (the SizedBox / divider between two items) is dropped as well.
+  Widget _rowOrWrap(
+    List<Widget> children, {
+    MainAxisAlignment mainAxisAlignment = MainAxisAlignment.start,
+    CrossAxisAlignment crossAxisAlignment = CrossAxisAlignment.center,
+    bool dropSeparators = false,
+    double spacing = 8,
+    double runSpacing = 8,
+    WrapAlignment wrapAlignment = WrapAlignment.start,
+  }) {
+    if (!isPhone(context)) {
+      return Row(
+        mainAxisAlignment: mainAxisAlignment,
+        crossAxisAlignment: crossAxisAlignment,
+        children: children,
+      );
+    }
+    final kept = <Widget>[];
+    for (var i = 0; i < children.length; i++) {
+      final w = children[i];
+      if (w is Spacer) continue;
+      if (dropSeparators && i.isOdd) continue;
+      kept.add(w);
+    }
+    return SizedBox(
+      width: double.infinity,
+      child: Wrap(
+        spacing: spacing,
+        runSpacing: runSpacing,
+        alignment: wrapAlignment,
+        crossAxisAlignment: WrapCrossAlignment.center,
+        children: kept,
+      ),
+    );
+  }
+
+  /// The four balance cards: one row of four on desktop, 2 x 2 on a phone.
+  /// [children] is [card, spacer, card, spacer, card, spacer, card].
+  Widget _balanceCardsRow(List<Widget> children) {
+    if (!isPhone(context)) {
+      return Row(children: children);
+    }
+    return Column(
+      children: [
+        Row(children: [children[0], children[1], children[2]]),
+        const SizedBox(height: 12),
+        Row(children: [children[4], children[5], children[6]]),
+      ],
+    );
+  }
+
+  /// Phone only: bottom bar that keeps the Match action always visible.
+  Widget _buildPhoneMatchBar() {
+    final canMatch = _selectedProviderTxnId != null && _selectedSystemExpenseId != null;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.08),
+            blurRadius: 6,
+            offset: const Offset(0, -2),
+          ),
+        ],
+      ),
+      child: SafeArea(
+        top: false,
+        child: Row(
+          children: [
+            Icon(
+              Icons.compare_arrows,
+              size: 24,
+              color: canMatch ? const Color(0xFF3498DB) : Colors.grey[500],
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                canMatch
+                    ? 'Ready: provider transaction and system expense selected'
+                    : 'Select one provider transaction and one system expense to match',
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: canMatch ? const Color(0xFF3498DB) : Colors.grey[600],
+                ),
+              ),
+            ),
+            const SizedBox(width: 12),
+            ElevatedButton(
+              onPressed: canMatch ? _performManualMatch : null,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF3498DB),
+                foregroundColor: Colors.white,
+                minimumSize: const Size(88, 44),
+              ),
+              child: const Text('Match'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    if (isPhone(context) && !_isLoading && widget.accountType != 'PETTY_CASH') {
+      // Phone: the two lists are stacked (instead of side by side) and the
+      // Match action is pinned at the bottom of the screen.
+      return Scaffold(
+        backgroundColor: Colors.grey[50],
+        appBar: _buildAppBar(),
+        body: Column(
+          children: [
+            Expanded(
+              child: SingleChildScrollView(
+                child: Column(
+                  children: [
+                    _buildEnhancedBalanceSummary(),
+                    _buildOpeningBalanceAlertCard(),
+                    _buildFiltersBar(),
+                    SizedBox(width: double.infinity, child: _buildProviderTransactionsList()),
+                    const SizedBox(height: 8),
+                    SizedBox(width: double.infinity, child: _buildSystemExpensesList()),
+                    _buildActionBar(),
+                  ],
+                ),
+              ),
+            ),
+            _buildPhoneMatchBar(),
+          ],
+        ),
+      );
+    }
     return Scaffold(
       backgroundColor: Colors.grey[50],
       appBar: _buildAppBar(),
@@ -415,7 +559,14 @@ class _ReconciliationBillingPageState extends State<ReconciliationBillingPage> {
         icon: const Icon(Icons.arrow_back, color: Colors.white),
         onPressed: () => Navigator.pop(context),
       ),
-      title: Column(
+      title: isPhone(context)
+          ? const Text(
+              'Reconciliation',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(color: Colors.white, fontSize: 18),
+            )
+          : Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const Text(
@@ -428,6 +579,23 @@ class _ReconciliationBillingPageState extends State<ReconciliationBillingPage> {
           ),
         ],
       ),
+      bottom: isPhone(context)
+          ? PreferredSize(
+              preferredSize: const Size.fromHeight(32),
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    '${widget.accountName} (${DateFormat('dd MMM').format(_periodStart)} - ${DateFormat('dd MMM yyyy').format(_periodEnd)})',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(color: Colors.white70, fontSize: 13),
+                  ),
+                ),
+              ),
+            )
+          : null,
       actions: [
         IconButton(
           icon: const Icon(Icons.refresh, color: Colors.white),
@@ -468,7 +636,7 @@ class _ReconciliationBillingPageState extends State<ReconciliationBillingPage> {
     final isBalanced = providerSystemDifference.abs() < 0.01;
 
     return Container(
-      padding: const EdgeInsets.all(20),
+      padding: EdgeInsets.all(isPhone(context) ? 12 : 20),
       decoration: BoxDecoration(
         color: Colors.white,
         boxShadow: [
@@ -482,8 +650,8 @@ class _ReconciliationBillingPageState extends State<ReconciliationBillingPage> {
       child: Column(
         children: [
           // ✅ FOUR-BALANCE ROW
-          Row(
-            children: [
+          _balanceCardsRow(
+            [
               Expanded(
                 child: _buildBalanceCard(
                   'Opening Balance',
@@ -579,9 +747,13 @@ class _ReconciliationBillingPageState extends State<ReconciliationBillingPage> {
                 const SizedBox(height: 16),
                 
                 // Statistics row
-                Row(
+                _rowOrWrap(
                   mainAxisAlignment: MainAxisAlignment.spaceAround,
-                  children: [
+                  dropSeparators: true,
+                  spacing: 24,
+                  runSpacing: 12,
+                  wrapAlignment: WrapAlignment.spaceAround,
+                  [
                     _buildStatItem('Matched', _totalMatched, Colors.green),
                     _buildStatDivider(),
                     _buildStatItem('Unmatched', _totalUnmatched, Colors.orange),
@@ -693,13 +865,22 @@ class _ReconciliationBillingPageState extends State<ReconciliationBillingPage> {
           Text(
             label,
             style: TextStyle(
-              fontSize: 11, // Smaller font
+              fontSize: _pf(11), // Smaller font
               color: Colors.grey[700],
               fontWeight: FontWeight.w500,
             ),
           ),
           const SizedBox(height: 4),
-          Text(
+          isPhone(context)
+              ? FitText(
+                  '₹${amount.toStringAsFixed(2)}',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: color,
+                  ),
+                )
+              : Text(
             '₹${amount.toStringAsFixed(2)}',
             style: TextStyle(
               fontSize: 18, // Smaller amount
@@ -711,7 +892,7 @@ class _ReconciliationBillingPageState extends State<ReconciliationBillingPage> {
           Text(
             subtitle,
             style: TextStyle(
-              fontSize: 10, // Smaller subtitle
+              fontSize: _pf(10), // Smaller subtitle
               color: Colors.grey[600],
               fontWeight: FontWeight.w400,
             ),
@@ -784,7 +965,7 @@ class _ReconciliationBillingPageState extends State<ReconciliationBillingPage> {
     }
 
     return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+      margin: EdgeInsets.symmetric(horizontal: isPhone(context) ? 12 : 20, vertical: 8),
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: cardColor,
@@ -827,8 +1008,9 @@ class _ReconciliationBillingPageState extends State<ReconciliationBillingPage> {
             style: TextStyle(fontSize: 13, color: iconColor),
           ),
           const SizedBox(height: 10),
-          Row(
-            children: [
+          _rowOrWrap(
+            dropSeparators: true,
+            [
               _buildAlertDetailChip(
                 'System Balance',
                 '₹${_openingBalance.toStringAsFixed(2)}',
@@ -911,8 +1093,9 @@ class _ReconciliationBillingPageState extends State<ReconciliationBillingPage> {
         color: Colors.white,
         border: Border(bottom: BorderSide(color: Colors.grey[200]!)),
       ),
-      child: Row(
-        children: [
+      child: _rowOrWrap(
+        runSpacing: 4,
+        [
           const Text(
             'Filter:',
             style: TextStyle(
@@ -999,8 +1182,8 @@ class _ReconciliationBillingPageState extends State<ReconciliationBillingPage> {
                 ),
                 if (_selectedUnmatchedIds.isNotEmpty) ...[
                   const SizedBox(height: 10),
-                  Row(
-                    children: [
+                  _rowOrWrap(
+                    [
                       Text(
                         '${_selectedUnmatchedIds.length} selected',
                         style: const TextStyle(color: Colors.white70, fontSize: 12),
@@ -1009,10 +1192,11 @@ class _ReconciliationBillingPageState extends State<ReconciliationBillingPage> {
                       TextButton.icon(
                         onPressed: _isResolvingUnmatched ? null : () => _bulkResolveUnmatched('carry-forward'),
                         icon: const Icon(Icons.arrow_forward_ios, size: 12, color: Colors.white),
-                        label: const Text('Carry All', style: TextStyle(color: Colors.white, fontSize: 11)),
+                        label: Text('Carry All', style: TextStyle(color: Colors.white, fontSize: _pf(11))),
                         style: TextButton.styleFrom(
                           backgroundColor: Colors.purple.withOpacity(0.5),
                           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                          minimumSize: isPhone(context) ? const Size(0, 44) : null,
                           visualDensity: VisualDensity.compact,
                         ),
                       ),
@@ -1020,10 +1204,11 @@ class _ReconciliationBillingPageState extends State<ReconciliationBillingPage> {
                       TextButton.icon(
                         onPressed: _isResolvingUnmatched ? null : () => _bulkResolveUnmatched('adjustment'),
                         icon: const Icon(Icons.tune, size: 12, color: Colors.white),
-                        label: const Text('Adjust All', style: TextStyle(color: Colors.white, fontSize: 11)),
+                        label: Text('Adjust All', style: TextStyle(color: Colors.white, fontSize: _pf(11))),
                         style: TextButton.styleFrom(
                           backgroundColor: Colors.orange.withOpacity(0.5),
                           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                          minimumSize: isPhone(context) ? const Size(0, 44) : null,
                           visualDensity: VisualDensity.compact,
                         ),
                       ),
@@ -1081,7 +1266,7 @@ Widget _buildProviderTransactionCard(ProviderTransactionModel transaction) {
         }
       },
       child: Container(
-        padding: const EdgeInsets.all(16),
+        padding: EdgeInsets.all(isPhone(context) ? 12 : 16),
         decoration: BoxDecoration(
           color: isCarriedForward
               ? Colors.purple[50]
@@ -1169,7 +1354,7 @@ Widget _buildProviderTransactionCard(ProviderTransactionModel transaction) {
                                 Text(
                                   isCarriedForward ? 'CARRIED FWD' : transaction.reconciliationStatus,
                                   style: TextStyle(
-                                    fontSize: 10,
+                                    fontSize: _pf(10),
                                     fontWeight: FontWeight.bold,
                                     color: statusColor,
                                   ),
@@ -1206,7 +1391,7 @@ Widget _buildProviderTransactionCard(ProviderTransactionModel transaction) {
                             Expanded(
                               child: Text(
                                 transaction.location!,
-                                style: TextStyle(fontSize: 11, color: Colors.grey[500]),
+                                style: TextStyle(fontSize: _pf(11), color: Colors.grey[500]),
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
                               ),
@@ -1231,11 +1416,12 @@ Widget _buildProviderTransactionCard(ProviderTransactionModel transaction) {
                     child: OutlinedButton.icon(
                       onPressed: () => _carryForwardTransaction(transaction),
                       icon: const Icon(Icons.arrow_forward, size: 14),
-                      label: const Text('Carry Forward', style: TextStyle(fontSize: 11)),
+                      label: Text('Carry Forward', style: TextStyle(fontSize: _pf(11))),
                       style: OutlinedButton.styleFrom(
                         foregroundColor: Colors.purple,
                         side: const BorderSide(color: Colors.purple),
                         padding: const EdgeInsets.symmetric(vertical: 6),
+                        minimumSize: isPhone(context) ? const Size(0, 44) : null,
                         visualDensity: VisualDensity.compact,
                       ),
                     ),
@@ -1245,11 +1431,12 @@ Widget _buildProviderTransactionCard(ProviderTransactionModel transaction) {
                     child: OutlinedButton.icon(
                       onPressed: () => _showAdjustmentDialog(transaction),
                       icon: const Icon(Icons.tune, size: 14),
-                      label: const Text('Adjustment', style: TextStyle(fontSize: 11)),
+                      label: Text('Adjustment', style: TextStyle(fontSize: _pf(11))),
                       style: OutlinedButton.styleFrom(
                         foregroundColor: Colors.orange[700],
                         side: BorderSide(color: Colors.orange[700]!),
                         padding: const EdgeInsets.symmetric(vertical: 6),
+                        minimumSize: isPhone(context) ? const Size(0, 44) : null,
                         visualDensity: VisualDensity.compact,
                       ),
                     ),
@@ -1262,14 +1449,14 @@ Widget _buildProviderTransactionCard(ProviderTransactionModel transaction) {
               const SizedBox(height: 8),
               const Divider(height: 1),
               const SizedBox(height: 8),
-              Row(
-                children: [
+              _rowOrWrap(
+                [
                   Icon(Icons.psychology, size: 14, color: Colors.orange[700]),
                   const SizedBox(width: 6),
                   Text(
                     'Auto-match confidence: ${transaction.matchConfidence}%',
                     style: TextStyle(
-                      fontSize: 11,
+                      fontSize: _pf(11),
                       fontWeight: FontWeight.w600,
                       color: Colors.orange[700],
                     ),
@@ -1277,12 +1464,12 @@ Widget _buildProviderTransactionCard(ProviderTransactionModel transaction) {
                   const Spacer(),
                   TextButton(
                     onPressed: () => _acceptMatch(transaction),
-                    child: const Text('Accept', style: TextStyle(fontSize: 11)),
+                    child: Text('Accept', style: TextStyle(fontSize: _pf(11))),
                   ),
                   TextButton(
                     onPressed: () => _rejectMatch(transaction),
                     style: TextButton.styleFrom(foregroundColor: Colors.red),
-                    child: const Text('Reject', style: TextStyle(fontSize: 11)),
+                    child: Text('Reject', style: TextStyle(fontSize: _pf(11))),
                   ),
                 ],
               ),
@@ -1292,8 +1479,8 @@ Widget _buildProviderTransactionCard(ProviderTransactionModel transaction) {
               const SizedBox(height: 8),
               const Divider(height: 1),
               const SizedBox(height: 8),
-              Row(
-                children: [
+              _rowOrWrap(
+                [
                   Icon(Icons.link, size: 14, color: Colors.green[700]),
                   const SizedBox(width: 6),
                   Text(
@@ -1301,7 +1488,7 @@ Widget _buildProviderTransactionCard(ProviderTransactionModel transaction) {
                         ? 'Resolved as adjustment'
                         : 'Matched with system expense',
                     style: TextStyle(
-                      fontSize: 11,
+                      fontSize: _pf(11),
                       fontWeight: FontWeight.w600,
                       color: Colors.green[700],
                     ),
@@ -1311,7 +1498,7 @@ Widget _buildProviderTransactionCard(ProviderTransactionModel transaction) {
                     TextButton(
                       onPressed: () => _unmatchTransaction(transaction),
                       style: TextButton.styleFrom(foregroundColor: Colors.red),
-                      child: const Text('Unmatch', style: TextStyle(fontSize: 11)),
+                      child: Text('Unmatch', style: TextStyle(fontSize: _pf(11))),
                     ),
                 ],
               ),
@@ -1329,7 +1516,7 @@ Widget _buildProviderTransactionCard(ProviderTransactionModel transaction) {
                     child: Text(
                       transaction.carriedForwardNotes ?? 'Carried forward to next period',
                       style: TextStyle(
-                        fontSize: 11,
+                        fontSize: _pf(11),
                         fontWeight: FontWeight.w600,
                         color: Colors.purple[700],
                       ),
@@ -1410,7 +1597,37 @@ Widget _buildProviderTransactionCard(ProviderTransactionModel transaction) {
                 borderRadius: BorderRadius.circular(8),
                 border: Border.all(color: Colors.blue[300]!),
               ),
-              child: Row(
+              child: isPhone(context)
+                  ? Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Icon(Icons.hourglass_top, color: Colors.blue[700], size: 20),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: Text(
+                                'Submitted for approval. Waiting for approver to review.',
+                                style: TextStyle(fontSize: 13, color: Colors.blue[700]),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        ElevatedButton(
+                          onPressed: () => _showApprovalDialog(),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.blue[700],
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                            minimumSize: const Size(0, 44),
+                          ),
+                          child: const Text('Review & Approve', style: TextStyle(fontSize: 13)),
+                        ),
+                      ],
+                    )
+                  : Row(
                 children: [
                   Icon(Icons.hourglass_top, color: Colors.blue[700], size: 20),
                   const SizedBox(width: 10),
@@ -1435,6 +1652,77 @@ Widget _buildProviderTransactionCard(ProviderTransactionModel transaction) {
             ),
           ],
 
+          if (isPhone(context))
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text(
+                  isFullyReconciled
+                      ? '✓ All transactions reconciled'
+                      : 'Reconciliation in progress',
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.bold,
+                    color: isFullyReconciled ? Colors.green[700] : Colors.orange[700],
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  isFullyReconciled
+                      ? 'Ready to finalize reconciliation'
+                      : '$_totalUnmatched unmatched + $_totalPending pending',
+                  style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                ),
+                const SizedBox(height: 12),
+                ElevatedButton.icon(
+                  onPressed: _isAutoMatching ? null : _performAutoMatch,
+                  icon: _isAutoMatching
+                      ? const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                        )
+                      : const Icon(Icons.auto_fix_high),
+                  label: Text(_isAutoMatching ? 'Matching...' : 'Auto-Match All'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF3498DB),
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
+                    minimumSize: const Size(0, 48),
+                  ),
+                ),
+                if (requiresApproval && !isSubmittedForApproval) ...[
+                  const SizedBox(height: 8),
+                  ElevatedButton.icon(
+                    onPressed: isFullyReconciled ? _submitForApproval : null,
+                    icon: const Icon(Icons.send),
+                    label: const Text('Submit for Approval'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.blue[700],
+                      foregroundColor: Colors.white,
+                      disabledBackgroundColor: Colors.grey[300],
+                      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
+                      minimumSize: const Size(0, 48),
+                    ),
+                  ),
+                ] else if (!requiresApproval && !isSubmittedForApproval) ...[
+                  const SizedBox(height: 8),
+                  ElevatedButton.icon(
+                    onPressed: isFullyReconciled ? _markAsReconciled : null,
+                    icon: const Icon(Icons.check_circle),
+                    label: const Text('Mark as Reconciled'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF27AE60),
+                      foregroundColor: Colors.white,
+                      disabledBackgroundColor: Colors.grey[300],
+                      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
+                      minimumSize: const Size(0, 48),
+                    ),
+                  ),
+                ],
+              ],
+            )
+          else
           Row(
             children: [
               Expanded(
@@ -2507,9 +2795,12 @@ Future<void> _performManualMatch() async {
     await showDialog(
       context: context,
       builder: (context) => Dialog(
+        insetPadding: isPhone(context)
+            ? const EdgeInsets.symmetric(horizontal: 16, vertical: 24)
+            : const EdgeInsets.symmetric(horizontal: 40, vertical: 24),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         child: Container(
-          width: 650,
+          width: phoneDialogWidth(context, 650),
           constraints: const BoxConstraints(maxHeight: 700),
           child: Column(
             children: [
@@ -2555,8 +2846,8 @@ Future<void> _performManualMatch() async {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       // Summary cards
-                      Row(
-                        children: [
+                      _balanceCardsRow(
+                        [
                           _buildReportSummaryCard('Matched', summary['matched'], Colors.green, '₹${fmt.format(summary['matchedAmount'])}'),
                           const SizedBox(width: 10),
                           _buildReportSummaryCard('Adjustments', summary['adjustments'], Colors.orange, '₹${fmt.format(summary['adjustmentAmount'])}'),
@@ -2587,13 +2878,13 @@ Future<void> _performManualMatch() async {
                             _buildReportRow('Closing Balance', session.balanceDifference, Colors.teal, isBold: true),
                             if (session.isLocked) ...[
                               const SizedBox(height: 8),
-                              Row(
-                                children: [
+                              _rowOrWrap(
+                                [
                                   const Icon(Icons.lock, size: 14, color: Colors.grey),
                                   const SizedBox(width: 6),
                                   Text(
                                     'Locked on ${session.lockedAt != null ? DateFormat('dd MMM yyyy hh:mm a').format(session.lockedAt!) : 'N/A'} by ${session.lockedBy ?? 'system'}',
-                                    style: TextStyle(fontSize: 11, color: Colors.grey[600]),
+                                    style: TextStyle(fontSize: _pf(11), color: Colors.grey[600]),
                                   ),
                                 ],
                               ),
@@ -2610,8 +2901,8 @@ Future<void> _performManualMatch() async {
                           borderRadius: BorderRadius.circular(8),
                           border: Border.all(color: session.isLocked ? Colors.green[300]! : Colors.orange[300]!),
                         ),
-                        child: Row(
-                          children: [
+                        child: _rowOrWrap(
+                          [
                             Icon(
                               session.isLocked ? Icons.lock : Icons.lock_open,
                               size: 16,
@@ -2664,14 +2955,14 @@ Future<void> _performManualMatch() async {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(label, style: TextStyle(fontSize: 11, color: Colors.grey[600])),
+            Text(label, style: TextStyle(fontSize: _pf(11), color: Colors.grey[600])),
             const SizedBox(height: 4),
             Text(
               count.toString(),
               style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: color),
             ),
             if (amount.isNotEmpty)
-              Text(amount, style: TextStyle(fontSize: 11, color: color)),
+              Text(amount, style: TextStyle(fontSize: _pf(11), color: color)),
           ],
         ),
       ),
@@ -3196,7 +3487,7 @@ Future<void> _performManualMatch() async {
         }
       },
       child: Container(
-        padding: const EdgeInsets.all(16),
+        padding: EdgeInsets.all(isPhone(context) ? 12 : 16),
         decoration: BoxDecoration(
           color: isSelected
               ? Colors.green[50]
@@ -3245,7 +3536,7 @@ Future<void> _performManualMatch() async {
                                   Text(
                                     'MATCHED',
                                     style: TextStyle(
-                                      fontSize: 10,
+                                      fontSize: _pf(10),
                                       fontWeight: FontWeight.bold,
                                       color: Colors.green[700],
                                     ),
@@ -3277,7 +3568,7 @@ Future<void> _performManualMatch() async {
                         const SizedBox(height: 4),
                         Text(
                           'Vendor: ${expense['vendor']}',
-                          style: TextStyle(fontSize: 11, color: Colors.grey[500]),
+                          style: TextStyle(fontSize: _pf(11), color: Colors.grey[500]),
                         ),
                       ],
                     ],
@@ -3296,7 +3587,7 @@ Future<void> _performManualMatch() async {
                   Text(
                     'Matched with provider transaction',
                     style: TextStyle(
-                      fontSize: 11,
+                      fontSize: _pf(11),
                       fontWeight: FontWeight.w600,
                       color: Colors.green[700],
                     ),
@@ -3434,6 +3725,58 @@ Future<void> _performManualMatch() async {
 // ============================================================================
 // ✅ UPDATED IMPORT STATEMENT DIALOG WITH CORRECT COLUMN MAPPINGS
 // ============================================================================
+
+
+// ============================================================================
+// PHONE HELPERS FOR THE STANDALONE WIDGETS BELOW (layout only; at widths of
+// 600 px and more every one returns exactly what the old layout had)
+// ============================================================================
+
+/// Desktop: a Row. Phone: a Wrap (items flow onto the next line, Spacers dropped).
+Widget _rbRowOrWrap(BuildContext context, List<Widget> children) {
+  if (!isPhone(context)) {
+    return Row(children: children);
+  }
+  return SizedBox(
+    width: double.infinity,
+    child: Wrap(
+      spacing: 8,
+      runSpacing: 8,
+      crossAxisAlignment: WrapCrossAlignment.center,
+      children: children.where((w) => w is! Spacer).toList(),
+    ),
+  );
+}
+
+/// Desktop: a Row (children use Expanded). Phone: a Column (horizontal gaps
+/// become vertical gaps).
+Widget _rbRowOrColumn(BuildContext context, List<Widget> children) {
+  if (!isPhone(context)) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: children,
+    );
+  }
+  return Column(
+    crossAxisAlignment: CrossAxisAlignment.stretch,
+    children: children.map((w) {
+      if (w is SizedBox && w.child == null && w.width != null) {
+        return SizedBox(height: w.width);
+      }
+      return w;
+    }).toList(),
+  );
+}
+
+/// Phone only: lets a dialog's content scroll when it is taller than the screen.
+Widget _phoneScrollWrap(BuildContext context, Widget child) {
+  return isPhone(context) ? SingleChildScrollView(child: child) : child;
+}
+
+/// Desktop: Expanded(flex). Phone: the child itself (full width in a Column).
+Widget _rbFlexSlot(BuildContext context, int flex, Widget child) {
+  return isPhone(context) ? child : Expanded(flex: flex, child: child);
+}
 
 class ImportStatementDialog extends StatefulWidget {
   final String accountId;
@@ -3596,10 +3939,13 @@ class _ImportStatementDialogState extends State<ImportStatementDialog> {
   @override
   Widget build(BuildContext context) {
     return Dialog(
+      insetPadding: isPhone(context)
+          ? const EdgeInsets.symmetric(horizontal: 16, vertical: 24)
+          : const EdgeInsets.symmetric(horizontal: 40, vertical: 24),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       child: Container(
-        width: 500,
-        padding: const EdgeInsets.all(24),
+        width: phoneDialogWidth(context, 500),
+        padding: EdgeInsets.all(isPhone(context) ? 16 : 24),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -3628,7 +3974,11 @@ class _ImportStatementDialogState extends State<ImportStatementDialog> {
             OutlinedButton.icon(
               onPressed: _isUploading ? null : _pickFile,
               icon: const Icon(Icons.file_upload),
-              label: Text(_fileName ?? 'Select Excel/CSV File'),
+              label: Text(
+                _fileName ?? 'Select Excel/CSV File',
+                maxLines: isPhone(context) ? 1 : null,
+                overflow: isPhone(context) ? TextOverflow.ellipsis : null,
+              ),
               style: OutlinedButton.styleFrom(
                 padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
               ),
@@ -3654,7 +4004,7 @@ class _ImportStatementDialogState extends State<ImportStatementDialog> {
                     ),
                     TextButton(
                       onPressed: _showColumnMappingDialog,
-                      child: const Text('Edit', style: TextStyle(fontSize: 11)),
+                      child: Text('Edit', style: TextStyle(fontSize: isPhone(context) ? 12 : 11)),
                     ),
                   ],
                 ),
@@ -3736,10 +4086,15 @@ class _ColumnMappingDialogState extends State<ColumnMappingDialog> {
   @override
   Widget build(BuildContext context) {
     return Dialog(
+      insetPadding: isPhone(context)
+          ? const EdgeInsets.symmetric(horizontal: 16, vertical: 24)
+          : const EdgeInsets.symmetric(horizontal: 40, vertical: 24),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      child: Container(
-        width: 600,
-        padding: const EdgeInsets.all(24),
+      child: _phoneScrollWrap(
+        context,
+        Container(
+        width: phoneDialogWidth(context, 600),
+        padding: EdgeInsets.all(isPhone(context) ? 16 : 24),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -3781,10 +4136,55 @@ class _ColumnMappingDialogState extends State<ColumnMappingDialog> {
           ],
         ),
       ),
+      ),
     );
   }
 
   Widget _buildMappingRow(String label, String key, bool required) {
+    if (isPhone(context)) {
+      // Phone: label above the dropdown so the dropdown gets the full width.
+      return Padding(
+        padding: const EdgeInsets.only(bottom: 12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+                color: required ? Colors.black : Colors.grey[700],
+              ),
+            ),
+            const SizedBox(height: 6),
+            DropdownButtonFormField<String>(
+              isExpanded: true,
+              value: _mappings[key],
+              decoration: InputDecoration(
+                hintText: 'Select column',
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                isDense: true,
+              ),
+              items: [
+                const DropdownMenuItem(value: null, child: Text('Skip')),
+                ...widget.availableColumns.map((col) {
+                  return DropdownMenuItem(
+                    value: col,
+                    child: Text(col, overflow: TextOverflow.ellipsis),
+                  );
+                }).toList(),
+              ],
+              onChanged: (value) {
+                setState(() {
+                  _mappings[key] = value;
+                });
+              },
+            ),
+          ],
+        ),
+      );
+    }
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
       child: Row(
@@ -3964,11 +4364,14 @@ class _PettyCashCountDialogState extends State<PettyCashCountDialog> {
   @override
   Widget build(BuildContext context) {
     return Dialog(
+      insetPadding: isPhone(context)
+          ? const EdgeInsets.symmetric(horizontal: 16, vertical: 24)
+          : const EdgeInsets.symmetric(horizontal: 40, vertical: 24),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       child: Container(
-        width: 550,
+        width: phoneDialogWidth(context, 550),
         constraints: const BoxConstraints(maxHeight: 700),
-        padding: const EdgeInsets.all(24),
+        padding: EdgeInsets.all(isPhone(context) ? 16 : 24),
         child: _isLoadingSummary
             ? _buildLoadingView()
             : _showSummary
@@ -4551,7 +4954,7 @@ class _PettyCashInlinePageState extends State<_PettyCashInlinePage> {
     }
 
     return SingleChildScrollView(
-      padding: const EdgeInsets.all(24),
+      padding: EdgeInsets.all(isPhone(context) ? 12 : 24),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -4570,18 +4973,33 @@ class _PettyCashInlinePageState extends State<_PettyCashInlinePage> {
   }
 
   Widget _buildBalanceSummary() {
+    final openingCard = _buildSummaryCard('Opening Balance', _openingBalance,
+        Icons.account_balance_wallet, Colors.purple);
+    final expensesCard = _buildSummaryCard('Total Expenses', _totalExpenses,
+        Icons.receipt_long, Colors.red,
+        subtitle: '$_expenseCount expense${_expenseCount != 1 ? 's' : ''}');
+    final closingCard = _buildSummaryCard('Expected Closing', _expectedBalance,
+        Icons.calculate, Colors.blue,
+        subtitle: 'Opening − Expenses');
+    if (isPhone(context)) {
+      // Phone: one card per line (three cards side by side are too narrow).
+      return Column(
+        children: [
+          Row(children: [openingCard]),
+          const SizedBox(height: 12),
+          Row(children: [expensesCard]),
+          const SizedBox(height: 12),
+          Row(children: [closingCard]),
+        ],
+      );
+    }
     return Row(
       children: [
-        _buildSummaryCard('Opening Balance', _openingBalance,
-            Icons.account_balance_wallet, Colors.purple),
+        openingCard,
         const SizedBox(width: 16),
-        _buildSummaryCard('Total Expenses', _totalExpenses,
-            Icons.receipt_long, Colors.red,
-            subtitle: '$_expenseCount expense${_expenseCount != 1 ? 's' : ''}'),
+        expensesCard,
         const SizedBox(width: 16),
-        _buildSummaryCard('Expected Closing', _expectedBalance,
-            Icons.calculate, Colors.blue,
-            subtitle: 'Opening − Expenses'),
+        closingCard,
       ],
     );
   }
@@ -4627,7 +5045,7 @@ class _PettyCashInlinePageState extends State<_PettyCashInlinePage> {
               const SizedBox(height: 4),
               Text(subtitle,
                   style:
-                      TextStyle(fontSize: 11, color: Colors.grey[500])),
+                      TextStyle(fontSize: isPhone(context) ? 12 : 11, color: Colors.grey[500])),
             ],
           ],
         ),
@@ -4689,7 +5107,7 @@ class _PettyCashInlinePageState extends State<_PettyCashInlinePage> {
           ),
 
           // Table header
-          if (_expenses.isNotEmpty)
+          if (_expenses.isNotEmpty && !isPhone(context))
             Container(
               padding: const EdgeInsets.symmetric(
                   horizontal: 16, vertical: 10),
@@ -4724,6 +5142,49 @@ class _PettyCashInlinePageState extends State<_PettyCashInlinePage> {
             ...(_expenses.asMap().entries.map((entry) {
               final i = entry.key;
               final e = entry.value;
+              if (isPhone(context)) {
+                // Phone: two-line tile instead of four narrow columns.
+                return Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  decoration: BoxDecoration(
+                    color: i.isEven ? Colors.white : Colors.grey[50],
+                    border: Border(bottom: BorderSide(color: Colors.grey[100]!)),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Expanded(
+                            child: Text(
+                              e['expenseAccount'] ?? e['description'] ?? '-',
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Text(
+                            '₹${(e['total'] ?? 0).toStringAsFixed(2)}',
+                            style: const TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.red),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        '${_fmtDate(e['date'])} · ${e['vendor'] ?? '-'}',
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                      ),
+                    ],
+                  ),
+                );
+              }
               return Container(
                 padding: const EdgeInsets.symmetric(
                     horizontal: 16, vertical: 12),
@@ -4795,15 +5256,15 @@ class _PettyCashInlinePageState extends State<_PettyCashInlinePage> {
               ),
               child: Row(
                 children: [
-                  const Expanded(
-                    flex: 9,
-                    child: Text('Total Expenses',
+                  Expanded(
+                    flex: isPhone(context) ? 1 : 9,
+                    child: const Text('Total Expenses',
                         style: TextStyle(
                             fontSize: 14,
                             fontWeight: FontWeight.bold)),
                   ),
                   Expanded(
-                    flex: 2,
+                    flex: isPhone(context) ? 1 : 2,
                     child: Text(
                       '₹${_totalExpenses.toStringAsFixed(2)}',
                       textAlign: TextAlign.right,
@@ -4849,7 +5310,7 @@ class _PettyCashInlinePageState extends State<_PettyCashInlinePage> {
 
   Widget _buildCashCountSection() {
     return Container(
-      padding: const EdgeInsets.all(24),
+      padding: EdgeInsets.all(isPhone(context) ? 16 : 24),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(12),
@@ -4883,12 +5344,13 @@ class _PettyCashInlinePageState extends State<_PettyCashInlinePage> {
             ],
           ),
           const SizedBox(height: 20),
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(
-                flex: 2,
-                child: TextFormField(
+          _rbRowOrColumn(
+            context,
+            [
+              _rbFlexSlot(
+                context,
+                2,
+                TextFormField(
                   controller: _cashCountController,
                   enabled: !_submitted,
                   decoration: InputDecoration(
@@ -4906,9 +5368,10 @@ class _PettyCashInlinePageState extends State<_PettyCashInlinePage> {
                 ),
               ),
               const SizedBox(width: 16),
-              Expanded(
-                flex: 3,
-                child: TextFormField(
+              _rbFlexSlot(
+                context,
+                3,
+                TextFormField(
                   controller: _notesController,
                   enabled: !_submitted,
                   decoration: InputDecoration(
@@ -4962,8 +5425,9 @@ class _PettyCashInlinePageState extends State<_PettyCashInlinePage> {
                 borderRadius: BorderRadius.circular(8),
                 border: Border.all(color: Colors.green[300]!),
               ),
-              child: Row(
-                children: [
+              child: _rbRowOrWrap(
+                context,
+                [
                   Icon(Icons.check_circle, color: Colors.green[700]),
                   const SizedBox(width: 10),
                   Text('Cash count submitted successfully',
@@ -4995,7 +5459,7 @@ class _PettyCashInlinePageState extends State<_PettyCashInlinePage> {
     final isOver = variance > 0;
 
     return Container(
-      padding: const EdgeInsets.all(24),
+      padding: EdgeInsets.all(isPhone(context) ? 16 : 24),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(12),

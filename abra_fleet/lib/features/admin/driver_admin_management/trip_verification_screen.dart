@@ -66,6 +66,25 @@ class _TripVerificationScreenState extends State<TripVerificationScreen> {
   }
 
   Future<void> _initializeScreen() async {
+    // ✅ This screen is instantiated eagerly inside AdminMainShell's IndexedStack
+    // for every user (admin or not) even when it's never opened, so its data
+    // fetches used to fire in the background for non-admins, fail with
+    // "Admin privileges required", and pop an error banner over whatever
+    // screen the user was actually looking at. Skip the fetch entirely for
+    // non-admins — this screen is only reachable via admin-gated navigation,
+    // so there is nothing to load for them anyway.
+    final prefs = await SharedPreferences.getInstance();
+    final role = (prefs.getString('user_role') ?? '').toLowerCase();
+    final isAdmin = role == 'admin' || role == 'super_admin';
+    if (!isAdmin) {
+      if (mounted) {
+        setState(() {
+          isLoadingFilters = false;
+          isLoading = false;
+        });
+      }
+      return;
+    }
     await _loadFilterData();
     await _loadTrips();
   }
@@ -148,11 +167,17 @@ class _TripVerificationScreenState extends State<TripVerificationScreen> {
         isLoading = false;
       });
       
-      _showSnackBar('Loaded ${trips.length} trip(s)', Colors.green);
+      // _showSnackBar('Loaded ${trips.length} trip(s)', Colors.green);
       
     } catch (e) {
       setState(() => isLoading = false);
-      _showSnackBar('Error loading trips: $e', Colors.red);
+      // ✅ This fetch runs the moment the screen is constructed, which
+      // happens eagerly in the background for every user (see
+      // _initializeScreen's admin check above). Surfacing failures as a
+      // floating banner put "Admin privileges required" on top of whatever
+      // screen the user actually had open. Log it instead of showing it.
+      debugPrint('❌ Error loading trips: $e');
+      // _showSnackBar('Error loading trips: $e', Colors.red);
     }
   }
 
@@ -1079,44 +1104,53 @@ class _TripVerificationScreenState extends State<TripVerificationScreen> {
           ),
         ],
       ),
-      body: Column(
-        children: [
-          // Filters Section
-          Container(
-            color: Colors.white,
-            padding: EdgeInsets.all(
-              MediaQuery.of(context).size.width < 600 ? 12.0 : 16.0,
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  'Filters',
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
+      body: SingleChildScrollView(
+        scrollDirection: Axis.vertical,
+        child: Column(
+          children: [
+            // Filters Section
+            Container(
+              color: Colors.white,
+              padding: EdgeInsets.all(
+                MediaQuery.of(context).size.width < 600 ? 12.0 : 16.0,
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Filters',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
-                ),
-                const SizedBox(height: 16),
-                if (isLoadingFilters)
-                  const Center(child: CircularProgressIndicator())
-                else
-                  _buildFilters(),
-              ],
+                  const SizedBox(height: 16),
+                  if (isLoadingFilters)
+                    const Center(child: CircularProgressIndicator())
+                  else
+                    _buildFilters(),
+                ],
+              ),
             ),
-          ),
-          
-          const Divider(height: 1),
-          
-          // Trips Table
-          Expanded(
-            child: isLoading
-                ? const Center(child: CircularProgressIndicator())
-                : trips.isEmpty
-                    ? _buildEmptyState()
-                    : _buildTripsTable(),
-          ),
-        ],
+            
+            const Divider(height: 1),
+            
+            // Trips Table
+            if (isLoading)
+              const Padding(
+                padding: EdgeInsets.symmetric(vertical: 40),
+                child: Center(child: CircularProgressIndicator()),
+              )
+            else if (trips.isEmpty)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 40),
+                child: _buildEmptyState(),
+              )
+            else
+              _buildTripsTable(),
+            const SizedBox(height: 24),
+          ],
+        ),
       ),
     );
   }
@@ -1284,31 +1318,30 @@ class _TripVerificationScreenState extends State<TripVerificationScreen> {
     return LayoutBuilder(
       builder: (context, constraints) {
         final tableMinWidth = constraints.maxWidth < 900 ? 900.0 : constraints.maxWidth;
-        return SingleChildScrollView(
-          child: Container(
-            margin: EdgeInsets.all(
-              MediaQuery.of(context).size.width < 600
-                  ? 8.0
-                  : MediaQuery.of(context).size.width <= 1024
-                      ? 12.0
-                      : 16.0,
-            ),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(8),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.05),
-                  blurRadius: 10,
-                  offset: const Offset(0, 2),
-                ),
-              ],
-            ),
-            child: SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: SizedBox(
-                width: tableMinWidth,
-                child: Column(
+        return Container(
+          margin: EdgeInsets.all(
+            MediaQuery.of(context).size.width < 600
+                ? 8.0
+                : MediaQuery.of(context).size.width <= 1024
+                    ? 12.0
+                    : 16.0,
+          ),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(8),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.05),
+                blurRadius: 10,
+                offset: const Offset(0, 2),
+              ),
+            ],
+          ),
+          child: SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: SizedBox(
+              width: tableMinWidth,
+              child: Column(
                   children: [
                     // Table Header
                     Container(
@@ -1341,11 +1374,10 @@ class _TripVerificationScreenState extends State<TripVerificationScreen> {
                 ),
               ),
             ),
-          ),
-        );
-      },
-    );
-  }
+          );
+        },
+      );
+    }
 
   // ============================================================================
   // Build trip row

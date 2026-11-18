@@ -1068,8 +1068,10 @@ class _VehicleMasterScreenState extends State<VehicleMasterScreen>
   }
 
   Widget _buildMainContent() {
-    return Column(
-      children: [
+    return SingleChildScrollView(
+      scrollDirection: Axis.vertical,
+      child: Column(
+        children: [
         // ── SEARCH + BASIC FILTERS ROW ──
         Container(
           padding: const EdgeInsets.all(16),
@@ -1464,7 +1466,7 @@ class _VehicleMasterScreenState extends State<VehicleMasterScreen>
         ),
 
         // ── TABLE ──
-        Expanded(child: _buildTableContent()),
+        _buildTableContent(),
 
         // ── FOOTER ──
         Container(
@@ -1481,9 +1483,11 @@ class _VehicleMasterScreenState extends State<VehicleMasterScreen>
             ],
           ),
         ),
+        const SizedBox(height: 24),
       ],
-    );
-  }
+    ),
+  );
+}
 
   Widget _buildStatBadge(String label, int count, IconData icon, Color color) {
     return Container(
@@ -1505,35 +1509,44 @@ class _VehicleMasterScreenState extends State<VehicleMasterScreen>
   // ============================================================================
   Widget _buildTableContent() {
     if (_isLoading) {
-      return const Center(child: CircularProgressIndicator(valueColor: AlwaysStoppedAnimation<Color>(_primaryColor)));
+      return const Padding(
+        padding: EdgeInsets.symmetric(vertical: 40),
+        child: Center(child: CircularProgressIndicator(valueColor: AlwaysStoppedAnimation<Color>(_primaryColor))),
+      );
     }
 
     if (_errorMessage != null) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.error_outline, size: 64, color: Colors.red.shade300),
-            const SizedBox(height: 16),
-            Text(_errorMessage!, style: TextStyle(color: Colors.red.shade700), textAlign: TextAlign.center),
-            const SizedBox(height: 16),
-            ElevatedButton(onPressed: _loadVehicles, style: ElevatedButton.styleFrom(backgroundColor: _primaryColor, foregroundColor: Colors.white), child: const Text('Retry')),
-          ],
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 40),
+        child: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(Icons.error_outline, size: 64, color: Colors.red.shade300),
+              const SizedBox(height: 16),
+              Text(_errorMessage!, style: TextStyle(color: Colors.red.shade700), textAlign: TextAlign.center),
+              const SizedBox(height: 16),
+              ElevatedButton(onPressed: _loadVehicles, style: ElevatedButton.styleFrom(backgroundColor: _primaryColor, foregroundColor: Colors.white), child: const Text('Retry')),
+            ],
+          ),
         ),
       );
     }
 
     if (_vehicleData.isEmpty) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.inventory_2_outlined, size: 64, color: Colors.grey.shade400),
-            const SizedBox(height: 16),
-            Text('No vehicles found', style: TextStyle(color: Colors.grey.shade600, fontSize: 16)),
-            const SizedBox(height: 16),
-            ElevatedButton.icon(onPressed: _showAddVehicleScreen, icon: const Icon(Icons.add), label: const Text('Add First Vehicle'), style: ElevatedButton.styleFrom(backgroundColor: _primaryColor, foregroundColor: Colors.white)),
-          ],
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 40),
+        child: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(Icons.inventory_2_outlined, size: 64, color: Colors.grey.shade400),
+              const SizedBox(height: 16),
+              Text('No vehicles found', style: TextStyle(color: Colors.grey.shade600, fontSize: 16)),
+              const SizedBox(height: 16),
+              ElevatedButton.icon(onPressed: _showAddVehicleScreen, icon: const Icon(Icons.add), label: const Text('Add First Vehicle'), style: ElevatedButton.styleFrom(backgroundColor: _primaryColor, foregroundColor: Colors.white)),
+            ],
+          ),
         ),
       );
     }
@@ -1541,16 +1554,19 @@ class _VehicleMasterScreenState extends State<VehicleMasterScreen>
     final List<_VehicleData> displayData = _hasActiveFilters() ? _filteredVehicleData : _vehicleData;
 
     if (displayData.isEmpty && _hasActiveFilters()) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.filter_alt_off, size: 64, color: Colors.grey.shade400),
-            const SizedBox(height: 16),
-            Text('No vehicles match the selected filters', style: TextStyle(color: Colors.grey.shade600, fontSize: 16)),
-            const SizedBox(height: 16),
-            ElevatedButton(onPressed: _clearAllFilters, style: ElevatedButton.styleFrom(backgroundColor: _primaryColor, foregroundColor: Colors.white), child: const Text('Clear Filters')),
-          ],
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 40),
+        child: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(Icons.filter_alt_off, size: 64, color: Colors.grey.shade400),
+              const SizedBox(height: 16),
+              Text('No vehicles match the selected filters', style: TextStyle(color: Colors.grey.shade600, fontSize: 16)),
+              const SizedBox(height: 16),
+              ElevatedButton(onPressed: _clearAllFilters, style: ElevatedButton.styleFrom(backgroundColor: _primaryColor, foregroundColor: Colors.white), child: const Text('Clear Filters')),
+            ],
+          ),
         ),
       );
     }
@@ -1599,12 +1615,12 @@ class _VehicleMasterScreenState extends State<VehicleMasterScreen>
                   ),
                 ),
                 // TABLE ROWS
-                Expanded(
-                  child: ListView.separated(
-                    itemCount: displayData.length,
-                    separatorBuilder: (context, index) => Divider(height: 1, color: Colors.grey.shade200),
-                    itemBuilder: (context, index) => _buildVehicleRow(displayData[index], index),
-                  ),
+                ListView.separated(
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  itemCount: displayData.length,
+                  separatorBuilder: (context, index) => Divider(height: 1, color: Colors.grey.shade200),
+                  itemBuilder: (context, index) => _buildVehicleRow(displayData[index], index),
                 ),
               ],
             ),

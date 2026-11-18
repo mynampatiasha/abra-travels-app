@@ -80,7 +80,7 @@ async function autoBoardPassenger(req, tripGroupId, stopId, passengerId, otpReco
     }
     
     if (!customer) {
-       const roster = await db.collection('roster-assigned-trips').findOne({ tripGroupId });
+       const roster = await db.collection('roster-assigned-trips').findOne({ tripGroupId, 'stops.stopId': stopId, status: { $ne: 'cancelled' } });
        if (roster) {
           for (const stop of roster.stops || []) {
              if (stop.stopId === stopId && stop.customer && (stop.customer.email === passengerId || stop.customer.id === passengerId || stopId === passengerId)) {
@@ -370,7 +370,7 @@ router.post('/resend', verifyToken, async (req, res) => {
       
         // Fallback: try passengerId as stopId and find customer from roster
         if (!customer) {
-           const roster = await req.db.collection('roster-assigned-trips').findOne({ tripGroupId });
+           const roster = await req.db.collection('roster-assigned-trips').findOne({ tripGroupId, 'stops.stopId': stopId, status: { $ne: 'cancelled' } });
            if (roster) {
               const stop = roster.stops?.find(s => s.stopId === stopId);
               if (stop) {

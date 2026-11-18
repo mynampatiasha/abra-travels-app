@@ -960,120 +960,129 @@ class _HrmLeaveRequestsScreenState extends State<HrmLeaveRequestsScreen> with Er
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFFF5F7FA),
-      body: Column(
-        children: [
-          Container(
-            padding: const EdgeInsets.all(24),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.05),
-                  blurRadius: 10,
-                  offset: const Offset(0, 2),
-                ),
-              ],
-            ),
-            child: LayoutBuilder(
-              builder: (context, constraints) {
-                final isMobile = constraints.maxWidth < 768;
-                return Wrap(
-                  spacing: 12,
-                  runSpacing: 12,
-                  crossAxisAlignment: WrapCrossAlignment.center,
-                  alignment: WrapAlignment.spaceBetween,
-                  children: [
-                    Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.all(12),
-                          decoration: BoxDecoration(
-                            color: Colors.purple.shade50,
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: Icon(Icons.event_note, color: Colors.purple.shade700, size: 28),
-                        ),
-                        const SizedBox(width: 16),
-                        Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const Text(
-                              'Leave Requests',
-                              style: TextStyle(
-                                fontSize: 24,
-                                fontWeight: FontWeight.bold,
-                                color: Color(0xFF1A1A1A),
-                              ),
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              isMobile
-                                  ? 'Manage employee leave requests'
-                                  : 'Manage employee leave requests - Add as Pending, Edit to Approve/Reject',
-                              style: const TextStyle(
-                                fontSize: 14,
-                                color: Color(0xFF757575),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
-                    Wrap(
-                      spacing: 12,
-                      runSpacing: 8,
-                      children: [
-                        ElevatedButton.icon(
-                          onPressed: _showAddLeaveDialog,
-                          icon: const Icon(Icons.add_circle_outline),
-                          label: const Text('Add New Leave'),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.teal.shade700,
-                            foregroundColor: Colors.white,
-                            padding: EdgeInsets.symmetric(
-                              horizontal: isMobile ? 16 : 24,
-                              vertical: isMobile ? 12 : 16,
-                            ),
-                            shape: RoundedRectangleBorder(
+      body: SingleChildScrollView(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(24),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.05),
+                    blurRadius: 10,
+                    offset: const Offset(0, 2),
+                  ),
+                ],
+              ),
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  final isMobile = constraints.maxWidth < 768;
+                  return Wrap(
+                    spacing: 12,
+                    runSpacing: 12,
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    alignment: WrapAlignment.spaceBetween,
+                    children: [
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              color: Colors.purple.shade50,
                               borderRadius: BorderRadius.circular(12),
                             ),
-                            elevation: 2,
+                            child: Icon(Icons.event_note, color: Colors.purple.shade700, size: 28),
                           ),
-                        ),
-                        ElevatedButton.icon(
-                          onPressed: _exportToCSV,
-                          icon: const Icon(Icons.file_download),
-                          label: const Text('Export CSV'),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.indigo.shade700,
-                            foregroundColor: Colors.white,
-                            padding: EdgeInsets.symmetric(
-                              horizontal: isMobile ? 16 : 24,
-                              vertical: isMobile ? 12 : 16,
-                            ),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            elevation: 2,
+                          const SizedBox(width: 16),
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text(
+                                'Leave Requests',
+                                style: TextStyle(
+                                  fontSize: 24,
+                                  fontWeight: FontWeight.bold,
+                                  color: Color(0xFF1A1A1A),
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                isMobile
+                                    ? 'Manage employee leave requests'
+                                    : 'Manage employee leave requests - Add as Pending, Edit to Approve/Reject',
+                                style: const TextStyle(
+                                  fontSize: 14,
+                                  color: Color(0xFF757575),
+                                ),
+                              ),
+                            ],
                           ),
-                        ),
-                      ],
-                    ),
-                  ],
-                );
-              },
+                        ],
+                      ),
+                      Wrap(
+                        spacing: 12,
+                        runSpacing: 8,
+                        children: [
+                          ElevatedButton.icon(
+                            onPressed: _showAddLeaveDialog,
+                            icon: const Icon(Icons.add_circle_outline),
+                            label: const Text('Add New Leave'),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.teal.shade700,
+                              foregroundColor: Colors.white,
+                              padding: EdgeInsets.symmetric(
+                                horizontal: isMobile ? 16 : 24,
+                                vertical: isMobile ? 12 : 16,
+                              ),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              elevation: 2,
+                            ),
+                          ),
+                          ElevatedButton.icon(
+                            onPressed: _exportToCSV,
+                            icon: const Icon(Icons.file_download),
+                            label: const Text('Export CSV'),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.indigo.shade700,
+                              foregroundColor: Colors.white,
+                              padding: EdgeInsets.symmetric(
+                                horizontal: isMobile ? 16 : 24,
+                                vertical: isMobile ? 12 : 16,
+                              ),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              elevation: 2,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  );
+                },
+              ),
             ),
-          ),
-          
-          Expanded(
-            child: _isLoading
-                ? const Center(child: CircularProgressIndicator())
-                : _leaveRequests.isEmpty
-                    ? _buildEmptyState()
-                    : _buildLeaveRequestsTable(),
-          ),
-        ],
+            
+            if (_isLoading)
+              const Padding(
+                padding: EdgeInsets.all(48.0),
+                child: Center(child: CircularProgressIndicator()),
+              )
+            else if (_leaveRequests.isEmpty)
+              Padding(
+                padding: const EdgeInsets.all(48.0),
+                child: _buildEmptyState(),
+              )
+            else
+              _buildLeaveRequestsTable(),
+            const SizedBox(height: 24),
+          ],
+        ),
       ),
     );
   }
@@ -1117,6 +1126,8 @@ class _HrmLeaveRequestsScreenState extends State<HrmLeaveRequestsScreen> with Er
           return Container(
             margin: EdgeInsets.all(marginVal),
             child: ListView.builder(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
               padding: EdgeInsets.zero,
               itemCount: _leaveRequests.length,
               itemBuilder: (context, index) {
@@ -1372,10 +1383,11 @@ class _HrmLeaveRequestsScreenState extends State<HrmLeaveRequestsScreen> with Er
                         ],
                       ),
                     ),
-                    Expanded(
-                      child: ListView.builder(
-                        padding: const EdgeInsets.all(0),
-                        itemCount: _leaveRequests.length,
+                    ListView.builder(
+                      shrinkWrap: true,
+                      physics: const NeverScrollableScrollPhysics(),
+                      padding: const EdgeInsets.all(0),
+                      itemCount: _leaveRequests.length,
                         itemBuilder: (context, index) {
                           final leave = _leaveRequests[index];
                           if (leave == null) {
@@ -1533,7 +1545,6 @@ class _HrmLeaveRequestsScreenState extends State<HrmLeaveRequestsScreen> with Er
                           );
                         },
                       ),
-                    ),
                   ],
                 ),
               ),

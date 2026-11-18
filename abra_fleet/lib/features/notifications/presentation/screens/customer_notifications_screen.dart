@@ -10,6 +10,7 @@ import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:abra_fleet/app/config/api_config.dart';
 import 'package:abra_fleet/features/admin/hrm/hrm_feedback.dart';
+import 'package:abra_fleet/core/widgets/responsive/responsive.dart';
 
 class CustomerNotificationsScreen extends StatefulWidget {
   const CustomerNotificationsScreen({super.key});
@@ -510,7 +511,7 @@ class _CustomerNotificationsScreenState extends State<CustomerNotificationsScree
       appBar: AppBar(
         title: Row(
           children: [
-            const Text('My Notifications'),
+            const Flexible(child: Text('My Notifications', overflow: TextOverflow.ellipsis)),
             const SizedBox(width: 8),
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
@@ -1157,7 +1158,7 @@ class _CustomerNotificationsScreenState extends State<CustomerNotificationsScree
                               const SizedBox(height: 16),
                               // Large OTP display
                               Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 14),
+                                padding: EdgeInsets.symmetric(horizontal: isPhone(context) ? 14 : 28, vertical: 14),
                                 decoration: BoxDecoration(
                                   color: Colors.white,
                                   borderRadius: BorderRadius.circular(12),
@@ -1314,7 +1315,7 @@ class _CustomerNotificationsScreenState extends State<CustomerNotificationsScree
                       bottomRight: Radius.circular(20),
                     ),
                   ),
-                  child: Row(
+                  child: _AdaptiveRow(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       // Delete button
@@ -1333,7 +1334,7 @@ class _CustomerNotificationsScreenState extends State<CustomerNotificationsScree
                       ),
 
                       // Action buttons based on type
-                      Row(
+                      _AdaptiveRow(
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           // Feedback request button
@@ -1788,7 +1789,7 @@ class _CustomerFeedbackDialogState extends State<CustomerFeedbackDialog> {
   Widget build(BuildContext context) {
     return Dialog(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-      child: Padding(
+      child: SingleChildScrollView(child: Padding(
         padding: const EdgeInsets.all(24),
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -1920,7 +1921,43 @@ class _CustomerFeedbackDialogState extends State<CustomerFeedbackDialog> {
             ),
           ],
         ),
-      ),
+      )),
+    );
+  }
+}
+
+/// Phone-only helper: behaves exactly like [Row] at 600 px and wider; on a
+/// phone the children wrap onto further lines so no button is cut off.
+class _AdaptiveRow extends StatelessWidget {
+  final MainAxisAlignment mainAxisAlignment;
+  final MainAxisSize mainAxisSize;
+  final List<Widget> children;
+
+  const _AdaptiveRow({
+    this.mainAxisAlignment = MainAxisAlignment.start,
+    this.mainAxisSize = MainAxisSize.max,
+    required this.children,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    if (!isPhone(context)) {
+      return Row(
+        mainAxisAlignment: mainAxisAlignment,
+        mainAxisSize: mainAxisSize,
+        children: children,
+      );
+    }
+    return Wrap(
+      alignment: mainAxisAlignment == MainAxisAlignment.spaceBetween
+          ? WrapAlignment.spaceBetween
+          : WrapAlignment.start,
+      crossAxisAlignment: WrapCrossAlignment.center,
+      spacing: 8,
+      runSpacing: 8,
+      children: children
+          .where((c) => !(c is SizedBox && c.child == null && c.height == null))
+          .toList(),
     );
   }
 }

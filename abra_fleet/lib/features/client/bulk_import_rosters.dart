@@ -10,6 +10,7 @@ import 'package:flutter/foundation.dart' hide debugPrint;
 import 'package:provider/provider.dart';
 import 'package:abra_fleet/features/customer/dashboard/data/repositories/roster_repository.dart';
 import 'package:abra_fleet/core/services/backend_connection_manager.dart';
+import 'package:abra_fleet/core/widgets/responsive/responsive.dart';
 
 // ✅ IMPORTS for Employee Management
 import 'package:abra_fleet/features/admin/customer_management/presentation/providers/customer_provider.dart';
@@ -83,28 +84,29 @@ class _BulkImportRostersScreenState extends State<BulkImportRostersScreen> {
   Widget build(BuildContext context) {
     return Container(
       color: const Color(0xFFF5F5F5),
-      child: Column(
-        children: [
-          Container(
-            padding: const EdgeInsets.all(16.0),
-            child: Row(
-              children: [
-                _buildStepIndicator(0, 'Upload', _currentStep >= 0),
-                Expanded(child: Container(height: 2, color: _currentStep >= 1 ? primaryColor : Colors.grey.shade300)),
-                _buildStepIndicator(1, 'Validate', _currentStep >= 1),
-                Expanded(child: Container(height: 2, color: _currentStep >= 2 ? primaryColor : Colors.grey.shade300)),
-                _buildStepIndicator(2, 'Import', _currentStep >= 2),
-              ],
+      child: SingleChildScrollView(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(16.0),
+              child: Row(
+                children: [
+                  _buildStepIndicator(0, 'Upload', _currentStep >= 0),
+                  Expanded(child: Container(height: 2, color: _currentStep >= 1 ? primaryColor : Colors.grey.shade300)),
+                  _buildStepIndicator(1, 'Validate', _currentStep >= 1),
+                  Expanded(child: Container(height: 2, color: _currentStep >= 2 ? primaryColor : Colors.grey.shade300)),
+                  _buildStepIndicator(2, 'Import', _currentStep >= 2),
+                ],
+              ),
             ),
-          ),
 
-          Expanded(
-            child: SingleChildScrollView(
+            Padding(
               padding: const EdgeInsets.all(16.0),
               child: _buildCurrentStepContent(),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -228,8 +230,9 @@ class _BulkImportRostersScreenState extends State<BulkImportRostersScreen> {
                   ),
                 ),
                 const SizedBox(height: 16),
-                Row(
-                  children: [
+                Builder(builder: (context) {
+                  final bool phone = isPhone(context);
+                  final templateButtons = <Widget>[
                     ElevatedButton.icon(
                       onPressed: _downloadTemplate,
                       icon: const Icon(Icons.download, size: 18),
@@ -237,9 +240,10 @@ class _BulkImportRostersScreenState extends State<BulkImportRostersScreen> {
                       style: ElevatedButton.styleFrom(
                         backgroundColor: Colors.green.shade600,
                         foregroundColor: Colors.white,
+                        minimumSize: phone ? const Size(0, 44) : null,
                       ),
                     ),
-                    const SizedBox(width: 12),
+                    if (!phone) const SizedBox(width: 12),
                     ElevatedButton.icon(
                       onPressed: _showSampleData,
                       icon: const Icon(Icons.visibility, size: 18),
@@ -247,10 +251,20 @@ class _BulkImportRostersScreenState extends State<BulkImportRostersScreen> {
                       style: ElevatedButton.styleFrom(
                         backgroundColor: Colors.blue.shade600,
                         foregroundColor: Colors.white,
+                        minimumSize: phone ? const Size(0, 44) : null,
                       ),
                     ),
-                  ],
-                ),
+                  ];
+                  // Phone: buttons wrap onto a second line instead of overflowing.
+                  if (phone) {
+                    return Wrap(
+                      spacing: 12,
+                      runSpacing: 8,
+                      children: templateButtons,
+                    );
+                  }
+                  return Row(children: templateButtons);
+                }),
               ],
             ),
           ),
@@ -456,6 +470,7 @@ class _BulkImportRostersScreenState extends State<BulkImportRostersScreen> {
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.orange.shade600,
                     foregroundColor: Colors.white,
+                    minimumSize: isPhone(context) ? const Size(double.infinity, 48) : null,
                   ),
                   child: const Text('Go Back & Fix File'),
                 ),
@@ -617,7 +632,38 @@ class _BulkImportRostersScreenState extends State<BulkImportRostersScreen> {
                     topRight: Radius.circular(12),
                   ),
                 ),
-                child: Row(
+                child: isPhone(context)
+                    ? Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Icon(Icons.check_circle_outline, color: Colors.green.shade700),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  'File Validated Successfully',
+                                  style: TextStyle(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.green.shade700,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            '${_previewData.length} unique rosters',
+                            style: TextStyle(
+                              fontSize: 14,
+                              color: Colors.green.shade700,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
+                      )
+                    : Row(
                   children: [
                     Icon(Icons.check_circle_outline, color: Colors.green.shade700),
                     const SizedBox(width: 8),
@@ -651,7 +697,8 @@ class _BulkImportRostersScreenState extends State<BulkImportRostersScreen> {
                       style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
                     ),
                     const SizedBox(height: 12),
-                    SingleChildScrollView(
+                    if (isPhone(context)) _buildPhonePreviewCards(),
+                    _phoneTableWrap(SingleChildScrollView(
                       scrollDirection: Axis.horizontal,
                       child: DataTable(
                         columns: [
@@ -715,7 +762,7 @@ class _BulkImportRostersScreenState extends State<BulkImportRostersScreen> {
                           ],
                         )).toList(),
                       ),
-                    ),
+                    )),
                     const SizedBox(height: 16),
                     Row(
                       children: [
@@ -756,6 +803,67 @@ class _BulkImportRostersScreenState extends State<BulkImportRostersScreen> {
   );
 }
 
+// Phone only: the first rows of the preview as readable cards (all five fields).
+Widget _buildPhonePreviewCards() {
+  final rows = _previewData.take(5).toList();
+  Widget field(String label, String value) => Padding(
+        padding: const EdgeInsets.symmetric(vertical: 3),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            SizedBox(
+              width: 96,
+              child: Text(
+                label,
+                style: TextStyle(fontSize: 12, color: Colors.grey.shade600, fontWeight: FontWeight.w600),
+              ),
+            ),
+            Expanded(
+              child: Text(value, style: const TextStyle(fontSize: 13)),
+            ),
+          ],
+        ),
+      );
+  return Column(
+    children: [
+      for (int i = 0; i < rows.length; i++)
+        Container(
+          width: double.infinity,
+          margin: const EdgeInsets.only(bottom: 8),
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: Colors.grey.shade50,
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: Colors.grey.shade300),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              field('Roster Type', rows[i]['Roster Type']?.toString() ?? ''),
+              field('Office Location', rows[i]['Office Location']?.toString() ?? ''),
+              field('Weekdays', rows[i]['Weekdays']?.toString() ?? ''),
+              field('Date Range', '${rows[i]['From Date']} to ${rows[i]['To Date']}'),
+              field('Time Range', '${rows[i]['Start Time']} - ${rows[i]['End Time']}'),
+            ],
+          ),
+        ),
+    ],
+  );
+}
+
+// Phone only: the sideways-scrolling table is kept, tucked in an expander.
+Widget _phoneTableWrap(Widget table) {
+  if (!isPhone(context)) return table;
+  return Theme(
+    data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+    child: ExpansionTile(
+      tilePadding: EdgeInsets.zero,
+      title: const Text('View as table', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
+      children: [table],
+    ),
+  );
+}
+
 Widget _buildStatCard(String label, String value, IconData icon, Color color) {
   return Container(
     padding: const EdgeInsets.all(12),
@@ -780,7 +888,7 @@ Widget _buildStatCard(String label, String value, IconData icon, Color color) {
         Text(
           label,
           style: TextStyle(
-            fontSize: 11,
+            fontSize: isPhone(context) ? 12 : 11,
             color: Colors.grey.shade600,
           ),
           textAlign: TextAlign.center,

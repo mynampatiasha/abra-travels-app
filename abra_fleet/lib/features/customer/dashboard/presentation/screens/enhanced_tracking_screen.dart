@@ -1032,46 +1032,97 @@ class _EnhancedTrackingScreenState extends State<EnhancedTrackingScreen>
           const SizedBox(height: 10),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: Row(
-              children: [
-                Expanded(
-                  child: _buildActionButton(
-                    icon: Icons.phone_rounded,
-                    label: 'Call',
-                    color: hasPhone
-                        ? const Color(0xFF2ECC71)
-                        : Colors.grey.shade300,
-                    iconColor: hasPhone
-                        ? Colors.white
-                        : Colors.grey.shade500,
-                    onTap: hasPhone ? _callDriver : null,
-                  ),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: _buildActionButton(
-                    icon: Icons.chat_rounded,
-                    label: 'Chat',
-                    color: hasPhone
-                        ? _whatsAppGreen
-                        : Colors.grey.shade300,
-                    iconColor: hasPhone
-                        ? Colors.white
-                        : Colors.grey.shade500,
-                    onTap: hasPhone ? _whatsAppDriver : null,
-                  ),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: _buildActionButton(
-                    icon: Icons.share_location_rounded,
-                    label: 'Share',
-                    color: _accentBlue,
-                    iconColor: Colors.white,
-                    onTap: _shareLiveLocation,
-                  ),
-                ),
-              ],
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                if (constraints.maxWidth < 360) {
+                  return Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    alignment: WrapAlignment.center,
+                    children: [
+                      SizedBox(
+                        width: (constraints.maxWidth - 8) / 2,
+                        child: _buildActionButton(
+                          icon: Icons.phone_rounded,
+                          label: 'Call',
+                          color: hasPhone
+                              ? const Color(0xFF2ECC71)
+                              : Colors.grey.shade300,
+                          iconColor: hasPhone
+                              ? Colors.white
+                              : Colors.grey.shade500,
+                          onTap: hasPhone ? _callDriver : null,
+                        ),
+                      ),
+                      SizedBox(
+                        width: (constraints.maxWidth - 8) / 2,
+                        child: _buildActionButton(
+                          icon: Icons.chat_rounded,
+                          label: 'Chat',
+                          color: hasPhone
+                              ? _whatsAppGreen
+                              : Colors.grey.shade300,
+                          iconColor: hasPhone
+                              ? Colors.white
+                              : Colors.grey.shade500,
+                          onTap: hasPhone ? _whatsAppDriver : null,
+                        ),
+                      ),
+                      SizedBox(
+                        width: constraints.maxWidth,
+                        child: _buildActionButton(
+                          icon: Icons.share_location_rounded,
+                          label: 'Share',
+                          color: _accentBlue,
+                          iconColor: Colors.white,
+                          onTap: _shareLiveLocation,
+                        ),
+                      ),
+                    ],
+                  );
+                }
+                return Row(
+                  children: [
+                    Expanded(
+                      child: _buildActionButton(
+                        icon: Icons.phone_rounded,
+                        label: 'Call',
+                        color: hasPhone
+                            ? const Color(0xFF2ECC71)
+                            : Colors.grey.shade300,
+                        iconColor: hasPhone
+                            ? Colors.white
+                            : Colors.grey.shade500,
+                        onTap: hasPhone ? _callDriver : null,
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: _buildActionButton(
+                        icon: Icons.chat_rounded,
+                        label: 'Chat',
+                        color: hasPhone
+                            ? _whatsAppGreen
+                            : Colors.grey.shade300,
+                        iconColor: hasPhone
+                            ? Colors.white
+                            : Colors.grey.shade500,
+                        onTap: hasPhone ? _whatsAppDriver : null,
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: _buildActionButton(
+                        icon: Icons.share_location_rounded,
+                        label: 'Share',
+                        color: _accentBlue,
+                        iconColor: Colors.white,
+                        onTap: _shareLiveLocation,
+                      ),
+                    ),
+                  ],
+                );
+              },
             ),
           ),
           if (!hasPhone) ...[

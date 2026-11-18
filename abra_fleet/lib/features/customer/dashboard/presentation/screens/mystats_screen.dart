@@ -376,37 +376,71 @@ class MyStatsScreenState extends State<MyStatsScreen>
           ],
         ),
         const SizedBox(height: 16),
-        Row(
-  children: [
-    Expanded(
-      child: _buildStatCard(
-        'Completed',
-        completed.toString(),
-        Colors.green,
-        Icons.check_circle,
-        _animation.value,
-      ),
-    ),
-    Expanded(
-      child: _buildStatCard(
-        'Today',  // ← Changed from "Ongoing"
-        ongoing.toString(),
-        Colors.blue,
-        Icons.today,
-        _animation.value,
-      ),
-    ),
-    Expanded(
-      child: _buildStatCard(
-        'Cancelled',
-        cancelled.toString(),
-        Colors.red,
-        Icons.cancel,
-        _animation.value,
-      ),
-    ),
-  ],
-),
+        LayoutBuilder(
+          builder: (context, constraints) {
+            if (constraints.maxWidth < 420) {
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  _buildStatCard(
+                    'Completed',
+                    completed.toString(),
+                    Colors.green,
+                    Icons.check_circle,
+                    _animation.value,
+                  ),
+                  const SizedBox(height: 12),
+                  _buildStatCard(
+                    'Today',  // ← Changed from "Ongoing"
+                    ongoing.toString(),
+                    Colors.blue,
+                    Icons.today,
+                    _animation.value,
+                  ),
+                  const SizedBox(height: 12),
+                  _buildStatCard(
+                    'Cancelled',
+                    cancelled.toString(),
+                    Colors.red,
+                    Icons.cancel,
+                    _animation.value,
+                  ),
+                ],
+              );
+            }
+            return Row(
+              children: [
+                Expanded(
+                  child: _buildStatCard(
+                    'Completed',
+                    completed.toString(),
+                    Colors.green,
+                    Icons.check_circle,
+                    _animation.value,
+                  ),
+                ),
+                Expanded(
+                  child: _buildStatCard(
+                    'Today',  // ← Changed from "Ongoing"
+                    ongoing.toString(),
+                    Colors.blue,
+                    Icons.today,
+                    _animation.value,
+                  ),
+                ),
+                Expanded(
+                  child: _buildStatCard(
+                    'Cancelled',
+                    cancelled.toString(),
+                    Colors.red,
+                    Icons.cancel,
+                    _animation.value,
+                  ),
+                ),
+              ],
+            );
+          },
+        ),
         const SizedBox(height: 16),
         Container(
           height: 100,

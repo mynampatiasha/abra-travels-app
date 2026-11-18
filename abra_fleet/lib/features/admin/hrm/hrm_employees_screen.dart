@@ -1030,9 +1030,11 @@ class _HrmEmployeesScreenState extends State<HrmEmployeesScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.grey[100],
-      body: Column(
-        children: [
-          // Header Section
+      body: SingleChildScrollView(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            // Header Section
           Container(
             padding: const EdgeInsets.all(24),
             decoration: BoxDecoration(
@@ -1166,128 +1168,135 @@ class _HrmEmployeesScreenState extends State<HrmEmployeesScreen> {
           ),
           
           // Employees Table
-          Expanded(
-            child: _isLoading
-                ? const Center(child: CircularProgressIndicator())
-                : _filteredEmployees.isEmpty
-                    ? Center(
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Icon(Icons.people_outline, size: 80, color: Colors.grey[400]),
-                            const SizedBox(height: 16),
-                            Text(
-                              'No employees found',
+          if (_isLoading)
+            const Padding(
+              padding: EdgeInsets.all(48.0),
+              child: Center(child: CircularProgressIndicator()),
+            )
+          else if (_filteredEmployees.isEmpty)
+            Padding(
+              padding: const EdgeInsets.all(48.0),
+              child: Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.people_outline, size: 80, color: Colors.grey[400]),
+                    const SizedBox(height: 16),
+                    Text(
+                      'No employees found',
+                      style: TextStyle(
+                        fontSize: 18,
+                        color: Colors.grey[600],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            )
+          else
+            Container(
+              margin: const EdgeInsets.all(24),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(8),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.grey.withOpacity(0.1),
+                    blurRadius: 4,
+                    offset: const Offset(0, 2),
+                  ),
+                ],
+              ),
+              child: SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: DataTable(
+                  headingRowColor: MaterialStateProperty.all(
+                    Colors.grey[100],
+                  ),
+                  columns: const [
+                    DataColumn(label: Text('ID', style: TextStyle(fontWeight: FontWeight.bold))),
+                    DataColumn(label: Text('Name', style: TextStyle(fontWeight: FontWeight.bold))),
+                    DataColumn(label: Text('Email', style: TextStyle(fontWeight: FontWeight.bold))),
+                    DataColumn(label: Text('Phone', style: TextStyle(fontWeight: FontWeight.bold))),
+                    DataColumn(label: Text('Department', style: TextStyle(fontWeight: FontWeight.bold))),
+                    DataColumn(label: Text('Status', style: TextStyle(fontWeight: FontWeight.bold))),
+                    DataColumn(label: Text('Edit', style: TextStyle(fontWeight: FontWeight.bold))),
+                    DataColumn(label: Text('Delete', style: TextStyle(fontWeight: FontWeight.bold))),
+                  ],
+                  rows: _filteredEmployees.map((employee) {
+                    return DataRow(
+                      cells: [
+                        DataCell(Text(employee['_id'].toString().substring(0, 8))),
+                        DataCell(Text(employee['name'] ?? '')),
+                        DataCell(Text(employee['email'] ?? '')),
+                        DataCell(Text(employee['phone'] ?? '')),
+                        DataCell(
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 6,
+                            ),
+                            decoration: BoxDecoration(
+                              color: Colors.blue[50],
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Text(
+                              employee['department'] ?? '',
                               style: TextStyle(
-                                fontSize: 18,
-                                color: Colors.grey[600],
+                                color: Colors.blue[700],
+                                fontWeight: FontWeight.w500,
                               ),
                             ),
-                          ],
-                        ),
-                      )
-                    : Container(
-                        margin: const EdgeInsets.all(24),
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(8),
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.grey.withOpacity(0.1),
-                              blurRadius: 4,
-                              offset: const Offset(0, 2),
-                            ),
-                          ],
-                        ),
-                        child: SingleChildScrollView(
-                          scrollDirection: Axis.horizontal,
-                          child: DataTable(
-                            headingRowColor: MaterialStateProperty.all(
-                              Colors.grey[100],
-                            ),
-                            columns: const [
-                              DataColumn(label: Text('ID', style: TextStyle(fontWeight: FontWeight.bold))),
-                              DataColumn(label: Text('Name', style: TextStyle(fontWeight: FontWeight.bold))),
-                              DataColumn(label: Text('Email', style: TextStyle(fontWeight: FontWeight.bold))),
-                              DataColumn(label: Text('Phone', style: TextStyle(fontWeight: FontWeight.bold))),
-                              DataColumn(label: Text('Department', style: TextStyle(fontWeight: FontWeight.bold))),
-                              DataColumn(label: Text('Status', style: TextStyle(fontWeight: FontWeight.bold))),
-                              DataColumn(label: Text('Edit', style: TextStyle(fontWeight: FontWeight.bold))),
-                              DataColumn(label: Text('Delete', style: TextStyle(fontWeight: FontWeight.bold))),
-                            ],
-                            rows: _filteredEmployees.map((employee) {
-                              return DataRow(
-                                cells: [
-                                  DataCell(Text(employee['_id'].toString().substring(0, 8))),
-                                  DataCell(Text(employee['name'] ?? '')),
-                                  DataCell(Text(employee['email'] ?? '')),
-                                  DataCell(Text(employee['phone'] ?? '')),
-                                  DataCell(
-                                    Container(
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 12,
-                                        vertical: 6,
-                                      ),
-                                      decoration: BoxDecoration(
-                                        color: Colors.blue[50],
-                                        borderRadius: BorderRadius.circular(12),
-                                      ),
-                                      child: Text(
-                                        employee['department'] ?? '',
-                                        style: TextStyle(
-                                          color: Colors.blue[700],
-                                          fontWeight: FontWeight.w500,
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                  DataCell(
-                                    Container(
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 12,
-                                        vertical: 6,
-                                      ),
-                                      decoration: BoxDecoration(
-                                        color: employee['status'] == 'active'
-                                            ? Colors.green[50]
-                                            : Colors.red[50],
-                                        borderRadius: BorderRadius.circular(12),
-                                      ),
-                                      child: Text(
-                                        (employee['status'] ?? 'inactive').toUpperCase(),
-                                        style: TextStyle(
-                                          color: employee['status'] == 'active'
-                                              ? Colors.green[700]
-                                              : Colors.red[700],
-                                          fontWeight: FontWeight.w500,
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                  DataCell(
-                                    IconButton(
-                                      icon: const Icon(Icons.edit, color: Colors.blue),
-                                      onPressed: () => _showEditEmployeeDialog(employee),
-                                    ),
-                                  ),
-                                  DataCell(
-                                    IconButton(
-                                      icon: const Icon(Icons.delete, color: Colors.red),
-                                      onPressed: () => _deleteEmployee(
-                                        employee['_id'],
-                                        employee['name'] ?? '',
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              );
-                            }).toList(),
                           ),
                         ),
-                      ),
-          ),
+                        DataCell(
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 6,
+                            ),
+                            decoration: BoxDecoration(
+                              color: employee['status'] == 'active'
+                                  ? Colors.green[50]
+                                  : Colors.red[50],
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Text(
+                              (employee['status'] ?? 'inactive').toUpperCase(),
+                              style: TextStyle(
+                                color: employee['status'] == 'active'
+                                    ? Colors.green[700]
+                                    : Colors.red[700],
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ),
+                        ),
+                        DataCell(
+                          IconButton(
+                            icon: const Icon(Icons.edit, color: Colors.blue),
+                            onPressed: () => _showEditEmployeeDialog(employee),
+                          ),
+                        ),
+                        DataCell(
+                          IconButton(
+                            icon: const Icon(Icons.delete, color: Colors.red),
+                            onPressed: () => _deleteEmployee(
+                              employee['_id'],
+                              employee['name'] ?? '',
+                            ),
+                          ),
+                        ),
+                      ],
+                    );
+                  }).toList(),
+                ),
+              ),
+            ),
+          const SizedBox(height: 24),
         ],
       ),
-    );
-  }
+    ),
+  );
+}
 }

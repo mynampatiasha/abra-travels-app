@@ -878,44 +878,87 @@ class _StopOTPVerificationScreenState extends State<StopOTPVerificationScreen> {
               // Resend / Override buttons (after max attempts)
               if (maxAttemptsReached) ...[
                 const SizedBox(height: 10),
-                Row(
-                  children: [
-                    Expanded(
-                      child: OutlinedButton.icon(
-                        onPressed: _loadingMap['resend_${passenger.passengerId}'] == true
-                            ? null
-                            : () => _resendOTP(passenger),
-                        icon: _loadingMap['resend_${passenger.passengerId}'] == true
-                            ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2))
-                            : const Icon(Icons.refresh, size: 16),
-                        label: const Text('Resend OTP', style: TextStyle(fontSize: 12)),
-                        style: OutlinedButton.styleFrom(
-                          foregroundColor: _navyLight,
-                          side: const BorderSide(color: _navyLight),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                          padding: const EdgeInsets.symmetric(vertical: 8),
+                LayoutBuilder(
+                  builder: (context, constraints) {
+                    final isNarrow = constraints.maxWidth < 340;
+                    if (isNarrow) {
+                      return Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          OutlinedButton.icon(
+                            onPressed: _loadingMap['resend_${passenger.passengerId}'] == true
+                                ? null
+                                : () => _resendOTP(passenger),
+                            icon: _loadingMap['resend_${passenger.passengerId}'] == true
+                                ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2))
+                                : const Icon(Icons.refresh, size: 16),
+                            label: const Text('Resend OTP', style: TextStyle(fontSize: 12)),
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: _navyLight,
+                              side: const BorderSide(color: _navyLight),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                              padding: const EdgeInsets.symmetric(vertical: 8),
+                            ),
+                          ),
+                          const SizedBox(height: 6),
+                          OutlinedButton.icon(
+                            onPressed: _loadingMap['override_${passenger.passengerId}'] == true
+                                ? null
+                                : () => _requestOverride(passenger),
+                            icon: _loadingMap['override_${passenger.passengerId}'] == true
+                                ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2))
+                                : const Icon(Icons.admin_panel_settings, size: 16),
+                            label: const Text('Override', style: TextStyle(fontSize: 12)),
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: _warning,
+                              side: const BorderSide(color: _warning),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                              padding: const EdgeInsets.symmetric(vertical: 8),
+                            ),
+                          ),
+                        ],
+                      );
+                    }
+                    return Row(
+                      children: [
+                        Expanded(
+                          child: OutlinedButton.icon(
+                            onPressed: _loadingMap['resend_${passenger.passengerId}'] == true
+                                ? null
+                                : () => _resendOTP(passenger),
+                            icon: _loadingMap['resend_${passenger.passengerId}'] == true
+                                ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2))
+                                : const Icon(Icons.refresh, size: 16),
+                            label: const Text('Resend OTP', style: TextStyle(fontSize: 12)),
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: _navyLight,
+                              side: const BorderSide(color: _navyLight),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                              padding: const EdgeInsets.symmetric(vertical: 8),
+                            ),
+                          ),
                         ),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: OutlinedButton.icon(
-                        onPressed: _loadingMap['override_${passenger.passengerId}'] == true
-                            ? null
-                            : () => _requestOverride(passenger),
-                        icon: _loadingMap['override_${passenger.passengerId}'] == true
-                            ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2))
-                            : const Icon(Icons.admin_panel_settings, size: 16),
-                        label: const Text('Override', style: TextStyle(fontSize: 12)),
-                        style: OutlinedButton.styleFrom(
-                          foregroundColor: _warning,
-                          side: const BorderSide(color: _warning),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                          padding: const EdgeInsets.symmetric(vertical: 8),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: OutlinedButton.icon(
+                            onPressed: _loadingMap['override_${passenger.passengerId}'] == true
+                                ? null
+                                : () => _requestOverride(passenger),
+                            icon: _loadingMap['override_${passenger.passengerId}'] == true
+                                ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2))
+                                : const Icon(Icons.admin_panel_settings, size: 16),
+                            label: const Text('Override', style: TextStyle(fontSize: 12)),
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: _warning,
+                              side: const BorderSide(color: _warning),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                              padding: const EdgeInsets.symmetric(vertical: 8),
+                            ),
+                          ),
                         ),
-                      ),
-                    ),
-                  ],
+                      ],
+                    );
+                  },
                 ),
               ],
             ],

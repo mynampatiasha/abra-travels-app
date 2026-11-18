@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:abra_fleet/core/widgets/responsive/responsive.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:abra_fleet/core/services/location_service.dart';
@@ -162,11 +163,12 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
           final shouldOpenSettings = await showDialog<bool>(
             context: context,
             builder: (context) => AlertDialog(
+              scrollable: isPhone(context),
               title: const Row(
                 children: [
                   Icon(Icons.location_off, color: Colors.red),
                   SizedBox(width: 12),
-                  Text('Location Permission Required'),
+                  Flexible(child: Text('Location Permission Required')),
                 ],
               ),
               content: Text(
@@ -326,11 +328,12 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
         showDialog(
           context: context,
           builder: (context) => AlertDialog(
+            scrollable: isPhone(context),
             title: const Row(
               children: [
                 Icon(Icons.error_outline, color: Colors.red),
                 SizedBox(width: 12),
-                Text('Location Error'),
+                Flexible(child: Text('Location Error')),
               ],
             ),
             content: Column(
@@ -736,7 +739,20 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
           ),
         ],
       ),
-      constraints: const BoxConstraints(maxHeight: 400),
+      // Phone: keep the list above the keyboard (it is scrollable inside).
+      constraints: BoxConstraints(
+        maxHeight: isPhone(context)
+            ? (() {
+                final mq = MediaQuery.of(context);
+                final avail = mq.size.height -
+                    mq.padding.top -
+                    kToolbarHeight -
+                    mq.viewInsets.bottom -
+                    88;
+                return avail.clamp(140.0, 400.0).toDouble();
+              })()
+            : 400,
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
@@ -930,7 +946,7 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
                                                 'No coordinates available',
                                                 style: TextStyle(
                                                   color: Colors.red[400],
-                                                  fontSize: 11,
+                                                  fontSize: isPhone(context) ? 12 : 11,
                                                   fontStyle: FontStyle.italic,
                                                 ),
                                               ),
@@ -950,9 +966,9 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
                                           _suggestions.remove(suggestion);
                                         });
                                       },
-                                      constraints: const BoxConstraints(
-                                        minWidth: 32,
-                                        minHeight: 32,
+                                      constraints: BoxConstraints(
+                                        minWidth: isPhone(context) ? 44 : 32,
+                                        minHeight: isPhone(context) ? 44 : 32,
                                       ),
                                       padding: EdgeInsets.zero,
                                     )
@@ -997,7 +1013,7 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text(widget.title),
+        title: Text(widget.title, overflow: TextOverflow.ellipsis),
         backgroundColor: Theme.of(context).colorScheme.primary,
         foregroundColor: Colors.white,
         actions: [
@@ -1244,7 +1260,12 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
                   ),
                 ),
                 
-                Container(
+                SafeArea(
+                  top: false,
+                  left: false,
+                  right: false,
+                  bottom: isPhone(context),
+                  child: Container(
                   width: double.infinity,
                   padding: const EdgeInsets.all(16.0),
                   child: ElevatedButton.icon(
@@ -1253,6 +1274,7 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
                     label: const Text('Confirm Location'),
                     style: ElevatedButton.styleFrom(
                       padding: const EdgeInsets.symmetric(vertical: 16.0),
+                      minimumSize: isPhone(context) ? const Size.fromHeight(52) : null,
                       backgroundColor: _selectedLocation != null 
                           ? Theme.of(context).primaryColor 
                           : Colors.grey[300],
@@ -1267,6 +1289,7 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
                         letterSpacing: 0.5,
                       ),
                     ),
+                  ),
                   ),
                 ),
               ],

@@ -103,7 +103,8 @@ function parseTripGroupId(tripGroupId) {
   
   const parts = tripGroupId.split('-');
   const vehicleId = parts[0];
-  const tripType = parts.slice(1).join('-'); // Handle trip types with hyphens
+  // Handle trip types with hyphens, and drop a trailing date (vehicleId-pickup-2026-11-18)
+  const tripType = parts.slice(1).join('-').replace(/-\d{4}-\d{2}-\d{2}(-\d{3,4})?$/, '');
   
   // Validate vehicleId is 24 hex characters
   if (!vehicleId || vehicleId.length !== 24 || !/^[0-9a-fA-F]{24}$/.test(vehicleId)) {
@@ -111,6 +112,19 @@ function parseTripGroupId(tripGroupId) {
   }
   
   return { vehicleId, tripType };
+}
+
+// When the app sends a short trip id (vehicleId-type, no date) the exact lookup finds nothing and we fall back
+// to "vehicle + type + date + driver". For grouped trips (documents with a stops list) that must pick ONE trip,
+// never all of them; individual per-customer records (no stops) keep the old "all together" behaviour.
+// mode 'start' -> earliest trip that has not started yet; mode 'end' -> earliest trip that is running.
+function pickOneGroupedTrip(candidates, mode) {
+  const grouped = candidates.filter((c) => Array.isArray(c.stops) && c.stops.length > 0);
+  if (grouped.length === 0) return { grouped: false, trip: null };
+  const running = ['started', 'in_progress'];
+  const eligible = grouped.filter((c) => (mode === 'start' ? !running.includes(c.status) : running.includes(c.status)));
+  eligible.sort((a, b) => String(a.startTime || '').localeCompare(String(b.startTime || '')) || new Date(a.createdAt || 0) - new Date(b.createdAt || 0));
+  return { grouped: true, trip: eligible[0] || null };
 }
 
 
@@ -406,7 +420,7 @@ router.get('/trips/today/all', verifyToken, async (req, res) => {
     console.log('='.repeat(80));
 
     const driverId = req.user.driverId || req.user.id || req.user.uid;
-    const today = new Date().toISOString().split('T')[0];
+    const today = (() => { const d = new Date(); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); })();
 
     const driver = await req.db.collection('drivers').findOne({ driverId });
     if (!driver) {
@@ -418,10 +432,15 @@ router.get('/trips/today/all', verifyToken, async (req, res) => {
     // ========================================================================
     const preGroupedTrips = await req.db.collection('roster-assigned-trips').find({
       driverId: driver._id,
-      scheduledDate: today,
+      status: { $ne: 'cancelled' },
+      // today's trips, plus any earlier trip still running (left in progress past midnight)
+      $or: [
+        { scheduledDate: today },
+        { scheduledDate: { $lt: today }, status: { $in: ['in_progress', 'started'] } }
+      ],
       tripGroupId: { $exists: true },
       'stops.0': { $exists: true }
-    }).toArray();
+    }).sort({ scheduledDate: 1, 'stops.0.pickupTime': 1, createdAt: 1 }).toArray();
 
     console.log(`📦 Found ${preGroupedTrips.length} pre-grouped trip(s)`);
 
@@ -494,6 +513,7 @@ router.get('/trips/today/all', verifyToken, async (req, res) => {
 
     const individualTrips = await req.db.collection('roster-assigned-trips').find({
       driverId: driver._id,
+      status: { $ne: 'cancelled' },
       scheduledDate: today
     }).toArray();
 
@@ -876,7 +896,7 @@ router.post('/trips/:tripGroupId/start', verifyToken, upload.single('photo'), as
     }
     
     const driverId = req.user.driverId || req.user.id || req.user.uid;
-    const today = new Date().toISOString().split('T')[0];
+    const today = (() => { const d = new Date(); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); })();
     
     // ========================================================================
     // STEP 0: Get driver's MongoDB _id
@@ -935,10 +955,12 @@ router.post('/trips/:tripGroupId/start', verifyToken, upload.single('photo'), as
     console.log(`   Driver: ${driverMongoId}`);
     
     // ✅ METHOD 1: Try pre-grouped trip (single document with all stops)
+    let startedFilter = { tripGroupId: tripGroupId, driverId: driverMongoId, status: { $nin: ['cancelled', 'completed'] } };
     let updateResult = await req.db.collection('roster-assigned-trips').updateMany(
       {
         tripGroupId: tripGroupId,
-        driverId: driverMongoId
+        driverId: driverMongoId,
+        status: { $nin: ['cancelled', 'completed'] }
       },
       {
         $set: {
@@ -976,13 +998,13 @@ router.post('/trips/:tripGroupId/start', verifyToken, upload.single('photo'), as
         });
       }
       
+      const broadFilter = { vehicleId: new ObjectId(vehicleId), tripType: tripType, scheduledDate: today, driverId: driverMongoId, status: { $nin: ['cancelled', 'completed'] } };
+      const candidates = await req.db.collection('roster-assigned-trips').find(broadFilter).toArray();
+      const pick = pickOneGroupedTrip(candidates, 'start');
+      startedFilter = pick.grouped ? { _id: pick.trip ? pick.trip._id : null } : broadFilter;
+      console.log('   Fallback: ' + candidates.length + ' candidate(s); grouped=' + pick.grouped + '; starting ' + (pick.grouped ? (pick.trip ? pick.trip.tripNumber : 'none (already started)') : 'all individual records'));
       updateResult = await req.db.collection('roster-assigned-trips').updateMany(
-        {
-          vehicleId: new ObjectId(vehicleId),
-          tripType: tripType,
-          scheduledDate: today,
-          driverId: driverMongoId
-        },
+        startedFilter,
         {
           $set: {
             status: 'started',
@@ -1024,21 +1046,7 @@ router.post('/trips/:tripGroupId/start', verifyToken, upload.single('photo'), as
     console.log('='.repeat(60));
     
     // Get trip document(s)
-    let trips = await req.db.collection('roster-assigned-trips').find({
-      tripGroupId: tripGroupId,
-      driverId: driverMongoId
-    }).toArray();
-    
-    // If no pre-grouped trip, get individual trips
-    if (trips.length === 0) {
-      const parsed = parseTripGroupId(tripGroupId);
-      trips = await req.db.collection('roster-assigned-trips').find({
-        vehicleId: new ObjectId(parsed.vehicleId),
-        tripType: parsed.tripType,
-        scheduledDate: today,
-        driverId: driverMongoId
-      }).toArray();
-    }
+    let trips = await req.db.collection('roster-assigned-trips').find(startedFilter).toArray();
     
     console.log(`📦 Found ${trips.length} trip document(s) for notifications`);
     
@@ -1243,7 +1251,9 @@ router.post('/trips/:tripGroupId/stop/:stopId/arrive', verifyToken, async (req, 
     // STEP 1: Find the pre-grouped trip document
     // ========================================================================
     const trip = await req.db.collection('roster-assigned-trips').findOne({
-      tripGroupId: tripGroupId
+      tripGroupId: tripGroupId,
+      'stops.stopId': stopId,
+      status: { $ne: 'cancelled' }
     });
     
     if (!trip) {
@@ -1282,7 +1292,7 @@ router.post('/trips/:tripGroupId/stop/:stopId/arrive', verifyToken, async (req, 
     console.log('📝 Updating stop status...');
     
     const updateResult = await req.db.collection('roster-assigned-trips').updateOne(
-      { tripGroupId: tripGroupId },
+      { tripGroupId: tripGroupId, 'stops.stopId': stopId, status: { $ne: 'cancelled' } },
       {
         $set: {
           [`stops.${stopIndex}.status`]: 'arrived',
@@ -1499,7 +1509,9 @@ router.post('/trips/:tripGroupId/stop/:stopId/depart', verifyToken, async (req, 
     
     // Find trip
     const trip = await req.db.collection('roster-assigned-trips').findOne({
-      tripGroupId: tripGroupId
+      tripGroupId: tripGroupId,
+      'stops.stopId': stopId,
+      status: { $ne: 'cancelled' }
     });
     
     if (!trip) {
@@ -1526,7 +1538,7 @@ router.post('/trips/:tripGroupId/stop/:stopId/depart', verifyToken, async (req, 
     
     // ✅ CRITICAL FIX: Update stop status AND currentStopIndex
     const updateResult = await req.db.collection('roster-assigned-trips').updateOne(
-      { tripGroupId: tripGroupId },
+      { tripGroupId: tripGroupId, 'stops.stopId': stopId, status: { $ne: 'cancelled' } },
       {
         $set: {
           [`stops.${stopIndex}.status`]: 'completed',
@@ -1992,6 +2004,112 @@ router.post('/trips/:tripId/stop/arrive', verifyToken, async (req, res) => {
       message: 'Failed to mark arrival',
       error: error.message
     });
+  }
+});
+
+// ============================================================================
+
+// ============================================================================
+// @route   POST /api/driver/trips/:tripGroupId/stop/:stopId/passenger/:passengerId/board
+// @desc    Mark passenger as boarded and generate step-out OTP
+// @access  Private (Driver only)
+// ============================================================================
+router.post('/trips/:tripGroupId/stop/:stopId/passenger/:passengerId/board', verifyToken, async (req, res) => {
+  try {
+    const { tripGroupId, stopId, passengerId } = req.params;
+    console.log(`\n👥 MARKING PASSENGER BOARDED: ${passengerId}`);
+    
+    // 1. Get the customer details
+    const { ObjectId } = require('mongodb');
+    let customer = null;
+    if (ObjectId.isValid(passengerId)) {
+      customer = await req.db.collection('customers').findOne({ _id: new ObjectId(passengerId) });
+    } else {
+      customer = await req.db.collection('customers').findOne({ email: passengerId });
+    }
+    
+    if (!customer) {
+      // Try finding from roster
+      const roster = await req.db.collection('roster-assigned-trips').findOne({ tripGroupId, 'stops.stopId': stopId, status: { $ne: 'cancelled' } });
+      if (roster) {
+         for (const stop of roster.stops || []) {
+            if (stop.stopId === stopId && stop.customer && (stop.customer.email === passengerId || stop.customer.id === passengerId || stop.stopId === passengerId)) {
+               customer = { ...stop.customer, id: passengerId };
+               break;
+            }
+         }
+      }
+    }
+    
+    if (!customer) {
+      return res.status(404).json({ success: false, message: 'Passenger not found' });
+    }
+
+    // 2. Mark attendance as boarded
+    // We update the passengerStatus if we track it, or just rely on the OTP verification.
+    // The previous code had a general passengerStatus update, but we'll do the minimal update:
+    await req.db.collection('roster-assigned-trips').updateOne(
+      { tripGroupId, 'stops.stopId': stopId, status: { $ne: 'cancelled' } },
+      { 
+        $set: { 
+           'stops.$[boardedStop].passengerStatus': 'boarded',
+           'stops.$[boardedStop].boardedAt': new Date(),
+           passengerStatus: 'boarded',
+           passengerStatusUpdatedAt: new Date(),
+           updatedAt: new Date()
+        } 
+      },
+      { arrayFilters: [{ 'boardedStop.stopId': stopId }] }
+    );
+
+    // 3. Generate Step-Out OTP
+    const otpService = require('../services/otp_service');
+    const otpRecord = await otpService.generateStepOutOTP(req.db, tripGroupId, stopId, customer);
+    
+    // Send Notification to customer about their Step-Out OTP
+    const notificationService = require('../services/notification_service');
+    // Get Driver name
+    let driverName = 'Your driver';
+    const driver = await req.db.collection('drivers').findOne({ _id: new ObjectId(req.user.userId) });
+    if (driver) {
+       driverName = driver.personalInfo?.name || driver.name || 'Your driver';
+    }
+
+    if (customer.email) {
+      const customerDoc = await req.db.collection('customers').findOne({ email: customer.email });
+      if (customerDoc) {
+        // Fire and forget notification
+        notificationService.sendRealTimeNotification('customer', customerDoc._id.toString(), {
+          type: 'otp_step_out',
+          title: '🔐 Your Drop-Off OTP',
+          message: `Your drop-off OTP: ${otpRecord.otp}\n\nShare this with ${driverName} at your destination.`,
+          data: {
+            otp: otpRecord.otp,
+            otpType: 'step_out',
+            tripGroupId,
+            stopId,
+            driverName,
+            expiresAt: otpRecord.expiresAt.toISOString(),
+          },
+          priority: 'urgent',
+          category: 'otp_verification',
+        }).catch(e => console.log('FCM failed for step-out:', e.message));
+      }
+    }
+
+    res.json({
+      success: true,
+      message: 'Passenger boarded',
+      data: {
+        passengerId: otpRecord.passengerId,
+        otp: otpRecord.otp,
+        expiresAt: otpRecord.expiresAt
+      }
+    });
+
+  } catch (error) {
+    console.error('❌ Error marking boarded:', error);
+    res.status(500).json({ success: false, message: 'Failed to mark boarded', error: error.message });
   }
 });
 
@@ -2675,7 +2793,8 @@ router.post('/trips/:tripGroupId/end', verifyToken, upload.single('photo'), asyn
     }
     
     const driverId = req.user.driverId || req.user.id || req.user.uid;
-    const today = new Date().toISOString().split('T')[0];
+    const tripDateMatch = String(tripGroupId).match(/(\d{4}-\d{2}-\d{2})(?:-\d{3,4})?$/);
+    const today = tripDateMatch ? tripDateMatch[1] : (() => { const d = new Date(); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); })();
     
     // ✅ Get driver's MongoDB _id
     const driver = await req.db.collection('drivers').findOne({
@@ -2725,12 +2844,21 @@ router.post('/trips/:tripGroupId/end', verifyToken, upload.single('photo'), asyn
     // ========================================================================
     // STEP 2: Get trip data for calculations
     // ========================================================================
-    const trips = await req.db.collection('roster-assigned-trips').find({
-      vehicleId: new ObjectId(vehicleId),
-      tripType: tripType,
-      scheduledDate: today,
-      driverId: driverMongoId
-    }).toArray();
+    // Prefer the exact trip (so two trips of one vehicle/day end separately); fall back to vehicle + type + date.
+    let tripFilter = { tripGroupId: tripGroupId, status: { $ne: 'cancelled' }, driverId: driverMongoId };
+    let trips = await req.db.collection('roster-assigned-trips').find(tripFilter).toArray();
+    if (trips.length === 0) {
+      const broadFilter = { vehicleId: new ObjectId(vehicleId), tripType: tripType, scheduledDate: today, status: { $ne: 'cancelled' }, driverId: driverMongoId };
+      const candidates = await req.db.collection('roster-assigned-trips').find(broadFilter).toArray();
+      const pick = pickOneGroupedTrip(candidates, 'end');
+      if (pick.grouped) {
+        tripFilter = { _id: pick.trip ? pick.trip._id : null };
+        console.log('   Fallback end: ' + candidates.length + ' candidate(s); ending ' + (pick.trip ? pick.trip.tripNumber : 'none running'));
+      } else {
+        tripFilter = broadFilter;
+      }
+      trips = await req.db.collection('roster-assigned-trips').find(tripFilter).toArray();
+    }
     
     if (trips.length === 0) {
       return res.status(404).json({
@@ -2750,12 +2878,7 @@ router.post('/trips/:tripGroupId/end', verifyToken, upload.single('photo'), asyn
     // STEP 3: Update all trips in group to completed
     // ========================================================================
     const updateResult = await req.db.collection('roster-assigned-trips').updateMany(
-      {
-        vehicleId: new ObjectId(vehicleId),
-        tripType: tripType,
-        scheduledDate: today,
-        driverId: driverMongoId
-      },
+      tripFilter,
       {
         $set: {
           status: 'completed',
@@ -2782,12 +2905,7 @@ router.post('/trips/:tripGroupId/end', verifyToken, upload.single('photo'), asyn
       const { getActiveRateCard } = require('./rate_cards');
 
       // Get completed trip documents (now have actualDistance set)
-      const completedTrips = await req.db.collection('roster-assigned-trips').find({
-        vehicleId: new ObjectId(vehicleId),
-        tripType:  tripType,
-        scheduledDate: today,
-        driverId:  driverMongoId
-      }).toArray();
+      const completedTrips = await req.db.collection('roster-assigned-trips').find(tripFilter).toArray();
 
       if (completedTrips.length === 0) {
         console.log('   ⚠️ No completed trips found for billing');
@@ -2897,6 +3015,42 @@ router.post('/trips/:tripGroupId/end', verifyToken, upload.single('photo'), asyn
     // ========================================================================
     // STEP 4: Send completion notifications
     // ========================================================================
+    // Mark the trip's rosters completed and notify each customer (customers live in stops[].customer)
+    try {
+      const rosterObjIds = [];
+      for (const t of trips) {
+        for (const rid of (t.rosterIds || [])) { if (ObjectId.isValid(rid)) rosterObjIds.push(new ObjectId(rid)); }
+        for (const st of (t.stops || [])) { if (st.rosterId && ObjectId.isValid(st.rosterId)) rosterObjIds.push(new ObjectId(st.rosterId)); }
+      }
+      if (rosterObjIds.length > 0) {
+        const rr = await req.db.collection('rosters').updateMany(
+          { _id: { $in: rosterObjIds }, status: { $nin: ['cancelled', 'completed'] } },
+          { $set: { status: 'completed', completedAt: new Date(), updatedAt: new Date() } }
+        );
+        console.log('Marked ' + rr.modifiedCount + ' roster(s) completed');
+      }
+      const notified = new Set();
+      for (const t of trips) {
+        for (const st of (t.stops || [])) {
+          const email = st.type === 'pickup' ? st.customer?.email : null;
+          if (!email || notified.has(email)) continue;
+          notified.add(email);
+          const custDoc = await req.db.collection('customers').findOne({ email });
+          if (!custDoc) continue;
+          notificationService.sendRealTimeNotification('customer', custDoc._id.toString(), {
+            type: 'trip_completed',
+            title: 'Trip completed!',
+            message: 'Thank you for riding with us. Distance: ' + actualDistance + ' km',
+            data: { tripGroupId, tripId: t._id.toString(), actualDistance },
+            priority: 'normal',
+            category: 'trip_update',
+          }).catch(e => console.log('Trip-complete notification failed:', e.message));
+        }
+      }
+    } catch (completeErr) {
+      console.log('Roster completion / notification step failed:', completeErr.message);
+    }
+
     console.log(`\n📲 Sending completion notifications...`);
     
     for (const trip of trips) {

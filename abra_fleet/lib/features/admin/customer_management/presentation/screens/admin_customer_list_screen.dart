@@ -205,43 +205,51 @@ void _navigateToDetailsScreen(BuildContext context, CustomerEntity customer) asy
         icon: const Icon(Icons.add),
         label: const Text('Add Customer'),
       ),
-      body: Column(
-        children: [
-          Padding(
-            padding: const EdgeInsets.all(16.0),
-            child: TextField(
-              decoration: InputDecoration(
-                hintText: 'Search customers...',
-                prefixIcon: const Icon(Icons.search),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(10.0),
+      body: SingleChildScrollView(
+        scrollDirection: Axis.vertical,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Padding(
+              padding: const EdgeInsets.all(16.0),
+              child: TextField(
+                decoration: InputDecoration(
+                  hintText: 'Search customers...',
+                  prefixIcon: const Icon(Icons.search),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10.0),
+                  ),
+                  filled: true,
+                  fillColor: Theme.of(context).cardColor,
                 ),
-                filled: true,
-                fillColor: Theme.of(context).cardColor,
+                onChanged: _onSearchChanged,
               ),
-              onChanged: _onSearchChanged,
             ),
-          ),
-          Expanded(
-            child: Consumer<CustomerProvider>(
+            Consumer<CustomerProvider>(
               builder: (context, provider, child) {
                 if (provider.isLoading && provider.customers.isEmpty) {
-                  return const Center(child: CircularProgressIndicator());
+                  return const Padding(
+                    padding: EdgeInsets.symmetric(vertical: 40),
+                    child: Center(child: CircularProgressIndicator()),
+                  );
                 }
 
                 if (provider.errorMessage != null) {
-                  return Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        const Icon(Icons.error_outline, size: 48, color: Colors.red),
-                        const SizedBox(height: 16),
-                        Text(provider.errorMessage!),
-                        TextButton(
-                          onPressed: provider.fetchCustomers,
-                          child: const Text('Retry'),
-                        ),
-                      ],
+                  return Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 40),
+                    child: Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          const Icon(Icons.error_outline, size: 48, color: Colors.red),
+                          const SizedBox(height: 16),
+                          Text(provider.errorMessage!),
+                          TextButton(
+                            onPressed: provider.fetchCustomers,
+                            child: const Text('Retry'),
+                          ),
+                        ],
+                      ),
                     ),
                   );
                 }
@@ -249,25 +257,30 @@ void _navigateToDetailsScreen(BuildContext context, CustomerEntity customer) asy
                 final filteredCustomers = _getFilteredCustomers(provider.customers);
 
                 if (filteredCustomers.isEmpty) {
-                  return Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        const Icon(Icons.people_outline, size: 64, color: Colors.grey),
-                        const SizedBox(height: 16),
-                        Text(
-                          _searchTerm.isEmpty
-                              ? 'No customers found.\nTap + to add a new customer.'
-                              : 'No customers match your search.',
-                          textAlign: TextAlign.center,
-                          style: Theme.of(context).textTheme.titleMedium,
-                        ),
-                      ],
+                  return Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 40),
+                    child: Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          const Icon(Icons.people_outline, size: 64, color: Colors.grey),
+                          const SizedBox(height: 16),
+                          Text(
+                            _searchTerm.isEmpty
+                                ? 'No customers found.\nTap + to add a new customer.'
+                                : 'No customers match your search.',
+                            textAlign: TextAlign.center,
+                            style: Theme.of(context).textTheme.titleMedium,
+                          ),
+                        ],
+                      ),
                     ),
                   );
                 }
 
                 return ListView.builder(
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
                   itemCount: filteredCustomers.length,
                   itemBuilder: (context, index) {
                     final customer = filteredCustomers[index];
@@ -325,8 +338,9 @@ void _navigateToDetailsScreen(BuildContext context, CustomerEntity customer) asy
                 );
               },
             ),
-          ),
-        ],
+            const SizedBox(height: 24),
+          ],
+        ),
       ),
     );
   }

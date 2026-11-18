@@ -35,6 +35,7 @@ import 'package:abra_fleet/features/auth/domain/repositories/auth_repository.dar
 import 'package:abra_fleet/features/auth/presentation/screens/welcome_screen.dart';
 import 'package:abra_fleet/core/services/api_service.dart';
 import 'package:abra_fleet/features/admin/hrm/hrm_feedback.dart';
+import 'package:abra_fleet/core/widgets/responsive/responsive.dart';
 import 'client_trip_dashboard_part1.dart';
 import 'client_all_trips.dart';
 
@@ -580,7 +581,8 @@ class _ClientMainShellState extends State<ClientMainShell>
                     : _buildModuleScreen(isMobile),
               ),
             ),
-            if (isMobile && _activeScreen != -1) _buildMobileBottomNav(),
+            // phone: the bottom bar is on the dashboard too (Home highlighted there)
+            if (isMobile) _buildMobileBottomNav(),
           ],
         ),
       ),
@@ -847,8 +849,8 @@ class _ClientMainShellState extends State<ClientMainShell>
             GestureDetector(
               onTap: _goHome,
               child: Container(
-                width: 36,
-                height: 36,
+                width: 44,
+                height: 44,
                 margin: const EdgeInsets.only(right: 10),
                 decoration: BoxDecoration(
                   color: Colors.white.withOpacity(0.1),
@@ -882,7 +884,7 @@ class _ClientMainShellState extends State<ClientMainShell>
                     'Corporate Travels',
                     style: TextStyle(
                       color: Colors.white.withOpacity(0.55),
-                      fontSize: 11,
+                      fontSize: 12,
                     ),
                     overflow: TextOverflow.ellipsis,
                     maxLines: 1,
@@ -906,19 +908,19 @@ class _ClientMainShellState extends State<ClientMainShell>
                   right: 4,
                   top: 4,
                   child: Container(
-                    width: 16,
-                    height: 16,
+                    constraints: const BoxConstraints(minWidth: 18, minHeight: 18),
+                    padding: const EdgeInsets.symmetric(horizontal: 3),
                     decoration: BoxDecoration(
                       color: EDS.red,
-                      shape: BoxShape.circle,
+                      borderRadius: BorderRadius.circular(9),
                       border: Border.all(color: EDS.navy, width: 2),
                     ),
                     child: Center(
                       child: Text(
-                        '$_notificationCount',
+                        _notificationCount > 99 ? '99+' : '$_notificationCount',
                         style: const TextStyle(
                             color: Colors.white,
-                            fontSize: 9,
+                            fontSize: 10,
                             fontWeight: FontWeight.w800),
                       ),
                     ),
@@ -1413,6 +1415,7 @@ class _ClientMainShellState extends State<ClientMainShell>
       _modules.firstWhere((m) => m.id == 'employees'),
       _modules.firstWhere((m) => m.id == 'trips'),
       _modules.firstWhere((m) => m.id == 'sos'),
+      _modules.firstWhere((m) => m.id == 'profile'),
     ];
 
     return Container(
@@ -1435,7 +1438,7 @@ class _ClientMainShellState extends State<ClientMainShell>
             child: _bottomTab(
               icon: Icons.home_rounded,
               label: 'Home',
-              isActive: false,
+              isActive: _activeScreen == -1,
               onTap: _goHome,
               activeColor: EDS.blue,
             ),
@@ -1445,7 +1448,8 @@ class _ClientMainShellState extends State<ClientMainShell>
             return Expanded(
               child: _bottomTab(
                 icon: m.icon,
-                label: m.label.split(' ').first,
+                // 'Organization Profile' is too long for a 5-tab bar: show 'Profile'
+                label: m.id == 'profile' ? 'Profile' : m.label.split(' ').first,
                 isActive: _activeScreen == idx,
                 onTap: () => _navigateTo(m.id),
                 activeColor: m.accent,
@@ -1477,6 +1481,8 @@ class _ClientMainShellState extends State<ClientMainShell>
             const SizedBox(height: 4),
             Text(
               label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
               style: EDS.body(12,   // ↑ was body(10)
                   w: isActive ? FontWeight.w700 : FontWeight.w500,
                   color: isActive ? activeColor : EDS.textTer),
@@ -1494,6 +1500,7 @@ class _ClientMainShellState extends State<ClientMainShell>
     showDialog(
       context: context,
       builder: (_) => Dialog(
+        insetPadding: EdgeInsets.symmetric(horizontal: isPhone(context) ? 16 : 40, vertical: 24),
         shape: RoundedRectangleBorder(borderRadius: EDS.radiusMd),
         child: Container(
           constraints: const BoxConstraints(maxWidth: 420),
@@ -1560,7 +1567,7 @@ class _ClientMainShellState extends State<ClientMainShell>
                             const SizedBox(height: 2),
                             Text(
                               'View trips for individual employees',
-                              style: EDS.body(11, color: EDS.textSec),
+                              style: EDS.body(isPhone(context) ? 12 : 11, color: EDS.textSec),
                             ),
                           ],
                         ),
@@ -1613,7 +1620,7 @@ class _ClientMainShellState extends State<ClientMainShell>
                             const SizedBox(height: 2),
                             Text(
                               'View all trips across organization',
-                              style: EDS.body(11, color: EDS.textSec),
+                              style: EDS.body(isPhone(context) ? 12 : 11, color: EDS.textSec),
                             ),
                           ],
                         ),
@@ -1682,6 +1689,7 @@ class _ClientMainShellState extends State<ClientMainShell>
     showDialog(
       context: context,
       builder: (_) => Dialog(
+        insetPadding: EdgeInsets.symmetric(horizontal: isPhone(context) ? 16 : 40, vertical: 24),
         shape: RoundedRectangleBorder(borderRadius: EDS.radiusXl),
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 480),
@@ -1754,7 +1762,8 @@ class _ClientMainShellState extends State<ClientMainShell>
                           Icon(Icons.access_time_rounded,
                               color: EDS.cyan, size: 22),
                           const SizedBox(width: 12),
-                          Column(
+                          Flexible(
+                            child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text('Available 24 / 7',
@@ -1765,6 +1774,7 @@ class _ClientMainShellState extends State<ClientMainShell>
                               Text('All days • Round the clock',
                                   style: EDS.body(13)),   // ↑ was body(11)
                             ],
+                          ),
                           ),
                         ],
                       ),

@@ -28,6 +28,7 @@ import 'package:printing/printing.dart';
 // Excel generation imports
 import 'package:excel/excel.dart' as excel_pkg;
 import 'dart:typed_data';
+import 'package:abra_fleet/core/widgets/responsive/responsive.dart';
 
 class ClientTripDetails extends StatefulWidget {
   final String tripId;
@@ -937,6 +938,9 @@ class _ClientTripDetailsState extends State<ClientTripDetails> {
     );
   }
 
+  // Phone only: never render text smaller than 12 px.
+  double _ps(double size) => (isPhone(context) && size < 12) ? 12 : size;
+
   PreferredSizeWidget _buildAppBar() {
     return AppBar(
       backgroundColor: const Color(0xFF0D47A1),
@@ -1092,9 +1096,11 @@ class _ClientTripDetailsState extends State<ClientTripDetails> {
               children: [
                 const Icon(Icons.event, size: 18, color: Colors.grey),
                 const SizedBox(width: 8),
-                Text(
-                  DateFormat('EEEE, MMM dd, yyyy').format(DateTime.parse(scheduledDate)),
-                  style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+                Expanded(
+                  child: Text(
+                    DateFormat('EEEE, MMM dd, yyyy').format(DateTime.parse(scheduledDate)),
+                    style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+                  ),
                 ),
               ],
             ),
@@ -1105,7 +1111,7 @@ class _ClientTripDetailsState extends State<ClientTripDetails> {
             children: [
               const Icon(Icons.schedule, size: 18, color: Colors.grey),
               const SizedBox(width: 8),
-              Text('Scheduled: $startTime - $endTime', style: const TextStyle(fontSize: 14)),
+              Expanded(child: Text('Scheduled: $startTime - $endTime', style: const TextStyle(fontSize: 14))),
             ],
           ),
           
@@ -1115,7 +1121,7 @@ class _ClientTripDetailsState extends State<ClientTripDetails> {
               children: [
                 const Icon(Icons.play_circle, size: 18, color: Colors.green),
                 const SizedBox(width: 8),
-                Text('Started: ${_formatDateTime(actualStartTime)}', style: const TextStyle(fontSize: 14)),
+                Expanded(child: Text('Started: ${_formatDateTime(actualStartTime)}', style: const TextStyle(fontSize: 14))),
               ],
             ),
           ],
@@ -1136,6 +1142,7 @@ Widget _buildCompactButton({
         backgroundColor: backgroundColor,
         foregroundColor: Colors.white,
         padding: const EdgeInsets.symmetric(vertical: 10),
+        minimumSize: isPhone(context) ? const Size(0, 48) : null,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(8),
         ),
@@ -1157,8 +1164,8 @@ Widget _buildCompactButton({
                 const SizedBox(height: 4),
                 Text(
                   label,
-                  style: const TextStyle(
-                    fontSize: 11,
+                  style: TextStyle(
+                    fontSize: _ps(11),
                     fontWeight: FontWeight.w600,
                   ),
                 ),
@@ -1179,64 +1186,79 @@ Widget _buildCompactButton({
           ),
         ],
       ),
-      child: Row(
-        children: [
-          // PDF Button
-          Expanded(
-            child: _buildCompactButton(
-              onPressed: _isDownloading ? null : _downloadPDF,
-              icon: Icons.picture_as_pdf,
-              label: 'PDF',
-              backgroundColor: Colors.red,
-              isLoading: _isDownloading,
-            ),
-          ),
-          const SizedBox(width: 8),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final pdfBtn = _buildCompactButton(
+            onPressed: _isDownloading ? null : _downloadPDF,
+            icon: Icons.picture_as_pdf,
+            label: 'PDF',
+            backgroundColor: Colors.red,
+            isLoading: _isDownloading,
+          );
+          final excelBtn = _buildCompactButton(
+            onPressed: _isDownloading ? null : _downloadExcel,
+            icon: Icons.table_chart,
+            label: 'Excel',
+            backgroundColor: Colors.green,
+            isLoading: _isDownloading,
+          );
+          final trackBtn = _buildCompactButton(
+            onPressed: _trackLive,
+            icon: Icons.location_on,
+            label: 'Track',
+            backgroundColor: const Color(0xFF0D47A1),
+          );
+          final callBtn = _buildCompactButton(
+            onPressed: _callDriver,
+            icon: Icons.phone,
+            label: 'Call',
+            backgroundColor: Colors.green[700]!,
+          );
+          final waBtn = _buildCompactButton(
+            onPressed: _whatsappDriver,
+            icon: Icons.message,
+            label: 'WhatsApp',
+            backgroundColor: const Color(0xFF25D366),
+          );
 
-          // Excel Button
-          Expanded(
-            child: _buildCompactButton(
-              onPressed: _isDownloading ? null : _downloadExcel,
-              icon: Icons.table_chart,
-              label: 'Excel',
-              backgroundColor: Colors.green,
-              isLoading: _isDownloading,
-            ),
-          ),
-          const SizedBox(width: 8),
+          if (constraints.maxWidth < 500) {
+            return Column(
+              children: [
+                Row(
+                  children: [
+                    Expanded(child: pdfBtn),
+                    const SizedBox(width: 8),
+                    Expanded(child: excelBtn),
+                    const SizedBox(width: 8),
+                    Expanded(child: trackBtn),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    Expanded(child: callBtn),
+                    const SizedBox(width: 8),
+                    Expanded(child: waBtn),
+                  ],
+                ),
+              ],
+            );
+          }
 
-          // Track Live Button
-          Expanded(
-            child: _buildCompactButton(
-              onPressed: _trackLive,
-              icon: Icons.location_on,
-              label: 'Track',
-              backgroundColor: const Color(0xFF0D47A1),
-            ),
-          ),
-          const SizedBox(width: 8),
-
-          // Call Button
-          Expanded(
-            child: _buildCompactButton(
-              onPressed: _callDriver,
-              icon: Icons.phone,
-              label: 'Call',
-              backgroundColor: Colors.green[700]!,
-            ),
-          ),
-          const SizedBox(width: 8),
-
-          // WhatsApp Button
-          Expanded(
-            child: _buildCompactButton(
-              onPressed: _whatsappDriver,
-              icon: Icons.message,
-              label: 'WhatsApp',
-              backgroundColor: const Color(0xFF25D366),
-            ),
-          ),
-        ],
+          return Row(
+            children: [
+              Expanded(child: pdfBtn),
+              const SizedBox(width: 8),
+              Expanded(child: excelBtn),
+              const SizedBox(width: 8),
+              Expanded(child: trackBtn),
+              const SizedBox(width: 8),
+              Expanded(child: callBtn),
+              const SizedBox(width: 8),
+              Expanded(child: waBtn),
+            ],
+          );
+        },
       ),
     );
   }
@@ -1278,8 +1300,10 @@ Widget _buildCompactButton({
             ),
           ),
           const SizedBox(height: 12),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          Wrap(
+            alignment: WrapAlignment.spaceBetween,
+            spacing: 12,
+            runSpacing: 4,
             children: [
               Text('Current stop: $currentStopIndex of $totalStops',
                   style: TextStyle(fontSize: 13, color: Colors.grey.shade700)),
@@ -1436,7 +1460,7 @@ Widget _buildCompactButton({
     required Color color,
   }) {
     return Container(
-      padding: const EdgeInsets.all(12),
+      padding: EdgeInsets.all(isPhone(context) ? 8 : 12),
       decoration: BoxDecoration(
         color: color.withOpacity(0.1),
         borderRadius: BorderRadius.circular(8),
@@ -1446,10 +1470,19 @@ Widget _buildCompactButton({
         children: [
           Icon(icon, color: color, size: 24),
           const SizedBox(height: 8),
+          if (isPhone(context)) ...[
+            FitText(value,
+                alignment: Alignment.center,
+                style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: color)),
+            FitText(subtitle, alignment: Alignment.center, style: TextStyle(fontSize: 12, color: color)),
+            const SizedBox(height: 4),
+            FitText(label, alignment: Alignment.center, style: TextStyle(fontSize: 12, color: Colors.grey.shade700)),
+          ] else ...[
           Text(value, style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: color)),
           Text(subtitle, style: TextStyle(fontSize: 11, color: color)),
           const SizedBox(height: 4),
           Text(label, style: TextStyle(fontSize: 12, color: Colors.grey.shade700)),
+          ],
         ],
       ),
     );
@@ -1473,7 +1506,7 @@ Widget _buildCompactButton({
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Text('Route Stops', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+              const Flexible(child: Text('Route Stops', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold))),
               Text('${stops.length} stop${stops.length != 1 ? 's' : ''}',
                   style: TextStyle(fontSize: 14, color: Colors.grey.shade600)),
             ],
@@ -1545,7 +1578,7 @@ Widget _buildCompactButton({
                 child: Text(
                   '${stop['sequence']} - ${type.toUpperCase()}',
                   style: TextStyle(
-                    fontSize: 11,
+                    fontSize: _ps(11),
                     fontWeight: FontWeight.bold,
                     color: type == 'pickup' ? Colors.blue.shade900 : Colors.orange.shade900,
                   ),
@@ -1556,7 +1589,7 @@ Widget _buildCompactButton({
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                   decoration: BoxDecoration(color: Colors.blue, borderRadius: BorderRadius.circular(4)),
-                  child: const Text('CURRENT', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.white)),
+                  child: Text('CURRENT', style: TextStyle(fontSize: _ps(10), fontWeight: FontWeight.bold, color: Colors.white)),
                 ),
             ],
           ),
@@ -1569,7 +1602,7 @@ Widget _buildCompactButton({
                 children: [
                   Icon(Icons.phone, size: 14, color: Colors.grey.shade600),
                   const SizedBox(width: 6),
-                  Text(customer['phone'], style: TextStyle(fontSize: 13, color: Colors.grey.shade600)),
+                  Expanded(child: Text(customer['phone'], style: TextStyle(fontSize: 13, color: Colors.grey.shade600))),
                 ],
               ),
             ],
@@ -1603,7 +1636,7 @@ Widget _buildCompactButton({
                     Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text('Estimated', style: TextStyle(fontSize: 11, color: Colors.grey.shade600)),
+                        Text('Estimated', style: TextStyle(fontSize: _ps(11), color: Colors.grey.shade600)),
                         const SizedBox(height: 4),
                         Text(stop['estimatedTime'] ?? 'N/A', style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
                       ],
@@ -1612,7 +1645,7 @@ Widget _buildCompactButton({
                       Column(
                         crossAxisAlignment: CrossAxisAlignment.end,
                         children: [
-                          Text('Actual', style: TextStyle(fontSize: 11, color: Colors.grey.shade600)),
+                          Text('Actual', style: TextStyle(fontSize: _ps(11), color: Colors.grey.shade600)),
                           const SizedBox(height: 4),
                           Text(_formatDateTime(stop['arrivedAt']), style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
                         ],
@@ -1655,7 +1688,7 @@ Widget _buildCompactButton({
                                   ? 'Delayed +${timingStatus['minutes']} min'
                                   : 'Early -${timingStatus['minutes']} min',
                           style: TextStyle(
-                            fontSize: 11,
+                            fontSize: _ps(11),
                             fontWeight: FontWeight.w600,
                             color: timingStatus['type'] == 'on_time'
                                 ? Colors.green
@@ -1734,7 +1767,7 @@ Widget _buildCompactButton({
           ],
           const SizedBox(height: 8),
           Text('Submitted: ${_formatDateTime(feedback['submittedAt'])}',
-              style: TextStyle(fontSize: 11, color: Colors.grey.shade600)),
+              style: TextStyle(fontSize: _ps(11), color: Colors.grey.shade600)),
         ],
       ),
     );

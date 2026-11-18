@@ -798,136 +798,145 @@ class _HrmPayrollScreenState extends State<HrmPayrollScreen> with ErrorHandlerMi
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFFF5F7FA),
-      body: Column(
-        children: [
-          Container(
-            padding: const EdgeInsets.all(24),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.05),
-                  blurRadius: 10,
-                  offset: const Offset(0, 2),
-                ),
-              ],
-            ),
-            child: LayoutBuilder(
-              builder: (context, constraints) {
-                final isMobile = constraints.maxWidth < 768;
-                return Wrap(
-                  spacing: 12,
-                  runSpacing: 12,
-                  crossAxisAlignment: WrapCrossAlignment.center,
-                  alignment: WrapAlignment.spaceBetween,
-                  children: [
-                    Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.all(12),
-                          decoration: BoxDecoration(
-                            color: Colors.orange.shade50,
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: Icon(Icons.account_balance_wallet, color: Colors.orange.shade700, size: 28),
-                        ),
-                        const SizedBox(width: 16),
-                        Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const Text(
-                              'Payroll Management',
-                              style: TextStyle(
-                                fontSize: 24,
-                                fontWeight: FontWeight.bold,
-                                color: Color(0xFF1A1A1A),
-                              ),
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              isMobile
-                                  ? 'Manage salary payments'
-                                  : 'Manage employee salary payments',
-                              style: TextStyle(
-                                fontSize: 14,
-                                color: Colors.grey.shade600,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
-                    Wrap(
-                      spacing: 12,
-                      runSpacing: 8,
-                      crossAxisAlignment: WrapCrossAlignment.center,
-                      children: [
-                        if (_selectedPayrollIds.isNotEmpty)
+      body: SingleChildScrollView(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(24),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.05),
+                    blurRadius: 10,
+                    offset: const Offset(0, 2),
+                  ),
+                ],
+              ),
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  final isMobile = constraints.maxWidth < 768;
+                  return Wrap(
+                    spacing: 12,
+                    runSpacing: 12,
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    alignment: WrapAlignment.spaceBetween,
+                    children: [
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
                           Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                            padding: const EdgeInsets.all(12),
                             decoration: BoxDecoration(
-                              color: Colors.blue.shade50,
-                              borderRadius: BorderRadius.circular(20),
+                              color: Colors.orange.shade50,
+                              borderRadius: BorderRadius.circular(12),
                             ),
-                            child: Text(
-                              '${_selectedPayrollIds.length} selected',
-                              style: TextStyle(
-                                color: Colors.blue.shade700,
-                                fontWeight: FontWeight.bold,
+                            child: Icon(Icons.account_balance_wallet, color: Colors.orange.shade700, size: 28),
+                          ),
+                          const SizedBox(width: 16),
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text(
+                                'Payroll Management',
+                                style: TextStyle(
+                                  fontSize: 24,
+                                  fontWeight: FontWeight.bold,
+                                  color: Color(0xFF1A1A1A),
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                isMobile
+                                    ? 'Manage salary payments'
+                                    : 'Manage employee salary payments',
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  color: Colors.grey.shade600,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                      Wrap(
+                        spacing: 12,
+                        runSpacing: 8,
+                        crossAxisAlignment: WrapCrossAlignment.center,
+                        children: [
+                          if (_selectedPayrollIds.isNotEmpty)
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                              decoration: BoxDecoration(
+                                color: Colors.blue.shade50,
+                                borderRadius: BorderRadius.circular(20),
+                              ),
+                              child: Text(
+                                '${_selectedPayrollIds.length} selected',
+                                style: TextStyle(
+                                  color: Colors.blue.shade700,
+                                  fontWeight: FontWeight.bold,
+                                ),
                               ),
                             ),
+                          ElevatedButton.icon(
+                            onPressed: _showAddPayrollDialog,
+                            icon: const Icon(Icons.add_circle_outline),
+                            label: const Text('Add Payroll'),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.green.shade700,
+                              foregroundColor: Colors.white,
+                              padding: EdgeInsets.symmetric(
+                                horizontal: isMobile ? 16 : 24,
+                                vertical: isMobile ? 12 : 16,
+                              ),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              elevation: 2,
+                            ),
                           ),
-                        ElevatedButton.icon(
-                          onPressed: _showAddPayrollDialog,
-                          icon: const Icon(Icons.add_circle_outline),
-                          label: const Text('Add Payroll'),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.green.shade700,
-                            foregroundColor: Colors.white,
-                            padding: EdgeInsets.symmetric(
-                              horizontal: isMobile ? 16 : 24,
-                              vertical: isMobile ? 12 : 16,
+                          ElevatedButton.icon(
+                            onPressed: _exportSelectedToExcel,
+                            icon: const Icon(Icons.file_download),
+                            label: const Text('Export Selected'),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.cyan.shade700,
+                              foregroundColor: Colors.white,
+                              padding: EdgeInsets.symmetric(
+                                horizontal: isMobile ? 16 : 24,
+                                vertical: isMobile ? 12 : 16,
+                              ),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              elevation: 2,
                             ),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            elevation: 2,
                           ),
-                        ),
-                        ElevatedButton.icon(
-                          onPressed: _exportSelectedToExcel,
-                          icon: const Icon(Icons.file_download),
-                          label: const Text('Export Selected'),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.cyan.shade700,
-                            foregroundColor: Colors.white,
-                            padding: EdgeInsets.symmetric(
-                              horizontal: isMobile ? 16 : 24,
-                              vertical: isMobile ? 12 : 16,
-                            ),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            elevation: 2,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                );
-              },
+                        ],
+                      ),
+                    ],
+                  );
+                },
+              ),
             ),
-          ),
-          
-          Expanded(
-            child: _isLoading
-                ? const Center(child: CircularProgressIndicator())
-                : _payrollEntries.isEmpty
-                    ? _buildEmptyState()
-                    : _buildPayrollTable(),
-          ),
-        ],
+            
+            if (_isLoading)
+              const Padding(
+                padding: EdgeInsets.all(48.0),
+                child: Center(child: CircularProgressIndicator()),
+              )
+            else if (_payrollEntries.isEmpty)
+              Padding(
+                padding: const EdgeInsets.all(48.0),
+                child: _buildEmptyState(),
+              )
+            else
+              _buildPayrollTable(),
+            const SizedBox(height: 24),
+          ],
+        ),
       ),
     );
   }
@@ -971,6 +980,8 @@ class _HrmPayrollScreenState extends State<HrmPayrollScreen> with ErrorHandlerMi
           return Container(
             margin: EdgeInsets.all(marginVal),
             child: ListView.builder(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
               padding: EdgeInsets.zero,
               itemCount: _payrollEntries.length,
               itemBuilder: (context, index) {
@@ -1224,10 +1235,11 @@ class _HrmPayrollScreenState extends State<HrmPayrollScreen> with ErrorHandlerMi
                         ],
                       ),
                     ),
-                    Expanded(
-                      child: ListView.builder(
-                        padding: const EdgeInsets.all(0),
-                        itemCount: _payrollEntries.length,
+                    ListView.builder(
+                      shrinkWrap: true,
+                      physics: const NeverScrollableScrollPhysics(),
+                      padding: const EdgeInsets.all(0),
+                      itemCount: _payrollEntries.length,
                         itemBuilder: (context, index) {
                           final payroll = _payrollEntries[index];
                           final isEven = index % 2 == 0;
@@ -1361,7 +1373,6 @@ class _HrmPayrollScreenState extends State<HrmPayrollScreen> with ErrorHandlerMi
                           );
                         },
                       ),
-                    ),
                   ],
                 ),
               ),

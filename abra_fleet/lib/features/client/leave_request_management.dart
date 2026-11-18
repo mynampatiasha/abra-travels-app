@@ -585,9 +585,11 @@ class _LeaveRequestManagementState extends State<LeaveRequestManagement> {
   Widget build(BuildContext context) {
     return Container(
       color: const Color(0xFFf8fafc),
-      child: Column(
-        children: [
-          // Header with filters
+      child: SingleChildScrollView(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            // Header with filters
           Container(
             padding: const EdgeInsets.all(24),
             decoration: const BoxDecoration(
@@ -596,21 +598,24 @@ class _LeaveRequestManagementState extends State<LeaveRequestManagement> {
                 bottom: BorderSide(color: Color(0xFFe2e8f0)),
               ),
             ),
-            child: Row(
-              children: [
-                const Icon(Icons.beach_access, color: Color(0xFF0D47A1)), // App's specified primary color
-                const SizedBox(width: 12),
-                const Text(
-                  'Leave Request Management',
-                  style: TextStyle(
-                    fontSize: 24,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                const Spacer(),
-                
-                // Status Filter
-                SizedBox(
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                const titleWidget = Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.beach_access, color: Color(0xFF0D47A1)), // App's specified primary color
+                    SizedBox(width: 12),
+                    Text(
+                      'Leave Request Management',
+                      style: TextStyle(
+                        fontSize: 24,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ],
+                );
+
+                final filterWidget = SizedBox(
                   width: 200,
                   child: DropdownButtonFormField<String>(
                     value: _selectedStatus,
@@ -635,12 +640,9 @@ class _LeaveRequestManagementState extends State<LeaveRequestManagement> {
                       }
                     },
                   ),
-                ),
-                
-                const SizedBox(width: 16),
-                
-                // Refresh Button
-                ElevatedButton.icon(
+                );
+
+                final refreshBtn = ElevatedButton.icon(
                   onPressed: _fetchLeaveRequests,
                   icon: const Icon(Icons.refresh),
                   label: const Text('Refresh'),
@@ -648,18 +650,49 @@ class _LeaveRequestManagementState extends State<LeaveRequestManagement> {
                     backgroundColor: const Color(0xFF0D47A1), // App's specified primary color
                     foregroundColor: Colors.white,
                   ),
-                ),
-              ],
+                );
+
+                if (constraints.maxWidth < 700) {
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      titleWidget,
+                      const SizedBox(height: 16),
+                      Wrap(
+                        spacing: 12,
+                        runSpacing: 12,
+                        crossAxisAlignment: WrapCrossAlignment.center,
+                        children: [
+                          filterWidget,
+                          refreshBtn,
+                        ],
+                      ),
+                    ],
+                  );
+                }
+
+                return Row(
+                  children: [
+                    titleWidget,
+                    const Spacer(),
+                    filterWidget,
+                    const SizedBox(width: 16),
+                    refreshBtn,
+                  ],
+                );
+              },
             ),
           ),
           
           // Content
-          Expanded(
-            child: FutureBuilder<List<Map<String, dynamic>>>(
+          FutureBuilder<List<Map<String, dynamic>>>(
               future: _leaveRequestsFuture,
               builder: (context, snapshot) {
                 if (snapshot.connectionState == ConnectionState.waiting) {
-                  return const Center(child: CircularProgressIndicator());
+                  return const Padding(
+                    padding: EdgeInsets.symmetric(vertical: 64),
+                    child: Center(child: CircularProgressIndicator()),
+                  );
                 }
 
                 if (snapshot.hasError) {
@@ -716,7 +749,7 @@ class _LeaveRequestManagementState extends State<LeaveRequestManagement> {
                   );
                 }
 
-                return SingleChildScrollView(
+                return Padding(
                   padding: const EdgeInsets.all(24),
                   child: Column(
                     children: leaveRequests.map((request) => 
@@ -736,8 +769,8 @@ class _LeaveRequestManagementState extends State<LeaveRequestManagement> {
                 );
               },
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }

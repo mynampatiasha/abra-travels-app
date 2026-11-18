@@ -25,6 +25,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:abra_fleet/app/config/api_config.dart';
+import 'package:abra_fleet/core/widgets/responsive/responsive.dart';
 
 class ClientBasedAllVehicles extends StatefulWidget {
   const ClientBasedAllVehicles({super.key});
@@ -463,7 +464,8 @@ void _centerOnVehicle(Map<String, dynamic> vehicle) {
       // ============================================================
       // END OF BACK ARROW BUTTON
       // ============================================================
-      title: Column(
+      titleSpacing: isPhone(context) ? 0 : null,
+      title: _wrapPhoneAppBarTitle(Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const Text('Live Vehicle Tracking'),
@@ -473,7 +475,7 @@ void _centerOnVehicle(Map<String, dynamic> vehicle) {
               style: const TextStyle(fontSize: 12, fontWeight: FontWeight.normal),
             ),
         ],
-      ),
+      )),
       actions: [
         // Alert badge
         if (_alertCount > 0)
@@ -528,6 +530,109 @@ void _centerOnVehicle(Map<String, dynamic> vehicle) {
     );
   }
 
+  /// Phone: shrink the title to the space left between the back arrow and the
+  /// action icons so it never clips. Other widths: returned unchanged.
+  Widget _wrapPhoneAppBarTitle(Widget title) {
+    if (!isPhone(context)) return title;
+    return FittedBox(
+      fit: BoxFit.scaleDown,
+      alignment: Alignment.centerLeft,
+      child: title,
+    );
+  }
+
+  /// Phone: the vehicle list as a draggable bottom sheet over a full-screen map.
+  Widget _buildPhoneVehicleSheet() {
+    return Positioned(
+      left: 0,
+      right: 0,
+      top: 0,
+      bottom: 60, // leave space for the stats bar
+      child: DraggableScrollableSheet(
+        key: const ValueKey('phone_vehicle_sheet'),
+        initialChildSize: 0.5,
+        minChildSize: 0.15,
+        maxChildSize: 0.9,
+        snap: true,
+        snapSizes: const [0.15, 0.5, 0.9],
+        builder: (context, scrollController) {
+          return Material(
+            elevation: 8,
+            color: Colors.white,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+            clipBehavior: Clip.antiAlias,
+            child: CustomScrollView(
+              controller: scrollController,
+              slivers: [
+                SliverToBoxAdapter(
+                  child: Container(
+                    color: const Color(0xFF0D47A1),
+                    padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Center(
+                          child: Container(
+                            width: 40,
+                            height: 4,
+                            decoration: BoxDecoration(
+                              color: Colors.white.withOpacity(0.6),
+                              borderRadius: BorderRadius.circular(2),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        const Text(
+                          'Your Vehicles',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          '${_vehicles.length} active',
+                          style: TextStyle(
+                            color: Colors.white.withOpacity(0.9),
+                            fontSize: 14,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                if (_vehicles.isEmpty)
+                  const SliverToBoxAdapter(
+                    child: Padding(
+                      padding: EdgeInsets.all(32),
+                      child: Column(
+                        children: [
+                          Icon(Icons.directions_car_outlined,
+                              size: 48, color: Colors.grey),
+                          SizedBox(height: 16),
+                          Text('No vehicles found'),
+                        ],
+                      ),
+                    ),
+                  )
+                else
+                  SliverList(
+                    delegate: SliverChildBuilderDelegate(
+                      (context, index) =>
+                          _buildVehicleListItem(_vehicles[index]),
+                      childCount: _vehicles.length,
+                    ),
+                  ),
+                const SliverToBoxAdapter(child: SizedBox(height: 8)),
+              ],
+            ),
+          );
+        },
+      ),
+    );
+  }
+
   Widget _buildBody() {
     if (_isLoading) {
       return const Center(
@@ -560,20 +665,30 @@ void _centerOnVehicle(Map<String, dynamic> vehicle) {
       );
     }
 
-    return Stack(
-      children: [
-        // Map
-        _buildMap(),
-        
-        // Vehicle list (left sidebar)
-        if (_showVehicleList) _buildVehicleListPanel(),
-        
-        // Vehicle details panel (right sidebar)
-        if (_showDetailsPanel && _selectedVehicle != null)
-          _buildDetailsPanel(),
-        
-        // Stats bar (bottom)
-        _buildStatsBar(),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final isMobile = constraints.maxWidth < 700;
+        final phone = constraints.maxWidth < 600;
+        return Stack(
+          children: [
+            // Map
+            _buildMap(),
+            
+            // Vehicle list (left sidebar on desktop, sliding drawer on mobile)
+            // On phones the list is a draggable sheet, hidden while the
+            // details sheet is open so the two never overlap.
+            if (_showVehicleList &&
+                !(phone && _showDetailsPanel && _selectedVehicle != null))
+              phone
+                  ? _buildPhoneVehicleSheet()
+                  : _buildVehicleListPanel(isMobile, constraints),
+            
+            // Vehicle details panel (right sidebar on desktop, bottom sheet on mobile)
+            if (_showDetailsPanel && _selectedVehicle != null)
+              _buildDetailsPanel(isMobile, constraints),
+            
+            // Stats bar (bottom)
+            _buildStatsBar(),
         
         // Toggle buttons
         Positioned(
@@ -608,6 +723,8 @@ void _centerOnVehicle(Map<String, dynamic> vehicle) {
           ),
         ),
       ],
+    );
+      },
     );
   }
 
@@ -828,13 +945,18 @@ onTap: () {
     );
   }
 
-  Widget _buildVehicleListPanel() {
+  Widget _buildVehicleListPanel([bool isMobile = false, BoxConstraints? constraints]) {
+    final panelWidth = isMobile && constraints != null
+        ? (constraints.maxWidth > 350 ? 300.0 : constraints.maxWidth * 0.85)
+        : 300.0;
     return Positioned(
       left: 0,
       top: 0,
       bottom: 60, // Leave space for stats bar
-      width: 300,
-      child: Container(
+      width: panelWidth,
+      child: Material(
+        elevation: isMobile ? 8 : 2,
+        child: Container(
         color: Colors.white,
         child: Column(
           children: [
@@ -898,6 +1020,7 @@ onTap: () {
             ),
           ],
         ),
+      ),
       ),
     );
   }
@@ -1036,7 +1159,7 @@ onTap: () {
     );
   }
 
-  Widget _buildDetailsPanel() {
+  Widget _buildDetailsPanel([bool isMobile = false, BoxConstraints? constraints]) {
     final vehicle = _selectedVehicle!;
     final vehicleNumber = vehicle['vehicleNumber']?.toString() ?? 'Unknown';
     final driverName = vehicle['driverName']?.toString() ?? 'Unknown';
@@ -1045,12 +1168,7 @@ onTap: () {
     final stops = vehicle['stops'] as List<dynamic>? ?? [];
     final currentStopIndex = vehicle['currentStopIndex'] ?? 0;
 
-    return Positioned(
-      right: 0,
-      top: 0,
-      bottom: 60,
-      width: 350,
-      child: Container(
+    final panelContent = Container(
         color: Colors.white,
         child: Column(
           children: [
@@ -1123,6 +1241,7 @@ if (driverPhone.isNotEmpty) ...[
     style: ElevatedButton.styleFrom(
       backgroundColor: Colors.green,
       foregroundColor: Colors.white,
+      minimumSize: isPhone(context) ? const Size(0, 44) : null,
     ),
   ),
   const SizedBox(height: 12),
@@ -1135,6 +1254,7 @@ ElevatedButton.icon(
   style: ElevatedButton.styleFrom(
     backgroundColor: const Color(0xFF25D366),
     foregroundColor: Colors.white,
+    minimumSize: isPhone(context) ? const Size(0, 44) : null,
   ),
 ),
 const SizedBox(height: 16),
@@ -1245,7 +1365,30 @@ const SizedBox(height: 16),
             ),
           ],
         ),
-      ),
+      );
+
+    if (isMobile && constraints != null) {
+      final sheetHeight = (constraints.maxHeight * 0.45).clamp(240.0, 360.0);
+      return Positioned(
+        left: 0,
+        right: 0,
+        bottom: 60,
+        height: sheetHeight,
+        child: Material(
+          elevation: 12,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+          clipBehavior: Clip.antiAlias,
+          child: panelContent,
+        ),
+      );
+    }
+
+    return Positioned(
+      right: 0,
+      top: 0,
+      bottom: 60,
+      width: 350,
+      child: panelContent,
     );
   }
 
@@ -1432,7 +1575,7 @@ const SizedBox(height: 16),
           Text(
             label,
             style: TextStyle(
-              fontSize: 11,
+              fontSize: isPhone(context) ? 12 : 11,
               color: Colors.grey.shade600,
             ),
           ),

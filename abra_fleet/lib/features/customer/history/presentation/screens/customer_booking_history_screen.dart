@@ -64,7 +64,10 @@ class _CustomerBookingHistoryScreenState extends State<CustomerBookingHistoryScr
     final DateFormat dateFormat = DateFormat('MMM dd, yyyy - hh:mm a');
 
     return Scaffold(
-      body: Consumer<BookingHistoryProvider>(
+      body: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 900),
+          child: Consumer<BookingHistoryProvider>(
         builder: (context, bookingHistoryProvider, child) {
           if (bookingHistoryProvider.isLoading && bookingHistoryProvider.bookingHistoryItems.isEmpty) {
             return const Center(child: CircularProgressIndicator());
@@ -149,6 +152,8 @@ class _CustomerBookingHistoryScreenState extends State<CustomerBookingHistoryScr
             ),
           );
         },
+      ),
+        ),
       ),
     );
   }

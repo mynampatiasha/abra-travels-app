@@ -402,6 +402,7 @@ class _ERPUsersManagementScreenState extends State<ERPUsersManagementScreen>
                       ? SizedBox(height: 400, child: _buildEmptyState())
                       : _buildTable(),
           if (!_isLoading && _filtered.isNotEmpty) _buildPagination(),
+          const SizedBox(height: 24),
         ]),
       ),
     );

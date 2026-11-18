@@ -217,6 +217,15 @@ class _ToursTravelsWebViewScreenState extends State<ToursTravelsWebViewScreen> {
       // Camera/microphone media requests are granted via the cross-platform
       // onPermissionRequest callback passed to WebViewController.fromPlatformCreationParams above.
       debugPrint('🔐 Android WebView configured - media permissions granted via onPermissionRequest');
+
+      // ✅ Android WebView blocks <video>.play() unless it was triggered by a
+      // direct user tap. The attendance-capture page starts the camera
+      // preview from JS after getUserMedia() resolves, which falls outside
+      // that gesture window, so the video stays paused showing its play
+      // button overlay instead of a live feed -- and "Capture" then grabs a
+      // blank frame. Disabling this requirement lets the preview autoplay.
+      (controller.platform as AndroidWebViewController)
+          .setMediaPlaybackRequiresUserGesture(false);
     }
 
     // ✅ iOS-SPECIFIC: Configure WKWebView for media permissions
@@ -232,6 +241,11 @@ class _ToursTravelsWebViewScreenState extends State<ToursTravelsWebViewScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      // ✅ Android's WebView PlatformView briefly renders nothing while its
+      // native surface spins up, letting whatever is behind it (often
+      // black) show through for a frame or two before the loading overlay
+      // paints. An explicit white background removes that flash.
+      backgroundColor: Colors.white,
       appBar: AppBar(
         title: Text(widget.title),
         backgroundColor: kPrimaryColor,

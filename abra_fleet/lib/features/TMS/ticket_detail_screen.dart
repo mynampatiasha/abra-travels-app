@@ -385,6 +385,7 @@
 
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:abra_fleet/core/widgets/responsive/responsive.dart';
 import 'package:abra_fleet/core/services/tms_service.dart';
 
 class TicketDetailScreen extends StatefulWidget {
@@ -602,7 +603,7 @@ class _TicketDetailScreenState extends State<TicketDetailScreen>
       body: FadeTransition(
         opacity: _fadeAnimation,
         child: SingleChildScrollView(
-          padding: const EdgeInsets.all(20),
+          padding: EdgeInsets.all(isPhone(context) ? 16 : 20),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -636,7 +637,7 @@ class _TicketDetailScreenState extends State<TicketDetailScreen>
   Widget _buildHeaderCard(String ticketNumber, String priority, String status) {
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.all(24),
+      padding: EdgeInsets.all(isPhone(context) ? 16 : 24),
       decoration: BoxDecoration(
         gradient: LinearGradient(
           colors: [darkBlue, mediumBlue],
@@ -665,6 +666,7 @@ class _TicketDetailScreenState extends State<TicketDetailScreen>
           const SizedBox(height: 16),
           Text(
             ticketNumber,
+            textAlign: TextAlign.center,
             style: const TextStyle(
               fontSize: 28,
               fontWeight: FontWeight.bold,
@@ -672,11 +674,12 @@ class _TicketDetailScreenState extends State<TicketDetailScreen>
             ),
           ),
           const SizedBox(height: 12),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
+          Wrap(
+            alignment: WrapAlignment.center,
+            spacing: 12,
+            runSpacing: 8,
             children: [
               _buildHeaderBadge(priority, _getPriorityIcon(priority), _getPriorityColor(priority)),
-              const SizedBox(width: 12),
               _buildHeaderBadge(status, Icons.info, _getStatusColor(status)),
             ],
           ),

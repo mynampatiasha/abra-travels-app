@@ -256,60 +256,130 @@ class _TripsClientPageState extends State<TripsClientPage>
     return Container(
       color: Colors.white,
       padding: const EdgeInsets.all(16),
-      child: Row(
-        children: [
-          Expanded(
-            child: InkWell(
-              onTap: () => _tabController.animateTo(0),
-              borderRadius: BorderRadius.circular(12),
-              child: _buildStatCard(
-                icon: Icons.assignment,
-                color: const Color(0xFF2563EB),
-                value: _assignedCount.toString(),
-                label: 'Assigned',
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final isNarrow = constraints.maxWidth < 640;
+          if (isNarrow) {
+            return Column(
+              children: [
+                Row(
+                  children: [
+                    Expanded(
+                      child: InkWell(
+                        onTap: () => _tabController.animateTo(0),
+                        borderRadius: BorderRadius.circular(12),
+                        child: _buildStatCard(
+                          icon: Icons.assignment,
+                          color: const Color(0xFF2563EB),
+                          value: _assignedCount.toString(),
+                          label: 'Assigned',
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: InkWell(
+                        onTap: () => _tabController.animateTo(1),
+                        borderRadius: BorderRadius.circular(12),
+                        child: _buildStatCard(
+                          icon: Icons.directions_car,
+                          color: const Color(0xFFF59E0B),
+                          value: _ongoingCount.toString(),
+                          label: 'Ongoing',
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    Expanded(
+                      child: InkWell(
+                        onTap: () => _tabController.animateTo(2),
+                        borderRadius: BorderRadius.circular(12),
+                        child: _buildStatCard(
+                          icon: Icons.check_circle,
+                          color: const Color(0xFF10B981),
+                          value: _completedCount.toString(),
+                          label: 'Completed',
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: InkWell(
+                        onTap: () => _tabController.animateTo(3),
+                        borderRadius: BorderRadius.circular(12),
+                        child: _buildStatCard(
+                          icon: Icons.cancel,
+                          color: const Color(0xFFEF4444),
+                          value: _cancelledCount.toString(),
+                          label: 'Cancelled',
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            );
+          }
+          return Row(
+            children: [
+              Expanded(
+                child: InkWell(
+                  onTap: () => _tabController.animateTo(0),
+                  borderRadius: BorderRadius.circular(12),
+                  child: _buildStatCard(
+                    icon: Icons.assignment,
+                    color: const Color(0xFF2563EB),
+                    value: _assignedCount.toString(),
+                    label: 'Assigned',
+                  ),
+                ),
               ),
-            ),
-          ),
-          const SizedBox(width: 8),
-          Expanded(
-            child: InkWell(
-              onTap: () => _tabController.animateTo(1),
-              borderRadius: BorderRadius.circular(12),
-              child: _buildStatCard(
-                icon: Icons.directions_car,
-                color: const Color(0xFFF59E0B),
-                value: _ongoingCount.toString(),
-                label: 'Ongoing',
+              const SizedBox(width: 8),
+              Expanded(
+                child: InkWell(
+                  onTap: () => _tabController.animateTo(1),
+                  borderRadius: BorderRadius.circular(12),
+                  child: _buildStatCard(
+                    icon: Icons.directions_car,
+                    color: const Color(0xFFF59E0B),
+                    value: _ongoingCount.toString(),
+                    label: 'Ongoing',
+                  ),
+                ),
               ),
-            ),
-          ),
-          const SizedBox(width: 8),
-          Expanded(
-            child: InkWell(
-              onTap: () => _tabController.animateTo(2),
-              borderRadius: BorderRadius.circular(12),
-              child: _buildStatCard(
-                icon: Icons.check_circle,
-                color: const Color(0xFF10B981),
-                value: _completedCount.toString(),
-                label: 'Completed',
+              const SizedBox(width: 8),
+              Expanded(
+                child: InkWell(
+                  onTap: () => _tabController.animateTo(2),
+                  borderRadius: BorderRadius.circular(12),
+                  child: _buildStatCard(
+                    icon: Icons.check_circle,
+                    color: const Color(0xFF10B981),
+                    value: _completedCount.toString(),
+                    label: 'Completed',
+                  ),
+                ),
               ),
-            ),
-          ),
-          const SizedBox(width: 8),
-          Expanded(
-            child: InkWell(
-              onTap: () => _tabController.animateTo(3),
-              borderRadius: BorderRadius.circular(12),
-              child: _buildStatCard(
-                icon: Icons.cancel,
-                color: const Color(0xFFEF4444),
-                value: _cancelledCount.toString(),
-                label: 'Cancelled',
+              const SizedBox(width: 8),
+              Expanded(
+                child: InkWell(
+                  onTap: () => _tabController.animateTo(3),
+                  borderRadius: BorderRadius.circular(12),
+                  child: _buildStatCard(
+                    icon: Icons.cancel,
+                    color: const Color(0xFFEF4444),
+                    value: _cancelledCount.toString(),
+                    label: 'Cancelled',
+                  ),
+                ),
               ),
-            ),
-          ),
-        ],
+            ],
+          );
+        },
       ),
     );
   }
@@ -471,7 +541,7 @@ class _TripsClientPageState extends State<TripsClientPage>
         unselectedLabelColor: const Color(0xFF64748B),
         indicatorColor: const Color(0xFF2563EB),
         indicatorWeight: 3,
-        isScrollable: false,
+        isScrollable: MediaQuery.of(context).size.width < 600,
         labelStyle: const TextStyle(
           fontWeight: FontWeight.w600,
           fontSize: 14,
@@ -480,7 +550,7 @@ class _TripsClientPageState extends State<TripsClientPage>
           fontWeight: FontWeight.w500,
           fontSize: 13,
         ),
-        labelPadding: const EdgeInsets.symmetric(horizontal: 8),
+        labelPadding: const EdgeInsets.symmetric(horizontal: 12),
         tabs: [
           Tab(text: 'Assigned ($_assignedCount)'),
           Tab(text: 'Ongoing ($_ongoingCount)'),
@@ -587,7 +657,7 @@ class _TripsClientPageState extends State<TripsClientPage>
     }
 
     return ListView.builder(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
       itemCount: trips.length,
       itemBuilder: (context, index) {
         return _buildTripCard(trips[index]);

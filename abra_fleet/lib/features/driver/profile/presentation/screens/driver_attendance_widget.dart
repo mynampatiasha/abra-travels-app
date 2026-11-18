@@ -10,6 +10,7 @@ import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:abra_fleet/app/config/api_config.dart';
+import 'package:abra_fleet/core/widgets/responsive/responsive.dart';
 
 // ============================================================================
 // MAIN WIDGET - Shows all 4 attendance cards
@@ -284,15 +285,16 @@ class DriverAttendanceWidgetState extends State<DriverAttendanceWidget> {
               children: [
                 Icon(Icons.calendar_today, color: statusColor, size: 24),
                 const SizedBox(width: 12),
-                Text(
-                  'TODAY\'S ATTENDANCE',
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                    color: statusColor,
+                Expanded(
+                  child: Text(
+                    'TODAY\'S ATTENDANCE',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                      color: statusColor,
+                    ),
                   ),
                 ),
-                const Spacer(),
                 if (isWorking)
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
@@ -323,12 +325,14 @@ class DriverAttendanceWidgetState extends State<DriverAttendanceWidget> {
                     size: 28,
                   ),
                   const SizedBox(width: 8),
-                  Text(
-                    isWorking ? 'Present (Working)' : 'Present',
-                    style: TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
-                      color: statusColor,
+                  Flexible(
+                    child: Text(
+                      isWorking ? 'Present (Working)' : 'Present',
+                      style: TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
+                        color: statusColor,
+                      ),
                     ),
                   ),
                 ],
@@ -395,9 +399,11 @@ class DriverAttendanceWidgetState extends State<DriverAttendanceWidget> {
                     children: [
                       const Icon(Icons.warning_amber, color: Colors.orange, size: 20),
                       const SizedBox(width: 8),
-                      Text(
-                        'Late by ${attendance['lateByMinutes']} minutes',
-                        style: const TextStyle(color: Colors.orange, fontWeight: FontWeight.w600),
+                      Flexible(
+                        child: Text(
+                          'Late by ${attendance['lateByMinutes']} minutes',
+                          style: const TextStyle(color: Colors.orange, fontWeight: FontWeight.w600),
+                        ),
                       ),
                     ],
                   ),
@@ -444,12 +450,14 @@ class DriverAttendanceWidgetState extends State<DriverAttendanceWidget> {
               children: [
                 Icon(Icons.calendar_month, color: Colors.blue.shade700, size: 24),
                 const SizedBox(width: 12),
-                Text(
-                  'THIS MONTH (${_getMonthName(now.month)} ${now.year})',
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.blue.shade700,
+                Flexible(
+                  child: Text(
+                    'THIS MONTH (${_getMonthName(now.month)} ${now.year})',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.blue.shade700,
+                    ),
                   ),
                 ),
               ],
@@ -684,7 +692,13 @@ class DriverAttendanceWidgetState extends State<DriverAttendanceWidget> {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceAround,
               children: ['S', 'M', 'T', 'W', 'T', 'F', 'S']
-                .map((d) => SizedBox(
+                .map((d) => isPhone(context)
+                  ? Expanded(
+                      child: Center(
+                        child: Text(d, style: const TextStyle(fontWeight: FontWeight.bold)),
+                      ),
+                    )
+                  : SizedBox(
                   width: 40,
                   child: Center(
                     child: Text(d, style: const TextStyle(fontWeight: FontWeight.bold)),
@@ -702,6 +716,7 @@ class DriverAttendanceWidgetState extends State<DriverAttendanceWidget> {
             // Legend
             Wrap(
               spacing: 12,
+              runSpacing: 8,
               children: [
                 _buildLegend('Present', Colors.green),
                 _buildLegend('Late', Colors.orange),

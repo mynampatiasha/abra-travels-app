@@ -1924,8 +1924,10 @@ class _TripOperationScreenState extends State<TripOperationScreen> {
           body: _isLoading && _trips.isEmpty
               ? const Center(child: CircularProgressIndicator())
               : SingleChildScrollView(
-                  controller: _scrollController,
-                  padding: const EdgeInsets.all(24),
+                  scrollDirection: Axis.vertical,
+                  padding: EdgeInsets.all(
+                    MediaQuery.of(context).size.width < 600 ? 12.0 : 24.0,
+                  ),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -1937,6 +1939,7 @@ class _TripOperationScreenState extends State<TripOperationScreen> {
                         _buildEmptyState()
                       else
                         _buildTripsTable(),
+                      const SizedBox(height: 24),
                     ],
                   ),
                 ),

@@ -206,8 +206,11 @@ class _ClientFeedbackManagementState extends State<ClientFeedbackManagement>
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFFf8fafc),
-      body: Column(
-        children: [
+      body: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 1100),
+          child: Column(
+            children: [
           // Header Card
           _buildHeaderCard(),
           const SizedBox(height: 20),
@@ -313,6 +316,8 @@ class _ClientFeedbackManagementState extends State<ClientFeedbackManagement>
             ),
           ),
         ],
+      ),
+        ),
       ),
     );
   }
@@ -972,19 +977,34 @@ class _ClientFeedbackManagementState extends State<ClientFeedbackManagement>
   Widget _buildGridView(List<HrmFeedbackModel> feedbackList) {
     return Padding(
       padding: const EdgeInsets.all(20),
-      child: GridView.builder(
-        shrinkWrap: true,
-        physics: const NeverScrollableScrollPhysics(),
-        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-          crossAxisCount: 2,
-          crossAxisSpacing: 16,
-          mainAxisSpacing: 16,
-          childAspectRatio: 0.85,
-        ),
-        itemCount: feedbackList.length,
-        itemBuilder: (context, index) {
-          final feedback = feedbackList[index];
-          return _buildFeedbackCard(feedback);
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          int crossAxisCount = 2;
+          double childAspectRatio = 0.85;
+
+          if (constraints.maxWidth < 600) {
+            crossAxisCount = 1;
+            childAspectRatio = 1.8;
+          } else if (constraints.maxWidth > 900) {
+            crossAxisCount = 3;
+            childAspectRatio = 0.95;
+          }
+
+          return GridView.builder(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: crossAxisCount,
+              crossAxisSpacing: 16,
+              mainAxisSpacing: 16,
+              childAspectRatio: childAspectRatio,
+            ),
+            itemCount: feedbackList.length,
+            itemBuilder: (context, index) {
+              final feedback = feedbackList[index];
+              return _buildFeedbackCard(feedback);
+            },
+          );
         },
       ),
     );

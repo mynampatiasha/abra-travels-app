@@ -5,6 +5,7 @@
 
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:abra_fleet/core/widgets/responsive/responsive.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:intl/intl.dart';
 import 'package:abra_fleet/core/services/tms_service.dart';
@@ -330,7 +331,7 @@ class _RaiseTicketScreenState extends State<RaiseTicketScreen> with TickerProvid
         child: ScaleTransition(
           scale: _scaleAnimation,
           child: SingleChildScrollView(
-            padding: const EdgeInsets.all(20),
+            padding: EdgeInsets.all(isPhone(context) ? 16 : 20),
             child: Form(
               key: _formKey,
               child: Column(
@@ -380,7 +381,7 @@ class _RaiseTicketScreenState extends State<RaiseTicketScreen> with TickerProvid
   Widget _buildHeaderCard() {
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.all(24),
+      padding: EdgeInsets.all(isPhone(context) ? 16 : 24),
       decoration: BoxDecoration(
         gradient: LinearGradient(
           colors: [darkBlue, mediumBlue],
@@ -828,10 +829,13 @@ class _RaiseTicketScreenState extends State<RaiseTicketScreen> with TickerProvid
         builder: (context, setDialogState) {
           return Dialog(
             backgroundColor: Colors.white,
+            insetPadding: isPhone(context)
+                ? const EdgeInsets.symmetric(horizontal: 16, vertical: 24)
+                : const EdgeInsets.symmetric(horizontal: 40, vertical: 24),
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
             child: Container(
               constraints: const BoxConstraints(maxHeight: 600),
-              padding: const EdgeInsets.all(24),
+              padding: EdgeInsets.all(isPhone(context) ? 16 : 24),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [

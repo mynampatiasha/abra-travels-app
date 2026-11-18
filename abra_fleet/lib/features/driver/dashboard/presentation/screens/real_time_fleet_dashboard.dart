@@ -330,18 +330,23 @@ class _RealTimeFleetDashboardState extends State<RealTimeFleetDashboard>
   Widget _buildMainContent() {
     return RefreshIndicator(
       onRefresh: _refreshData,
-      child: ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
-          _buildDebugInfoCard(),
-          const SizedBox(height: 16),
-          _buildRouteOverviewCard(),
-          const SizedBox(height: 16),
-          _buildCustomersListCard(),
-          const SizedBox(height: 16),
-          _buildQuickActionsCard(),
-          const SizedBox(height: 80), // Space for FAB
-        ],
+      child: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 1000),
+          child: ListView(
+            padding: const EdgeInsets.all(16),
+            children: [
+              _buildDebugInfoCard(),
+              const SizedBox(height: 16),
+              _buildRouteOverviewCard(),
+              const SizedBox(height: 16),
+              _buildCustomersListCard(),
+              const SizedBox(height: 16),
+              _buildQuickActionsCard(),
+              const SizedBox(height: 80), // Space for FAB
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -1151,33 +1156,66 @@ class _RealTimeFleetDashboardState extends State<RealTimeFleetDashboard>
   }
 
   Widget _buildCustomerActionButtons(CustomerPickupInfo customer) {
-    return Row(
-      children: [
-        if (customer.status == CustomerStatus.pending) ...[
-          Expanded(
-            child: ElevatedButton.icon(
-              onPressed: () => _markCustomerPickedUp(customer),
-              icon: const Icon(Icons.person_add, size: 16),
-              label: const Text('Mark Picked Up'),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: kSuccessColor,
-                foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(vertical: 8),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final isNarrow = constraints.maxWidth < 340;
+        if (customer.status == CustomerStatus.pending) {
+          if (isNarrow) {
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                ElevatedButton.icon(
+                  onPressed: () => _markCustomerPickedUp(customer),
+                  icon: const Icon(Icons.person_add, size: 16),
+                  label: const Text('Mark Picked Up'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: kSuccessColor,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 8),
+                  ),
+                ),
+                const SizedBox(height: 6),
+                ElevatedButton(
+                  onPressed: () => _markCustomerNoShow(customer),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: kDangerColor,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
+                  ),
+                  child: const Text('No Show'),
+                ),
+              ],
+            );
+          }
+          return Row(
+            children: [
+              Expanded(
+                child: ElevatedButton.icon(
+                  onPressed: () => _markCustomerPickedUp(customer),
+                  icon: const Icon(Icons.person_add, size: 16),
+                  label: const Text('Mark Picked Up'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: kSuccessColor,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 8),
+                  ),
+                ),
               ),
-            ),
-          ),
-          const SizedBox(width: 8),
-          ElevatedButton(
-            onPressed: () => _markCustomerNoShow(customer),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: kDangerColor,
-              foregroundColor: Colors.white,
-              padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
-            ),
-            child: const Text('No Show'),
-          ),
-        ] else if (customer.status == CustomerStatus.pickedUp) ...[
-          Expanded(
+              const SizedBox(width: 8),
+              ElevatedButton(
+                onPressed: () => _markCustomerNoShow(customer),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: kDangerColor,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
+                ),
+                child: const Text('No Show'),
+              ),
+            ],
+          );
+        } else if (customer.status == CustomerStatus.pickedUp) {
+          return SizedBox(
+            width: double.infinity,
             child: ElevatedButton.icon(
               onPressed: () => _markCustomerDropped(customer),
               icon: const Icon(Icons.person_remove, size: 16),
@@ -1188,9 +1226,10 @@ class _RealTimeFleetDashboardState extends State<RealTimeFleetDashboard>
                 padding: const EdgeInsets.symmetric(vertical: 8),
               ),
             ),
-          ),
-        ],
-      ],
+          );
+        }
+        return const SizedBox.shrink();
+      },
     );
   }
 
@@ -1411,39 +1450,54 @@ class _RealTimeFleetDashboardState extends State<RealTimeFleetDashboard>
     return _buildCard(
       title: 'Quick Actions',
       icon: Icons.flash_on,
-      child: GridView.count(
-        crossAxisCount: 2,
-        shrinkWrap: true,
-        physics: const NeverScrollableScrollPhysics(),
-        crossAxisSpacing: 12,
-        mainAxisSpacing: 12,
-        childAspectRatio: 1.5,
-        children: [
-          _buildQuickActionButton(
-            'Broadcast Message',
-            Icons.broadcast_on_personal,
-            kInfoColor,
-            _showBroadcastDialog,
-          ),
-          _buildQuickActionButton(
-            'Route Optimization',
-            Icons.route,
-            kPrimaryColor,
-            _showRouteOptimizationDialog,
-          ),
-          _buildQuickActionButton(
-            'Emergency Alert',
-            Icons.emergency,
-            kDangerColor,
-            _showEmergencyDialog,
-          ),
-          _buildQuickActionButton(
-            'Customer Support',
-            Icons.headset_mic,
-            kSuccessColor,
-            _showSupportDialog,
-          ),
-        ],
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          int crossAxisCount = 2;
+          double aspectRatio = 1.5;
+          if (constraints.maxWidth >= 1000) {
+            crossAxisCount = 4;
+            aspectRatio = 2.0;
+          } else if (constraints.maxWidth >= 600) {
+            crossAxisCount = 3;
+            aspectRatio = 1.8;
+          } else if (constraints.maxWidth < 360) {
+            aspectRatio = 1.2;
+          }
+          return GridView.count(
+            crossAxisCount: crossAxisCount,
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            crossAxisSpacing: 12,
+            mainAxisSpacing: 12,
+            childAspectRatio: aspectRatio,
+            children: [
+              _buildQuickActionButton(
+                'Broadcast Message',
+                Icons.broadcast_on_personal,
+                kInfoColor,
+                _showBroadcastDialog,
+              ),
+              _buildQuickActionButton(
+                'Route Optimization',
+                Icons.route,
+                kPrimaryColor,
+                _showRouteOptimizationDialog,
+              ),
+              _buildQuickActionButton(
+                'Emergency Alert',
+                Icons.emergency,
+                kDangerColor,
+                _showEmergencyDialog,
+              ),
+              _buildQuickActionButton(
+                'Customer Support',
+                Icons.headset_mic,
+                kSuccessColor,
+                _showSupportDialog,
+              ),
+            ],
+          );
+        },
       ),
     );
   }

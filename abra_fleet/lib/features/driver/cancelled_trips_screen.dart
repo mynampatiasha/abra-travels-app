@@ -352,12 +352,15 @@ class _CancelledTripsScreenState extends State<CancelledTripsScreen> {
             );
           }
 
-          return ListView.builder(
-            padding: const EdgeInsets.all(16),
-            itemCount: cancelledTrips.length,
-            itemBuilder: (context, index) {
-              final trip = cancelledTrips[index];
-              return CancelledTripCard(
+          return Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 900),
+              child: ListView.builder(
+                padding: const EdgeInsets.all(16),
+                itemCount: cancelledTrips.length,
+                itemBuilder: (context, index) {
+                  final trip = cancelledTrips[index];
+                  return CancelledTripCard(
                 trip: trip,
                 onViewDetails: () => _showTripDetails(trip),
                 onAcknowledge: () => _acknowledgeCancellation(trip['id']),
@@ -367,6 +370,8 @@ class _CancelledTripsScreenState extends State<CancelledTripsScreen> {
                 getCancellationReasonColor: _getCancellationReasonColor,
               );
             },
+              ),
+            ),
           );
         },
       ),
@@ -570,8 +575,11 @@ class CancelledTripCard extends StatelessWidget {
               
               // Actions
               const SizedBox(height: 16),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.end,
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                alignment: WrapAlignment.end,
+                crossAxisAlignment: WrapCrossAlignment.center,
                 children: [
                   OutlinedButton.icon(
                     onPressed: onViewDetails,
@@ -581,7 +589,6 @@ class CancelledTripCard extends StatelessWidget {
                       foregroundColor: const Color(0xFF0D47A1),
                     ),
                   ),
-                  const SizedBox(width: 12),
                   ElevatedButton.icon(
                     onPressed: onAcknowledge,
                     icon: const Icon(Icons.check),

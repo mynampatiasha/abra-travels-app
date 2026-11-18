@@ -68,18 +68,21 @@ class _OrganizationShiftConfigScreenState
       ),
       body: isLoading
           ? const Center(child: CircularProgressIndicator())
-          : shifts.isEmpty
-              ? _buildEmptyState()
-              : ListView(
-                  padding: const EdgeInsets.all(16),
-                  children: [
-                    _buildHeaderCard(),
-                    const SizedBox(height: 20),
-                    ...shifts.map((shift) => _buildShiftCard(shift)).toList(),
-                    const SizedBox(height: 20),
-                    _buildAddShiftButton(),
-                  ],
-                ),
+          : SingleChildScrollView(
+              padding: const EdgeInsets.all(16),
+              child: shifts.isEmpty
+                  ? _buildEmptyState()
+                  : Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        _buildHeaderCard(),
+                        const SizedBox(height: 20),
+                        ...shifts.map((shift) => _buildShiftCard(shift)),
+                        const SizedBox(height: 20),
+                        _buildAddShiftButton(),
+                      ],
+                    ),
+            ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: _loadTemplates,
         icon: const Icon(Icons.auto_awesome),
@@ -323,7 +326,9 @@ class _OrganizationShiftConfigScreenState
                 ),
               ],
               const SizedBox(height: 12),
-              Row(
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
                 children: [
                   _buildInfoChip(
                     icon: Icons.schedule,
@@ -331,7 +336,6 @@ class _OrganizationShiftConfigScreenState
                     value: _formatDuration(shift.getShiftDuration()),
                     color: const Color(0xFF2563EB),
                   ),
-                  const SizedBox(width: 8),
                   if (shift.maxEmployees > 0)
                     _buildInfoChip(
                       icon: Icons.people,
@@ -339,7 +343,6 @@ class _OrganizationShiftConfigScreenState
                       value: shift.maxEmployees.toString(),
                       color: const Color(0xFF10B981),
                     ),
-                  const SizedBox(width: 8),
                   if (shift.isOvernight())
                     _buildInfoChip(
                       icon: Icons.nightlight_round,
@@ -433,48 +436,52 @@ class _OrganizationShiftConfigScreenState
 
   Widget _buildEmptyState() {
     return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(
-            Icons.access_time_outlined,
-            size: 100,
-            color: Colors.grey.shade300,
-          ),
-          const SizedBox(height: 24),
-          const Text(
-            'No Shifts Configured',
-            style: TextStyle(
-              fontSize: 20,
-              fontWeight: FontWeight.bold,
-              color: Color(0xFF1E293B),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 48, horizontal: 16),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              Icons.access_time_outlined,
+              size: 100,
+              color: Colors.grey.shade300,
             ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            'Add your first shift to get started',
-            style: TextStyle(
-              fontSize: 14,
-              color: Colors.grey.shade600,
+            const SizedBox(height: 24),
+            const Text(
+              'No Shifts Configured',
+              style: TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.bold,
+                color: Color(0xFF1E293B),
+              ),
             ),
-          ),
-          const SizedBox(height: 24),
-          ElevatedButton.icon(
-            onPressed: _showAddShiftDialog,
-            icon: const Icon(Icons.add),
-            label: const Text('Add Shift'),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFF2563EB),
-              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+            const SizedBox(height: 8),
+            Text(
+              'Add your first shift to get started',
+              style: TextStyle(
+                fontSize: 14,
+                color: Colors.grey.shade600,
+              ),
             ),
-          ),
-          const SizedBox(height: 16),
-          TextButton.icon(
-            onPressed: _loadTemplates,
-            icon: const Icon(Icons.auto_awesome),
-            label: const Text('Load Templates'),
-          ),
-        ],
+            const SizedBox(height: 24),
+            ElevatedButton.icon(
+              onPressed: _showAddShiftDialog,
+              icon: const Icon(Icons.add),
+              label: const Text('Add Shift'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF2563EB),
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+              ),
+            ),
+            const SizedBox(height: 16),
+            TextButton.icon(
+              onPressed: _loadTemplates,
+              icon: const Icon(Icons.auto_awesome),
+              label: const Text('Load Templates'),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -755,24 +762,37 @@ class _ShiftEditorDialogState extends State<ShiftEditorDialog> {
               ),
               const SizedBox(height: 16),
               
-              Row(
-                children: [
-                  Expanded(
-                    child: _buildTimeField(
-                      'Start Time',
-                      _startTime,
-                      (time) => setState(() => _startTime = time),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: _buildTimeField(
-                      'End Time',
-                      _endTime,
-                      (time) => setState(() => _endTime = time),
-                    ),
-                  ),
-                ],
+              LayoutBuilder(
+                builder: (context, constraints) {
+                  final startField = _buildTimeField(
+                    'Start Time',
+                    _startTime,
+                    (time) => setState(() => _startTime = time),
+                  );
+                  final endField = _buildTimeField(
+                    'End Time',
+                    _endTime,
+                    (time) => setState(() => _endTime = time),
+                  );
+
+                  if (constraints.maxWidth < 400) {
+                    return Column(
+                      children: [
+                        startField,
+                        const SizedBox(height: 12),
+                        endField,
+                      ],
+                    );
+                  }
+
+                  return Row(
+                    children: [
+                      Expanded(child: startField),
+                      const SizedBox(width: 12),
+                      Expanded(child: endField),
+                    ],
+                  );
+                },
               ),
               const SizedBox(height: 16),
               

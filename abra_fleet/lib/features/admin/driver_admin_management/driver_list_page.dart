@@ -698,15 +698,16 @@ class _DriverListPageState extends State<DriverListPage> with SingleTickerProvid
         .where((driver) => 
             driver['assignedVehicle'] != null && 
             driver['driverId'] != currentDriverId)
-        .map((driver) => driver['assignedVehicle']?['vehicleId'] ?? driver['assignedVehicle']?['_id'])
+        .expand((driver) => [driver['assignedVehicle']?['vehicleId'], driver['assignedVehicle']?['_id']])
         .where((id) => id != null)
+        .map((id) => id.toString())
         .toSet();
 
     final available = _vehicles.where((vehicle) {
       final vehicleId = vehicle['vehicleId'] ?? vehicle['_id'];
       final status = vehicle['status']?.toString().toUpperCase() ?? '';
       
-      final isNotAssigned = !assignedVehicleIds.contains(vehicleId);
+      final isNotAssigned = !assignedVehicleIds.contains(vehicle['vehicleId']?.toString()) && !assignedVehicleIds.contains(vehicle['_id']?.toString());
       final isActive = status == 'ACTIVE';
       
       return isNotAssigned && isActive;
@@ -915,7 +916,7 @@ class _DriverListPageState extends State<DriverListPage> with SingleTickerProvid
               child: const Text('Cancel', style: TextStyle(color: textSecondaryColor)),
             ),
             ElevatedButton(
-              onPressed: availableVehicles.isEmpty ? null : () => Navigator.pop(context, selectedVehicleId),
+              onPressed: (availableVehicles.isEmpty || selectedVehicleId == null) ? null : () => Navigator.pop(context, selectedVehicleId),
               style: ElevatedButton.styleFrom(
                 backgroundColor: primaryColor,
                 foregroundColor: Colors.white,
@@ -2901,10 +2902,12 @@ class _DriverListPageState extends State<DriverListPage> with SingleTickerProvid
             ? const EdgeInsets.all(14)
             : const EdgeInsets.all(20);
     
-    return Container(
-      color: lightBackgroundColor,
-      child: Column(
-        children: [
+    return SingleChildScrollView(
+      scrollDirection: Axis.vertical,
+      child: Container(
+        color: lightBackgroundColor,
+        child: Column(
+          children: [
           // SEARCH AND BASIC FILTERS
           Container(
             padding: responsivePadding,
@@ -3227,117 +3230,120 @@ class _DriverListPageState extends State<DriverListPage> with SingleTickerProvid
           ),
 
           // ✅ TABLE WITH SYNCHRONIZED HORIZONTAL SCROLLING (FIXED)
-          Expanded(
-            child: _isLoading
-                ? const Center(child: CircularProgressIndicator(color: primaryColor))
-                : _filteredDrivers.isEmpty
-                    ? Center(
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Icon(Icons.person_off, size: 64, color: Colors.grey.shade400),
-                            const SizedBox(height: 16),
-                            Text('No drivers found', style: TextStyle(fontSize: 18, color: Colors.grey.shade600)),
-                          ],
-                        ),
-                      )
-                    : Container(
-                        margin: cardMargin,
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(8),
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.black.withOpacity(0.05),
-                              blurRadius: 10,
-                              offset: const Offset(0, 2),
-                            )
-                          ],
-                        ),
-                        child: Column(
-                          children: [
-                            // ✅ HEADER AND BODY WITH SYNCHRONIZED HORIZONTAL SCROLL
-                            Expanded(
-                              child: Scrollbar(
-                                controller: _horizontalScrollController,
-                                thumbVisibility: true,
-                                child: Listener(
-                                  onPointerSignal: (pointerSignal) {
-                                    if (pointerSignal is PointerScrollEvent) {
-                                      final newOffset = _horizontalScrollController.offset + pointerSignal.scrollDelta.dx;
-                                      _horizontalScrollController.jumpTo(
-                                        newOffset.clamp(
-                                          0.0,
-                                          _horizontalScrollController.position.maxScrollExtent,
-                                        ),
-                                      );
-                                    }
-                                  },
-                                  child: LayoutBuilder(
-                                    builder: (context, constraints) {
-                                      final dynamicMinWidth = constraints.maxWidth > 1700 ? constraints.maxWidth : 1700.0;
-                                      return SingleChildScrollView(
-                                        controller: _horizontalScrollController,
-                                        scrollDirection: Axis.horizontal,
-                                        physics: const ClampingScrollPhysics(),
-                                        child: SizedBox(
-                                          width: dynamicMinWidth, // Dynamic minWidth for responsive layout
-                                      child: Column(
-                                        children: [
-                                          // HEADER ROW
-                                          Container(
-                                            padding: const EdgeInsets.all(16),
-                                            decoration: const BoxDecoration(
-                                              color: Color(0xFF34495E),
-                                              borderRadius: BorderRadius.only(
-                                                topLeft: Radius.circular(8),
-                                                topRight: Radius.circular(8),
-                                              ),
-                                            ),
-                                            child: Row(
-                                              children: [
-                                                SizedBox(width: 150, child: _buildHeaderCellFixed('DRIVER ID')),
-                                                SizedBox(width: 150, child: _buildHeaderCellFixed('NAME')),
-                                                SizedBox(width: 220, child: _buildHeaderCellFixed('EMAIL')),
-                                                SizedBox(width: 130, child: _buildHeaderCellFixed('PHONE')),
-                                                SizedBox(width: 120, child: _buildHeaderCellFixed('STATUS')),
-                                                SizedBox(width: 100, child: _buildHeaderCellFixed('LOGIN')),
-                                                SizedBox(width: 140, child: _buildHeaderCellFixed('LICENSE NO.')),
-                                                SizedBox(width: 130, child: _buildHeaderCellFixed('LICENSE EXPIRY')),
-                                                SizedBox(width: 200, child: _buildHeaderCellFixed('VEHICLE')),
-                                                // ❌ REMOVED: Trips and Rating columns
-                                                SizedBox(width: 70, child: _buildHeaderCellFixed('DOCS')),
-                                                SizedBox(width: 250, child: _buildHeaderCellFixed('ACTIONS')),
-                                              ],
-                                            ),
-                                          ),
-                                          
-                                          // DATA ROWS
-                                          Expanded(
-                                            child: ListView.separated(
-                                              itemCount: _pagedDrivers.length,
-                                              separatorBuilder: (context, index) => Divider(
-                                                height: 1,
-                                                color: Colors.grey[200],
-                                              ),
-                                              itemBuilder: (context, index) {
-                                                return _buildDriverRowFixed(_pagedDrivers[index]);
-                                              },
-                                            ),
-                                          ),
-                                        ],
+          if (_isLoading)
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 40),
+              child: Center(child: CircularProgressIndicator(color: primaryColor)),
+            )
+          else if (_filteredDrivers.isEmpty)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 40),
+              child: Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.person_off, size: 64, color: Colors.grey.shade400),
+                    const SizedBox(height: 16),
+                    Text('No drivers found', style: TextStyle(fontSize: 18, color: Colors.grey.shade600)),
+                  ],
+                ),
+              ),
+            )
+          else
+            Container(
+              margin: cardMargin,
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(8),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.05),
+                    blurRadius: 10,
+                    offset: const Offset(0, 2),
+                  )
+                ],
+              ),
+              child: Column(
+                children: [
+                  // ✅ HEADER AND BODY WITH SYNCHRONIZED HORIZONTAL SCROLL
+                  Scrollbar(
+                    controller: _horizontalScrollController,
+                    thumbVisibility: true,
+                    child: Listener(
+                      onPointerSignal: (pointerSignal) {
+                        if (pointerSignal is PointerScrollEvent) {
+                          final newOffset = _horizontalScrollController.offset + pointerSignal.scrollDelta.dx;
+                          _horizontalScrollController.jumpTo(
+                            newOffset.clamp(
+                              0.0,
+                              _horizontalScrollController.position.maxScrollExtent,
+                            ),
+                          );
+                        }
+                      },
+                      child: LayoutBuilder(
+                        builder: (context, constraints) {
+                          final dynamicMinWidth = constraints.maxWidth > 1700 ? constraints.maxWidth : 1700.0;
+                          return SingleChildScrollView(
+                            controller: _horizontalScrollController,
+                            scrollDirection: Axis.horizontal,
+                            physics: const ClampingScrollPhysics(),
+                            child: SizedBox(
+                              width: dynamicMinWidth, // Dynamic minWidth for responsive layout
+                              child: Column(
+                                children: [
+                                  // HEADER ROW
+                                  Container(
+                                    padding: const EdgeInsets.all(16),
+                                    decoration: const BoxDecoration(
+                                      color: Color(0xFF34495E),
+                                      borderRadius: BorderRadius.only(
+                                        topLeft: Radius.circular(8),
+                                        topRight: Radius.circular(8),
                                       ),
                                     ),
-                                  );
+                                    child: Row(
+                                      children: [
+                                        SizedBox(width: 150, child: _buildHeaderCellFixed('DRIVER ID')),
+                                        SizedBox(width: 150, child: _buildHeaderCellFixed('NAME')),
+                                        SizedBox(width: 220, child: _buildHeaderCellFixed('EMAIL')),
+                                        SizedBox(width: 130, child: _buildHeaderCellFixed('PHONE')),
+                                        SizedBox(width: 120, child: _buildHeaderCellFixed('STATUS')),
+                                        SizedBox(width: 100, child: _buildHeaderCellFixed('LOGIN')),
+                                        SizedBox(width: 140, child: _buildHeaderCellFixed('LICENSE NO.')),
+                                        SizedBox(width: 130, child: _buildHeaderCellFixed('LICENSE EXPIRY')),
+                                        SizedBox(width: 200, child: _buildHeaderCellFixed('VEHICLE')),
+                                        // ❌ REMOVED: Trips and Rating columns
+                                        SizedBox(width: 70, child: _buildHeaderCellFixed('DOCS')),
+                                        SizedBox(width: 250, child: _buildHeaderCellFixed('ACTIONS')),
+                                      ],
+                                    ),
+                                  ),
+                                  
+                                  // DATA ROWS
+                                  ListView.separated(
+                                    shrinkWrap: true,
+                                    physics: const NeverScrollableScrollPhysics(),
+                                    itemCount: _pagedDrivers.length,
+                                    separatorBuilder: (context, index) => Divider(
+                                      height: 1,
+                                      color: Colors.grey[200],
+                                    ),
+                                    itemBuilder: (context, index) {
+                                      return _buildDriverRowFixed(_pagedDrivers[index]);
                                     },
                                   ),
-                                ),
+                                ],
                               ),
                             ),
-                          ],
-                        ),
+                          );
+                        },
                       ),
-          ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
 
           // FOOTER
           Container(
@@ -3390,10 +3396,12 @@ class _DriverListPageState extends State<DriverListPage> with SingleTickerProvid
               ],
             ),
           ),
+          const SizedBox(height: 24),
         ],
       ),
-    );
-  }
+    ),
+  );
+}
 
   // ============================================================================
   // EXPORT/IMPORT METHODS (NEW - Moved from driver_admin_management_screen.dart)

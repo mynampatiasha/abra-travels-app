@@ -421,7 +421,7 @@ class _ClientDashboardAnalyticsState extends State<ClientDashboardAnalytics>
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           // Section header
-          Row(
+          if (isMobile) _buildPhoneSectionHeader() else Row(
             children: [
               Text('Analytics Overview',
                   style: _EDS.display(isMobile ? 20 : 22)),
@@ -483,6 +483,63 @@ class _ClientDashboardAnalyticsState extends State<ClientDashboardAnalytics>
           ),
         ],
       ),
+    );
+  }
+
+  /// Phone header: title + Live chip wrap, Refresh is a 44px icon button.
+  Widget _buildPhoneSectionHeader() {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        Expanded(
+          child: Wrap(
+            spacing: 10,
+            runSpacing: 6,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              Text('Analytics Overview', style: _EDS.display(20)),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                decoration: BoxDecoration(
+                    color: _EDS.greenLight, borderRadius: _EDS.radiusFull),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                        width: 7,
+                        height: 7,
+                        decoration: const BoxDecoration(
+                            color: _EDS.green, shape: BoxShape.circle)),
+                    const SizedBox(width: 6),
+                    Text('Live Data',
+                        style: _EDS.body(12,
+                            w: FontWeight.w600, color: _EDS.green)),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(width: 8),
+        Tooltip(
+          message: 'Refresh',
+          child: InkWell(
+            onTap: _fetchAll,
+            borderRadius: _EDS.radiusSm,
+            child: Container(
+              width: 44,
+              height: 44,
+              decoration: BoxDecoration(
+                color: _EDS.surface,
+                borderRadius: _EDS.radiusSm,
+                border: Border.all(color: _EDS.border),
+                boxShadow: _EDS.shadowSm,
+              ),
+              child: Icon(Icons.refresh_rounded, color: _EDS.textSec, size: 20),
+            ),
+          ),
+        ),
+      ],
     );
   }
 
@@ -678,9 +735,13 @@ class _ClientDashboardAnalyticsState extends State<ClientDashboardAnalytics>
                 ),
               ),
               const SizedBox(height: 16),
-              Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+              Wrap(
+                alignment: WrapAlignment.center,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                spacing: 20,
+                runSpacing: 8,
+                children: [
                 _legendDot(_EDS.purple, 'Active', active, count),
-                const SizedBox(width: 20),
                 _legendDot(_EDS.purpleLight, 'Inactive', inactive, count),
               ]),
             ]),

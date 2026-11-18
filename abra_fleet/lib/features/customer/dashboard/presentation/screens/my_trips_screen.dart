@@ -1,6 +1,7 @@
 // lib/features/customer/trips/presentation/screens/my_trips_screen.dart
 
 import 'package:flutter/material.dart';
+import 'package:abra_fleet/core/widgets/responsive/responsive.dart';
 import 'package:intl/intl.dart';
 import 'package:abra_fleet/features/customer/dashboard/data/repositories/roster_repository.dart';
 import 'package:abra_fleet/features/customer/dashboard/presentation/screens/roster_screen.dart'; // or wherever your CreateRosterScreen is located
@@ -123,6 +124,7 @@ class _MyTripsScreenState extends State<MyTripsScreen> {
       context: context,
       builder: (BuildContext context) {
         return AlertDialog(
+          scrollable: isPhone(context),
           title: const Text('Filter Trips'),
           content: Column(
             mainAxisSize: MainAxisSize.min,
@@ -170,6 +172,7 @@ class _MyTripsScreenState extends State<MyTripsScreen> {
       context: context,
       builder: (BuildContext context) {
         return AlertDialog(
+          scrollable: isPhone(context),
           title: const Text('Confirm Deletion'),
           content: const Text('Are you sure you want to cancel this roster request?'),
           actions: <Widget>[
@@ -284,7 +287,9 @@ class _MyTripsScreenState extends State<MyTripsScreen> {
       appBar: AppBar(
         title: Row(
           children: [
-            const Text('My Trips'),
+            const Flexible(
+              child: Text('My Trips', overflow: TextOverflow.ellipsis),
+            ),
             const SizedBox(width: 8),
             if (_selectedFilter != 'all')
               Container(
@@ -382,7 +387,9 @@ class _MyTripsScreenState extends State<MyTripsScreen> {
               // --- ERROR STATE ---
               if (snapshot.hasError) {
                 return Center(
-                  child: Column(
+                  child: Padding(
+                    padding: EdgeInsets.symmetric(horizontal: isPhone(context) ? 24 : 0),
+                    child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
                       const Icon(Icons.error_outline, color: Colors.red, size: 48),
@@ -405,6 +412,7 @@ class _MyTripsScreenState extends State<MyTripsScreen> {
                         onPressed: _fetchMyRosters,
                       ),
                     ],
+                  ),
                   ),
                 );
               }
@@ -879,6 +887,7 @@ Future<void> _loadDailyTrips() async {
     context: context,
     builder: (BuildContext context) {
       return AlertDialog(
+        scrollable: isPhone(context),
         title: const Text('Cancel Trip'),
         content: Column(
           mainAxisSize: MainAxisSize.min,
@@ -1224,7 +1233,10 @@ Future<void> _undoCancelTrip(Map<String, dynamic> trip) async {
                     ),
                     const SizedBox(width: 8),
                     // Status badge
-                    Container(
+                    ConstrainedBox(
+                      constraints: BoxConstraints(
+                          maxWidth: isPhone(context) ? 120 : double.infinity),
+                      child: Container(
                       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                       decoration: BoxDecoration(
                         color: _getStatusColor(status).withOpacity(0.1),
@@ -1232,11 +1244,14 @@ Future<void> _undoCancelTrip(Map<String, dynamic> trip) async {
                       ),
                       child: Text(
                         _titleCase(status),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                         style: TextStyle(
                           color: _getStatusColor(status),
                           fontWeight: FontWeight.bold,
                           fontSize: 12,
                         ),
+                      ),
                       ),
                     ),
                     const SizedBox(width: 8),
@@ -1413,12 +1428,14 @@ Future<void> _undoCancelTrip(Map<String, dynamic> trip) async {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(
-                'Daily Trips (${_dailyTrips.length})',
-                style: const TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.black87,
+              Flexible(
+                child: Text(
+                  'Daily Trips (${_dailyTrips.length})',
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.black87,
+                  ),
                 ),
               ),
               Container(
@@ -1430,7 +1447,7 @@ Future<void> _undoCancelTrip(Map<String, dynamic> trip) async {
                 child: Text(
                   'Tap to expand',
                   style: TextStyle(
-                    fontSize: 10,
+                    fontSize: _ps(10),
                     color: Colors.blue.shade700,
                     fontWeight: FontWeight.w500,
                   ),
@@ -1476,7 +1493,7 @@ Future<void> _undoCancelTrip(Map<String, dynamic> trip) async {
               child: Text(
                 'Tip: You can cancel individual future trips by tapping the ✕ button',
                 style: TextStyle(
-                  fontSize: 11,
+                  fontSize: _ps(11),
                   color: Colors.grey.shade600,
                   fontStyle: FontStyle.italic,
                 ),
@@ -1489,6 +1506,9 @@ Future<void> _undoCancelTrip(Map<String, dynamic> trip) async {
     );
   }
 
+  // Phone only: small captions are raised to 12 px; other widths unchanged.
+  double _ps(double base) => (isPhone(context) && base < 12) ? 12 : base;
+
   // Build status chip for trip summary
   Widget _buildStatusChip(String label, int count, Color color) {
     return Container(
@@ -1500,7 +1520,7 @@ Future<void> _undoCancelTrip(Map<String, dynamic> trip) async {
       child: Text(
         '$count $label',
         style: TextStyle(
-          fontSize: 10,
+          fontSize: _ps(10),
           color: color,
           fontWeight: FontWeight.bold,
         ),
@@ -1574,8 +1594,8 @@ Future<void> _undoCancelTrip(Map<String, dynamic> trip) async {
                             ),
                             child: Text(
                               '${distance.toStringAsFixed(1)} km',
-                              style: const TextStyle(
-                                fontSize: 11,
+                              style: TextStyle(
+                                fontSize: _ps(11),
                                 fontWeight: FontWeight.bold,
                                 color: Colors.blue,
                               ),
@@ -1591,12 +1611,15 @@ Future<void> _undoCancelTrip(Map<String, dynamic> trip) async {
                         children: [
                           Icon(Icons.directions_car, size: 12, color: Colors.grey.shade600),
                           const SizedBox(width: 4),
-                          Text(
-                            trip['vehicleNumber'],
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: isCancelled ? Colors.grey : Colors.grey.shade600,
-                              fontWeight: FontWeight.w500,
+                          Flexible(
+                            child: Text(
+                              trip['vehicleNumber'],
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: isCancelled ? Colors.grey : Colors.grey.shade600,
+                                fontWeight: FontWeight.w500,
+                              ),
                             ),
                           ),
                         ],
@@ -1607,6 +1630,29 @@ Future<void> _undoCancelTrip(Map<String, dynamic> trip) async {
                         children: [
                           Icon(Icons.person, size: 12, color: Colors.grey.shade600),
                           const SizedBox(width: 4),
+                          if (isPhone(context))
+                            Flexible(
+                              child: Text.rich(
+                                TextSpan(children: [
+                                  TextSpan(
+                                    text: '${trip['driverName']}',
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      color: isCancelled ? Colors.grey : Colors.grey.shade600,
+                                    ),
+                                  ),
+                                  if (trip['driverPhone'] != null && trip['driverPhone'] != 'N/A')
+                                    TextSpan(
+                                      text: ' • ${trip['driverPhone']}',
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        color: isCancelled ? Colors.grey : Colors.grey.shade500,
+                                      ),
+                                    ),
+                                ]),
+                              ),
+                            )
+                          else ...[
                           Text(
                             trip['driverName'],
                             style: TextStyle(
@@ -1622,6 +1668,7 @@ Future<void> _undoCancelTrip(Map<String, dynamic> trip) async {
                                 color: isCancelled ? Colors.grey : Colors.grey.shade500,
                               ),
                             ),
+                          ],
                         ],
                       ),
                     
@@ -1631,11 +1678,13 @@ Future<void> _undoCancelTrip(Map<String, dynamic> trip) async {
                         children: [
                           Icon(Icons.access_time, size: 12, color: Colors.grey.shade600),
                           const SizedBox(width: 4),
-                          Text(
-                            'Pickup: ${trip['pickupTime']}${trip['dropoffTime'] != null && trip['dropoffTime'].isNotEmpty ? ' • Drop: ${trip['dropoffTime']}' : ''}',
-                            style: TextStyle(
-                              fontSize: 11,
-                              color: isCancelled ? Colors.grey : Colors.grey.shade500,
+                          Flexible(
+                            child: Text(
+                              'Pickup: ${trip['pickupTime']}${trip['dropoffTime'] != null && trip['dropoffTime'].isNotEmpty ? ' • Drop: ${trip['dropoffTime']}' : ''}',
+                              style: TextStyle(
+                                fontSize: _ps(11),
+                                color: isCancelled ? Colors.grey : Colors.grey.shade500,
+                              ),
                             ),
                           ),
                         ],
@@ -1655,7 +1704,7 @@ Future<void> _undoCancelTrip(Map<String, dynamic> trip) async {
                   _titleCase(status),
                   style: TextStyle(
                     color: _getStatusColor(status),
-                    fontSize: 10,
+                    fontSize: _ps(10),
                     fontWeight: FontWeight.bold,
                   ),
                 ),
@@ -1668,9 +1717,9 @@ Future<void> _undoCancelTrip(Map<String, dynamic> trip) async {
                   icon: const Icon(Icons.close, color: Colors.red, size: 20),
                   onPressed: () => _cancelTrip(trip),
                   tooltip: 'Cancel this trip',
-                  constraints: const BoxConstraints(
-                    minWidth: 32,
-                    minHeight: 32,
+                  constraints: BoxConstraints(
+                    minWidth: isPhone(context) ? 44 : 32,
+                    minHeight: isPhone(context) ? 44 : 32,
                   ),
                 ),
               ],
@@ -1691,10 +1740,10 @@ Future<void> _undoCancelTrip(Map<String, dynamic> trip) async {
                 children: [
                   const Icon(Icons.cancel, size: 14, color: Colors.red),
                   const SizedBox(width: 6),
-                  const Text(
+                  Text(
                     'Trip Cancelled',
                     style: TextStyle(
-                      fontSize: 11,
+                      fontSize: _ps(11),
                       color: Colors.red,
                       fontWeight: FontWeight.bold,
                     ),
@@ -1705,13 +1754,13 @@ Future<void> _undoCancelTrip(Map<String, dynamic> trip) async {
                       onPressed: () => _undoCancelTrip(trip),
                       style: TextButton.styleFrom(
                         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                        minimumSize: Size.zero,
+                        minimumSize: isPhone(context) ? const Size(44, 44) : Size.zero,
                         tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                       ),
-                      child: const Text(
+                      child: Text(
                         'Undo',
                         style: TextStyle(
-                          fontSize: 10,
+                          fontSize: _ps(10),
                           color: Colors.blue,
                           fontWeight: FontWeight.bold,
                         ),
@@ -1732,16 +1781,18 @@ Future<void> _undoCancelTrip(Map<String, dynamic> trip) async {
                 color: Colors.purple.withOpacity(0.1),
                 borderRadius: BorderRadius.circular(6),
               ),
-              child: const Row(
+              child: Row(
                 children: [
-                  Icon(Icons.directions_car, size: 14, color: Colors.purple),
-                  SizedBox(width: 6),
-                  Text(
-                    'Trip in Progress - Track your ride',
-                    style: TextStyle(
-                      fontSize: 11,
-                      color: Colors.purple,
-                      fontWeight: FontWeight.bold,
+                  const Icon(Icons.directions_car, size: 14, color: Colors.purple),
+                  const SizedBox(width: 6),
+                  Flexible(
+                    child: Text(
+                      'Trip in Progress - Track your ride',
+                      style: TextStyle(
+                        fontSize: _ps(11),
+                        color: Colors.purple,
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
                   ),
                 ],

@@ -12,6 +12,7 @@
 
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
+import 'package:abra_fleet/core/widgets/responsive/responsive.dart';
 import 'package:provider/provider.dart';
 import 'package:abra_fleet/features/auth/domain/repositories/auth_repository.dart';
 
@@ -207,7 +208,9 @@ class _RegistrationScreenState extends State<RegistrationScreen>
                 child: Center(
                   child: SingleChildScrollView(
                     controller: _scrollController,
-                    padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 40),
+                    padding: isPhone(context)
+                        ? const EdgeInsets.symmetric(horizontal: 16, vertical: 24)
+                        : const EdgeInsets.symmetric(horizontal: 24, vertical: 40),
                     child: ConstrainedBox(
                       constraints: const BoxConstraints(maxWidth: 560),
                       child: Column(
@@ -215,11 +218,11 @@ class _RegistrationScreenState extends State<RegistrationScreen>
                         children: [
                           _buildLogoBadge(),
                           const SizedBox(height: 24),
-                          const Text(
+                          Text(
                             'Create Account',
                             textAlign: TextAlign.center,
                             style: TextStyle(
-                              fontSize: 36,
+                              fontSize: isPhone(context) ? 28 : 36,
                               fontWeight: FontWeight.w900,
                               color: Colors.white,
                               height: 1.1,
@@ -272,14 +275,16 @@ class _RegistrationScreenState extends State<RegistrationScreen>
           ),
         ),
         const SizedBox(width: 14),
-        const Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text('CORPORATE TRAVELS',
-                style: TextStyle(color: Colors.white, fontSize: 17,
-                    fontWeight: FontWeight.w800, letterSpacing: 2)),
-          ],
+        const Flexible(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text('CORPORATE TRAVELS',
+                  style: TextStyle(color: Colors.white, fontSize: 17,
+                      fontWeight: FontWeight.w800, letterSpacing: 2)),
+            ],
+          ),
         ),
       ],
     );
@@ -293,6 +298,50 @@ class _RegistrationScreenState extends State<RegistrationScreen>
       (Icons.badge_outlined,               '03', 'Role Assigned'),
       (Icons.directions_bus_rounded,       '04', 'Fleet Access'),
     ];
+
+    if (isPhone(context)) {
+      // Phone: four equal columns (no connector lines) so labels wrap, never overflow.
+      return Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          for (final s in steps)
+            Expanded(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    width: 38,
+                    height: 38,
+                    decoration: const BoxDecoration(
+                      shape: BoxShape.circle,
+                      gradient: const LinearGradient(
+                        colors: [_blueAccent, _blueLight],
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                      ),
+                    ),
+                    child: Icon(s.$1, color: Colors.white, size: 17),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(s.$2,
+                      style: const TextStyle(
+                          color: _blueAccent,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: 0.8)),
+                  const SizedBox(height: 3),
+                  Text(s.$3,
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w500)),
+                ],
+              ),
+            ),
+        ],
+      );
+    }
 
     return Row(
       mainAxisAlignment: MainAxisAlignment.center,
@@ -472,16 +521,19 @@ class _RegistrationScreenState extends State<RegistrationScreen>
           ),
           const SizedBox(height: 20),
 
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
+          Wrap(
+            alignment: WrapAlignment.center,
+            crossAxisAlignment: WrapCrossAlignment.center,
             children: [
               const Text('Already have an account?',
                   style: TextStyle(color: Colors.white, fontSize: 13)),
               TextButton(
                 onPressed: _isLoading ? null : () => Navigator.pop(context),
                 style: TextButton.styleFrom(
-                  padding: const EdgeInsets.only(left: 6),
-                  minimumSize: Size.zero,
+                  padding: isPhone(context)
+                      ? const EdgeInsets.fromLTRB(6, 12, 6, 12)
+                      : const EdgeInsets.only(left: 6),
+                  minimumSize: isPhone(context) ? const Size(44, 44) : Size.zero,
                   tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                 ),
                 child: const Text('Sign In',
@@ -504,7 +556,7 @@ class _RegistrationScreenState extends State<RegistrationScreen>
     required List<Widget> children,
   }) {
     return Container(
-      padding: const EdgeInsets.all(20),
+      padding: EdgeInsets.all(isPhone(context) ? 16 : 20),
       decoration: BoxDecoration(
         color: Colors.white.withOpacity(0.06),
         borderRadius: BorderRadius.circular(16),
@@ -523,10 +575,13 @@ class _RegistrationScreenState extends State<RegistrationScreen>
               child: Icon(icon, color: _blueAccent, size: 16),
             ),
             const SizedBox(width: 10),
-            Text(title,
-                style: const TextStyle(
-                    color: Colors.white, fontSize: 15,
-                    fontWeight: FontWeight.w700)),
+            Flexible(
+              child: Text(title,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                      color: Colors.white, fontSize: 15,
+                      fontWeight: FontWeight.w700)),
+            ),
             if (subtitle != null) ...[
               const SizedBox(width: 8),
               Container(
@@ -770,12 +825,14 @@ class _RegistrationScreenState extends State<RegistrationScreen>
                     child: Row(children: [
                       Icon(icon, size: 14, color: isSelected ? _blueAccent : Colors.white),
                       const SizedBox(width: 10),
-                      Text(item,
-                          style: TextStyle(
-                            color: isSelected ? _blueAccent : Colors.white,
-                            fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
-                            fontSize: 13,
-                          )),
+                      Expanded(
+                        child: Text(item,
+                            style: TextStyle(
+                              color: isSelected ? _blueAccent : Colors.white,
+                              fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
+                              fontSize: 13,
+                            )),
+                      ),
                     ]),
                   ),
                 );

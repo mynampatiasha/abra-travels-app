@@ -102,7 +102,10 @@ class CustomerTrackBookingScreen extends StatelessWidget {
     final colorScheme = Theme.of(context).colorScheme;
 
     return Scaffold(
-      body: Consumer<BookingProvider>(
+      body: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 900),
+          child: Consumer<BookingProvider>(
         builder: (context, bookingProvider, child) {
           final BookingEntity? activeBooking = bookingProvider.activeBooking;
 
@@ -211,55 +214,66 @@ class CustomerTrackBookingScreen extends StatelessWidget {
                           _buildDetailItem(context, Icons.phone_rounded, 'Driver Contact', activeBooking.driverPhoneNumber!),
 
                         const SizedBox(height: 20.0),
-                        Row(
-                          children: [
-                            if (activeBooking.driverPhoneNumber != null && (activeBooking.status == BookingStatus.confirmed || activeBooking.status == BookingStatus.driverArrived || activeBooking.status == BookingStatus.inProgress))
-                              Expanded(
-                                child: OutlinedButton.icon(
-                                  icon: const Icon(Icons.call_rounded),
-                                  label: const Text('Call Driver'),
-                                  onPressed: () { /* Placeholder */ },
-                                  style: OutlinedButton.styleFrom(
-                                    padding: const EdgeInsets.symmetric(vertical: 12),
-                                    side: BorderSide(color: colorScheme.primary),
-                                  ),
-                                ),
-                              ),
-                            if (activeBooking.driverPhoneNumber != null && (activeBooking.status == BookingStatus.confirmed || activeBooking.status == BookingStatus.driverArrived || activeBooking.status == BookingStatus.inProgress))
-                              const SizedBox(width: 12),
+                        LayoutBuilder(
+                          builder: (context, constraints) {
+                            final bool showCall = activeBooking.driverPhoneNumber != null && (activeBooking.status == BookingStatus.confirmed || activeBooking.status == BookingStatus.driverArrived || activeBooking.status == BookingStatus.inProgress);
+                            final bool showCancel = activeBooking.status == BookingStatus.pending || activeBooking.status == BookingStatus.confirmed;
+                            final int count = (showCall ? 1 : 0) + (showCancel ? 1 : 0);
+                            final bool isNarrow = constraints.maxWidth < 380 || count == 1;
+                            final double buttonWidth = isNarrow ? double.infinity : (constraints.maxWidth - 12) / 2;
 
-                            if (activeBooking.status == BookingStatus.pending || activeBooking.status == BookingStatus.confirmed)
-                              Expanded(
-                                child: ElevatedButton.icon(
-                                  icon: bookingProvider.state == DataState.loading && bookingProvider.activeBooking?.id == activeBooking.id
-                                      ? const SizedBox(width:18, height:18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                                      : const Icon(Icons.cancel_outlined),
-                                  label: Text(bookingProvider.state == DataState.loading  && bookingProvider.activeBooking?.id == activeBooking.id ? 'Cancelling...' : 'Cancel Ride'),
-                                  onPressed: (bookingProvider.state == DataState.loading && bookingProvider.activeBooking?.id == activeBooking.id)
-                                      ? null
-                                      : () async {
-                                    final bool? confirmCancel = await showDialog<bool>(
-                                        context: context,
-                                        builder: (ctx) => AlertDialog(
-                                          title: const Text('Cancel Booking?'),
-                                          content: const Text('Are you sure you want to cancel this booking?'),
-                                          actions: [
-                                            TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: const Text('No')),
-                                            TextButton(onPressed: () => Navigator.of(ctx).pop(true), child: const Text('Yes, Cancel'), style: TextButton.styleFrom(foregroundColor: Colors.red)),
-                                          ],
-                                        ));
-                                    if (confirmCancel == true) {
-                                      await bookingProvider.cancelActiveBooking();
-                                    }
-                                  },
-                                  style: ElevatedButton.styleFrom(
-                                    padding: const EdgeInsets.symmetric(vertical: 12),
-                                    backgroundColor: Colors.red.shade50,
-                                    foregroundColor: Colors.red.shade700,
+                            return Wrap(
+                              spacing: 12,
+                              runSpacing: 12,
+                              children: [
+                                if (showCall)
+                                  SizedBox(
+                                    width: buttonWidth,
+                                    child: OutlinedButton.icon(
+                                      icon: const Icon(Icons.call_rounded),
+                                      label: const Text('Call Driver'),
+                                      onPressed: () { /* Placeholder */ },
+                                      style: OutlinedButton.styleFrom(
+                                        padding: const EdgeInsets.symmetric(vertical: 12),
+                                        side: BorderSide(color: colorScheme.primary),
+                                      ),
+                                    ),
                                   ),
-                                ),
-                              ),
-                          ],
+                                if (showCancel)
+                                  SizedBox(
+                                    width: buttonWidth,
+                                    child: ElevatedButton.icon(
+                                      icon: bookingProvider.state == DataState.loading && bookingProvider.activeBooking?.id == activeBooking.id
+                                          ? const SizedBox(width:18, height:18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                                          : const Icon(Icons.cancel_outlined),
+                                      label: Text(bookingProvider.state == DataState.loading  && bookingProvider.activeBooking?.id == activeBooking.id ? 'Cancelling...' : 'Cancel Ride'),
+                                      onPressed: (bookingProvider.state == DataState.loading && bookingProvider.activeBooking?.id == activeBooking.id)
+                                          ? null
+                                          : () async {
+                                        final bool? confirmCancel = await showDialog<bool>(
+                                            context: context,
+                                            builder: (ctx) => AlertDialog(
+                                              title: const Text('Cancel Booking?'),
+                                              content: const Text('Are you sure you want to cancel this booking?'),
+                                              actions: [
+                                                TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: const Text('No')),
+                                                TextButton(onPressed: () => Navigator.of(ctx).pop(true), style: TextButton.styleFrom(foregroundColor: Colors.red), child: const Text('Yes, Cancel')),
+                                              ],
+                                            ));
+                                        if (confirmCancel == true) {
+                                          await bookingProvider.cancelActiveBooking();
+                                        }
+                                      },
+                                      style: ElevatedButton.styleFrom(
+                                        padding: const EdgeInsets.symmetric(vertical: 12),
+                                        backgroundColor: Colors.red.shade50,
+                                        foregroundColor: Colors.red.shade700,
+                                      ),
+                                    ),
+                                  ),
+                              ],
+                            );
+                          },
                         ),
                       ],
                     ),
@@ -269,6 +283,8 @@ class CustomerTrackBookingScreen extends StatelessWidget {
             ],
           );
         },
+      ),
+        ),
       ),
     );
   }

@@ -1078,7 +1078,7 @@ Future<void> _launchWhatsAppMessage(String cleanPhone, String message) async {
       setState(() => isLoading = true);
 
       final rawTripGroupId = currentTripApiData['tripGroupId'];
-      final tripGroupId = _cleanTripGroupId(rawTripGroupId);
+      final tripGroupId = rawTripGroupId.toString();
 
       String numericOnly =
           startOdometerController.text.replaceAll(RegExp(r'[^0-9]'), '');
@@ -1611,7 +1611,7 @@ Future<void> _launchWhatsAppMessage(String cleanPhone, String message) async {
       setState(() => isLoading = true);
 
       final rawTripGroupId = currentTripApiData['tripGroupId'];
-      final tripGroupId = _cleanTripGroupId(rawTripGroupId);
+      final tripGroupId = rawTripGroupId.toString();
 
       String numericOnly =
           endOdometerController.text.replaceAll(RegExp(r'[^0-9]'), '');
@@ -1640,7 +1640,7 @@ Future<void> _launchWhatsAppMessage(String cleanPhone, String message) async {
           currentTripApiData['startOdometer']?['reading'] ??
               int.tryParse(startOdometerController.text
                       .replaceAll(RegExp(r'[^0-9]'), '')) ??
-              0;
+              (distance is num && distance > 0 ? reading - distance.toInt() : 0);
 
       setState(() {
         trips[currentTripIndex]['trip'].status = TripStatus.completed;

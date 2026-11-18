@@ -20,6 +20,7 @@ import '../../../../core/utils/export_helper.dart';
 import '../../../../core/services/recurring_expense_service.dart';
 import '../app_top_bar.dart';
 import 'new_recurring_expense.dart';
+import 'package:abra_fleet/core/widgets/responsive/responsive.dart';
 
 class RecurringExpensesListPage extends StatefulWidget {
   const RecurringExpensesListPage({Key? key}) : super(key: key);
@@ -164,9 +165,13 @@ class _RecurringExpensesListPageState
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(16),
         ),
-        child: Container(
-          width: 800,
-          padding: const EdgeInsets.all(32),
+        insetPadding: isPhone(context)
+            ? const EdgeInsets.symmetric(horizontal: 16, vertical: 24)
+            : const EdgeInsets.symmetric(horizontal: 40, vertical: 24),
+        child: SingleChildScrollView(
+          child: Container(
+          width: phoneDialogWidth(context, 800),
+          padding: EdgeInsets.all(isPhone(context) ? 16 : 32),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -174,13 +179,16 @@ class _RecurringExpensesListPageState
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  const Text(
+                  _phoneExpanded(
+                    context,
+                    Text(
                     'Life cycle of a Recurring Expense',
                     style: TextStyle(
-                      fontSize: 24,
+                      fontSize: isPhone(context) ? 18 : 24,
                       fontWeight: FontWeight.bold,
-                      color: Color(0xFF2C3E50),
+                      color: const Color(0xFF2C3E50),
                     ),
+                  ),
                   ),
                   IconButton(
                     icon: const Icon(Icons.close),
@@ -260,12 +268,73 @@ class _RecurringExpensesListPageState
             ],
           ),
         ),
+        ),
       ),
     );
   }
 
+  /// Phone only: lets a title take the free width so it wraps instead of
+  /// overflowing. Elsewhere the widget is returned unchanged.
+  Widget _phoneExpanded(BuildContext context, Widget child) {
+    return isPhone(context) ? Expanded(child: child) : child;
+  }
+
   // Build Lifecycle Diagram
   Widget _buildLifecycleDiagram() {
+    if (isPhone(context)) {
+      // Phone: the same steps stacked top-to-bottom so nothing is cut off.
+      Widget down() => Padding(
+            padding: const EdgeInsets.symmetric(vertical: 6),
+            child: Icon(Icons.arrow_downward, color: Colors.grey[600], size: 20),
+          );
+      return Column(
+        children: [
+          _buildLifecycleStep(
+            icon: Icons.add_circle_outline,
+            label: 'CREATE RECURRING\nEXPENSE',
+            color: const Color(0xFF3498DB),
+          ),
+          down(),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Column(
+                children: [
+                  _buildLifecycleStep(
+                    icon: Icons.receipt_long,
+                    label: 'BILLABLE',
+                    color: const Color(0xFF27AE60),
+                    compact: true,
+                  ),
+                  down(),
+                  _buildLifecycleStep(
+                    icon: Icons.description,
+                    label: 'CONVERT TO\nINVOICE',
+                    color: const Color(0xFF3498DB),
+                    compact: true,
+                  ),
+                  down(),
+                  _buildLifecycleStep(
+                    icon: Icons.attach_money,
+                    label: 'GET\nREIMBURSED',
+                    color: const Color(0xFF27AE60),
+                    compact: true,
+                  ),
+                ],
+              ),
+              const SizedBox(width: 16),
+              _buildLifecycleStep(
+                icon: Icons.cancel_outlined,
+                label: 'NON-BILLABLE',
+                color: const Color(0xFFE74C3C),
+                compact: true,
+              ),
+            ],
+          ),
+        ],
+      );
+    }
     return SizedBox(
       height: 200,
       child: Row(
@@ -448,6 +517,9 @@ class _RecurringExpensesListPageState
       context: context,
       builder: (context) => StatefulBuilder(
         builder: (context, setDialogState) => AlertDialog(
+          insetPadding: isPhone(context)
+              ? const EdgeInsets.symmetric(horizontal: 16, vertical: 24)
+              : const EdgeInsets.symmetric(horizontal: 40, vertical: 24),
           title: Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
@@ -459,7 +531,7 @@ class _RecurringExpensesListPageState
             ],
           ),
           content: SizedBox(
-            width: 500,
+            width: phoneDialogWidth(context, 500),
             child: SingleChildScrollView(
               child: Column(
                 mainAxisSize: MainAxisSize.min,
@@ -995,9 +1067,12 @@ class _RecurringExpensesListPageState
       showDialog(
         context: context,
         builder: (context) => AlertDialog(
+          insetPadding: isPhone(context)
+              ? const EdgeInsets.symmetric(horizontal: 16, vertical: 24)
+              : const EdgeInsets.symmetric(horizontal: 40, vertical: 24),
           title: Text('Child Expenses - ${profile.profileName}'),
           content: SizedBox(
-            width: 600,
+            width: phoneDialogWidth(context, 600),
             height: 400,
             child: response.isEmpty
                 ? const Center(
@@ -1155,6 +1230,18 @@ class _RecurringExpensesListPageState
 
   @override
   Widget build(BuildContext context) {
+    if (isPhone(context)) {
+      return Scaffold(
+        appBar: AppTopBar(title: 'Recurring Expenses'),
+        backgroundColor: Colors.grey[50],
+        body: Column(
+          children: [
+            Expanded(child: _buildPhoneBody()),
+            if (!_isLoading && _recurringProfiles.isNotEmpty) _buildPagination(),
+          ],
+        ),
+      );
+    }
     return Scaffold(
       appBar: AppTopBar(title: 'Recurring Expenses'),
       backgroundColor: Colors.grey[50],
@@ -1179,173 +1266,214 @@ class _RecurringExpensesListPageState
 
   // Top Bar
   Widget _buildTopBar() {
+    final phone = isPhone(context);
+    final minHeight = phone ? const Size(0, 44) : null;
+
+    // Status Filter Dropdown
+    final statusDropdown = Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      decoration: BoxDecoration(
+        border: Border.all(color: Colors.grey[300]!),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: DropdownButton<String>(
+        value: _selectedStatus,
+        isExpanded: phone,
+        underline: const SizedBox(),
+        icon: const Icon(Icons.arrow_drop_down),
+        items: _statusFilters.map((status) {
+          return DropdownMenuItem(
+            value: status,
+            child: Text(
+              status == 'All' ? 'All Recurring Expenses' : status,
+              style: const TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          );
+        }).toList(),
+        onChanged: (value) {
+          if (value != null) _filterByStatus(value);
+        },
+      ),
+    );
+
+    // Search
+    final searchField = TextField(
+      controller: _searchController,
+      decoration: InputDecoration(
+        hintText: 'Search recurring expenses...',
+        prefixIcon: const Icon(Icons.search),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(8),
+        ),
+        contentPadding: const EdgeInsets.symmetric(vertical: 8),
+      ),
+      onChanged: (value) {
+        setState(() {
+          _searchQuery = value.toLowerCase();
+        });
+      },
+    );
+
+    // Filter Button
+    final filterButton = Stack(
+      children: [
+        IconButton(
+          icon: const Icon(Icons.filter_list, size: 24),
+          onPressed: _showFilterDialog,
+          tooltip: 'Filter',
+          style: IconButton.styleFrom(
+            backgroundColor: _hasActiveFilters
+                ? const Color(0xFF3498DB).withOpacity(0.2)
+                : Colors.grey[200],
+            padding: const EdgeInsets.all(12),
+          ),
+        ),
+        if (_hasActiveFilters)
+          Positioned(
+            right: 8,
+            top: 8,
+            child: Container(
+              width: 8,
+              height: 8,
+              decoration: const BoxDecoration(
+                color: Color(0xFF3498DB),
+                shape: BoxShape.circle,
+              ),
+            ),
+          ),
+      ],
+    );
+
+    // Clear Filters Button (only show if filters active)
+    final clearButton = _hasActiveFilters
+        ? TextButton.icon(
+            onPressed: _clearAllFilters,
+            icon: const Icon(Icons.clear, size: 18),
+            label: const Text('Clear'),
+            style: TextButton.styleFrom(
+              foregroundColor: Colors.red,
+              minimumSize: minHeight,
+            ),
+          )
+        : null;
+
+    // Refresh Button
+    final refreshButton = IconButton(
+      icon: const Icon(Icons.refresh, size: 24),
+      onPressed: _isLoading ? null : _refreshData,
+      tooltip: 'Refresh',
+      style: IconButton.styleFrom(
+        backgroundColor: Colors.grey[200],
+        padding: const EdgeInsets.all(12),
+      ),
+    );
+
+    // View Process Button
+    final processButton = OutlinedButton.icon(
+      onPressed: _showLifecycleDialog,
+      icon: const Icon(Icons.info_outline, size: 20),
+      label: const Text('View Process'),
+      style: OutlinedButton.styleFrom(
+        foregroundColor: const Color(0xFF3498DB),
+        side: const BorderSide(color: Color(0xFF3498DB)),
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+        minimumSize: minHeight,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(8),
+        ),
+      ),
+    );
+
+    // New Recurring Expense Button
+    final newButton = ElevatedButton.icon(
+      onPressed: _openNewRecurringExpense,
+      icon: const Icon(Icons.add, size: 20),
+      label: const Text('New Recurring Expense'),
+      style: ElevatedButton.styleFrom(
+        backgroundColor: const Color(0xFF3498DB),
+        foregroundColor: Colors.white,
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+        minimumSize: minHeight,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(8),
+        ),
+      ),
+    );
+
+    // Export to Excel Button
+    final exportButton = ElevatedButton.icon(
+      onPressed: _isLoading ? null : _exportToExcel,
+      icon: const Icon(Icons.file_download, size: 20),
+      label: const Text('Export Excel'),
+      style: ElevatedButton.styleFrom(
+        backgroundColor: const Color(0xFF27AE60),
+        foregroundColor: Colors.white,
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        minimumSize: minHeight,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(8),
+        ),
+      ),
+    );
+
+    if (phone) {
+      // Phone: status filter and search use the full width; the buttons
+      // wrap onto as many lines as they need (nothing is cut off).
+      return Container(
+        padding: const EdgeInsets.all(16),
+        color: Colors.white,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            statusDropdown,
+            const SizedBox(height: 12),
+            searchField,
+            const SizedBox(height: 12),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: [
+                filterButton,
+                if (clearButton != null) clearButton,
+                refreshButton,
+                processButton,
+                newButton,
+                exportButton,
+              ],
+            ),
+          ],
+        ),
+      );
+    }
+
     return Container(
       padding: const EdgeInsets.all(20),
       color: Colors.white,
       child: Row(
         children: [
           const SizedBox(width: 8),
-
-          // Status Filter Dropdown
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            decoration: BoxDecoration(
-              border: Border.all(color: Colors.grey[300]!),
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: DropdownButton<String>(
-              value: _selectedStatus,
-              underline: const SizedBox(),
-              icon: const Icon(Icons.arrow_drop_down),
-              items: _statusFilters.map((status) {
-                return DropdownMenuItem(
-                  value: status,
-                  child: Text(
-                    status == 'All' ? 'All Recurring Expenses' : status,
-                    style: const TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                );
-              }).toList(),
-              onChanged: (value) {
-                if (value != null) _filterByStatus(value);
-              },
-            ),
-          ),
-
+          statusDropdown,
           const Spacer(),
-
-          // Search
           SizedBox(
             width: 300,
-            child: TextField(
-              controller: _searchController,
-              decoration: InputDecoration(
-                hintText: 'Search recurring expenses...',
-                prefixIcon: const Icon(Icons.search),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                contentPadding: const EdgeInsets.symmetric(vertical: 8),
-              ),
-              onChanged: (value) {
-                setState(() {
-                  _searchQuery = value.toLowerCase();
-                });
-              },
-            ),
+            child: searchField,
           ),
-
           const SizedBox(width: 12),
-
-          // Filter Button
-          Stack(
-            children: [
-              IconButton(
-                icon: const Icon(Icons.filter_list, size: 24),
-                onPressed: _showFilterDialog,
-                tooltip: 'Filter',
-                style: IconButton.styleFrom(
-                  backgroundColor: _hasActiveFilters
-                      ? const Color(0xFF3498DB).withOpacity(0.2)
-                      : Colors.grey[200],
-                  padding: const EdgeInsets.all(12),
-                ),
-              ),
-              if (_hasActiveFilters)
-                Positioned(
-                  right: 8,
-                  top: 8,
-                  child: Container(
-                    width: 8,
-                    height: 8,
-                    decoration: const BoxDecoration(
-                      color: Color(0xFF3498DB),
-                      shape: BoxShape.circle,
-                    ),
-                  ),
-                ),
-            ],
-          ),
-
+          filterButton,
           const SizedBox(width: 8),
-
-          // Clear Filters Button (only show if filters active)
-          if (_hasActiveFilters)
-            TextButton.icon(
-              onPressed: _clearAllFilters,
-              icon: const Icon(Icons.clear, size: 18),
-              label: const Text('Clear'),
-              style: TextButton.styleFrom(
-                foregroundColor: Colors.red,
-              ),
-            ),
-
+          if (clearButton != null) clearButton,
           const SizedBox(width: 8),
-
-          // Refresh Button
-          IconButton(
-            icon: const Icon(Icons.refresh, size: 24),
-            onPressed: _isLoading ? null : _refreshData,
-            tooltip: 'Refresh',
-            style: IconButton.styleFrom(
-              backgroundColor: Colors.grey[200],
-              padding: const EdgeInsets.all(12),
-            ),
-          ),
-
+          refreshButton,
           const SizedBox(width: 16),
-
-          // View Process Button
-          OutlinedButton.icon(
-            onPressed: _showLifecycleDialog,
-            icon: const Icon(Icons.info_outline, size: 20),
-            label: const Text('View Process'),
-            style: OutlinedButton.styleFrom(
-              foregroundColor: const Color(0xFF3498DB),
-              side: const BorderSide(color: Color(0xFF3498DB)),
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(8),
-              ),
-            ),
-          ),
-
+          processButton,
           const SizedBox(width: 12),
-
-          // New Recurring Expense Button
-          ElevatedButton.icon(
-            onPressed: _openNewRecurringExpense,
-            icon: const Icon(Icons.add, size: 20),
-            label: const Text('New Recurring Expense'),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFF3498DB),
-              foregroundColor: Colors.white,
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(8),
-              ),
-            ),
-          ),
-
+          newButton,
           const SizedBox(width: 12),
-
-          // Export to Excel Button
-          ElevatedButton.icon(
-            onPressed: _isLoading ? null : _exportToExcel,
-            icon: const Icon(Icons.file_download, size: 20),
-            label: const Text('Export Excel'),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFF27AE60),
-              foregroundColor: Colors.white,
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(8),
-              ),
-            ),
-          ),
+          exportButton,
         ],
       ),
     );
@@ -1353,6 +1481,39 @@ class _RecurringExpensesListPageState
 
   // Stats Cards
   Widget _buildStatsCards() {
+    final phone = isPhone(context);
+    final cards = <List<Object>>[
+      ['Total Profiles', _stats!.totalProfiles.toString(), Icons.repeat, Colors.blue],
+      ['Active', _stats!.activeProfiles.toString(), Icons.check_circle, Colors.green],
+      ['Paused', _stats!.pausedProfiles.toString(), Icons.pause_circle, Colors.orange],
+      ['Stopped', _stats!.stoppedProfiles.toString(), Icons.stop_circle, Colors.red],
+      ['Total Generated', _stats!.totalExpensesGenerated.toString(), Icons.receipt, Colors.purple],
+      ['Total Amount', '₹${_stats!.totalAmountGenerated.toStringAsFixed(2)}', Icons.currency_rupee, Colors.teal],
+    ];
+    if (phone) {
+      // Phone: 2 cards per row.
+      final cardWidth = (MediaQuery.of(context).size.width - 32 - 12) / 2;
+      return Container(
+        padding: const EdgeInsets.all(16),
+        color: Colors.white,
+        child: Wrap(
+          spacing: 12,
+          runSpacing: 12,
+          children: cards
+              .map((c) => SizedBox(
+                    width: cardWidth,
+                    child: _buildStatCard(
+                      c[0] as String,
+                      c[1] as String,
+                      c[2] as IconData,
+                      c[3] as Color,
+                      phone: true,
+                    ),
+                  ))
+              .toList(),
+        ),
+      );
+    }
     return Container(
       padding: const EdgeInsets.all(20),
       color: Colors.white,
@@ -1405,10 +1566,10 @@ class _RecurringExpensesListPageState
   }
 
   Widget _buildStatCard(
-      String label, String value, IconData icon, Color color) {
-    return Expanded(
-      child: Container(
-        padding: const EdgeInsets.all(20),
+      String label, String value, IconData icon, Color color,
+      {bool phone = false}) {
+    final body = Container(
+        padding: EdgeInsets.all(phone ? 12 : 20),
         decoration: BoxDecoration(
           color: color.withOpacity(0.1),
           borderRadius: BorderRadius.circular(8),
@@ -1416,8 +1577,8 @@ class _RecurringExpensesListPageState
         ),
         child: Row(
           children: [
-            Icon(icon, size: 40, color: color),
-            const SizedBox(width: 16),
+            Icon(icon, size: phone ? 28 : 40, color: color),
+            SizedBox(width: phone ? 8 : 16),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -1425,11 +1586,21 @@ class _RecurringExpensesListPageState
                   Text(
                     label,
                     style: TextStyle(
-                      fontSize: 13,
+                      fontSize: phone ? 12 : 13,
                       color: Colors.grey[700],
                     ),
                   ),
                   const SizedBox(height: 4),
+                  if (phone)
+                    FitText(
+                      value,
+                      style: TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
+                        color: color,
+                      ),
+                    )
+                  else
                   Text(
                     value,
                     style: TextStyle(
@@ -1444,8 +1615,8 @@ class _RecurringExpensesListPageState
             ),
           ],
         ),
-      ),
-    );
+      );
+    return phone ? body : Expanded(child: body);
   }
 
   // Recurring Profiles Table
@@ -1660,7 +1831,16 @@ class _RecurringExpensesListPageState
             // Actions
             SizedBox(
               width: 60,
-              child: PopupMenuButton<String>(
+              child: _buildProfileActionsMenu(profile),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildProfileActionsMenu(RecurringExpense profile) {
+    return PopupMenuButton<String>(
                 icon: const Icon(Icons.more_vert, size: 20),
                 itemBuilder: (context) => [
                   const PopupMenuItem(
@@ -1750,9 +1930,182 @@ class _RecurringExpensesListPageState
                       break;
                   }
                 },
+              );
+  }
+
+  // ── Phone layout (phone only): everything scrolls together as cards ───────
+  Widget _buildPhoneBody() {
+    final Widget? stateWidget = _isLoading
+        ? const Center(child: CircularProgressIndicator())
+        : _errorMessage != null
+            ? _buildErrorState()
+            : _recurringProfiles.isEmpty
+                ? _buildEmptyState()
+                : null;
+    final filtered = _searchQuery.isEmpty
+        ? _recurringProfiles
+        : _recurringProfiles.where((profile) {
+            return profile.profileName.toLowerCase().contains(_searchQuery) ||
+                profile.vendorName.toLowerCase().contains(_searchQuery);
+          }).toList();
+    return CustomScrollView(
+      slivers: [
+        SliverToBoxAdapter(child: _buildTopBar()),
+        if (_stats != null) SliverToBoxAdapter(child: _buildStatsCards()),
+        if (stateWidget != null)
+          SliverFillRemaining(hasScrollBody: false, child: stateWidget)
+        else ...[
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(8, 8, 16, 0),
+              child: Row(
+                children: [
+                  Checkbox(value: _selectAll, onChanged: _toggleSelectAll),
+                  const Text('Select all', style: TextStyle(fontSize: 14)),
+                ],
               ),
             ),
-          ],
+          ),
+          SliverPadding(
+            padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
+            sliver: SliverList(
+              delegate: SliverChildBuilderDelegate(
+                (context, index) => _buildPhoneProfileCard(filtered[index]),
+                childCount: filtered.length,
+              ),
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+
+  Widget _buildPhoneProfileCard(RecurringExpense profile) {
+    final isSelected = _selectedProfiles.contains(profile.id);
+    final frequency = '${profile.repeatEvery} ${profile.repeatUnit}(s)';
+    final totalAmount = profile.amount + profile.tax;
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      decoration: BoxDecoration(
+        color: isSelected ? Colors.blue[50] : Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.grey[200]!),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.04),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(12),
+        onTap: () => _openEditRecurringExpense(profile.id),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(4, 8, 4, 8),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Checkbox(
+                    value: isSelected,
+                    onChanged: (value) => _toggleSelection(profile.id),
+                  ),
+                  Expanded(
+                    child: Padding(
+                      padding: const EdgeInsets.only(top: 12),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            profile.profileName,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              color: Color(0xFF3498DB),
+                              fontWeight: FontWeight.w600,
+                              fontSize: 15,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            profile.expenseCreationMode == 'auto_create'
+                                ? '🚀 Auto-Create'
+                                : '📝 Save as Draft',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: Colors.grey[600],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.only(top: 12),
+                    child: _buildStatusBadge(profile.status),
+                  ),
+                  _buildProfileActionsMenu(profile),
+                ],
+              ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(12, 0, 12, 0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      profile.vendorName,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(fontSize: 14),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      '$frequency · Next: ${DateFormat('dd MMM yyyy').format(profile.nextExpenseDate)}',
+                      style: TextStyle(fontSize: 13, color: Colors.grey[700]),
+                    ),
+                    const SizedBox(height: 4),
+                    Row(
+                      children: [
+                        InkWell(
+                          onTap: () => _viewChildExpenses(profile),
+                          child: ConstrainedBox(
+                            constraints: const BoxConstraints(minHeight: 44),
+                            child: Align(
+                              alignment: Alignment.centerLeft,
+                              widthFactor: 1,
+                              child: Text(
+                                'Generated: ${profile.totalExpensesGenerated}',
+                                style: const TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w600,
+                                  color: Color(0xFF3498DB),
+                                  decoration: TextDecoration.underline,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: FitText(
+                            '₹${totalAmount.toStringAsFixed(2)}',
+                            alignment: Alignment.centerRight,
+                            style: const TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -1808,18 +2161,12 @@ class _RecurringExpensesListPageState
 
   // Pagination
   Widget _buildPagination() {
-    return Container(
-      padding: const EdgeInsets.all(20),
-      color: Colors.white,
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Text(
-            'Showing ${(_currentPage - 1) * _itemsPerPage + 1} - ${(_currentPage * _itemsPerPage).clamp(0, _totalProfiles)} of $_totalProfiles',
-            style: TextStyle(color: Colors.grey[700]),
-          ),
-          Row(
-            children: [
+    final phone = isPhone(context);
+    final showingText = Text(
+      'Showing ${(_currentPage - 1) * _itemsPerPage + 1} - ${(_currentPage * _itemsPerPage).clamp(0, _totalProfiles)} of $_totalProfiles',
+      style: TextStyle(color: Colors.grey[700]),
+    );
+    final pagerChildren = <Widget>[
               IconButton(
                 icon: const Icon(Icons.chevron_left),
                 onPressed: _currentPage > 1
@@ -1845,7 +2192,7 @@ class _RecurringExpensesListPageState
                         _loadRecurringProfiles();
                       },
                       child: Container(
-                        padding: const EdgeInsets.all(8),
+                        padding: EdgeInsets.all(phone ? 12 : 8),
                         decoration: BoxDecoration(
                           color: _currentPage == pageNum
                               ? const Color(0xFF3498DB)
@@ -1879,10 +2226,35 @@ class _RecurringExpensesListPageState
                       }
                     : null,
               ),
-            ],
-          ),
-        ],
-      ),
+    ];
+    return Container(
+      padding: EdgeInsets.all(phone ? 12 : 20),
+      color: Colors.white,
+      child: phone
+          ? Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                showingText,
+                Align(
+                  alignment: Alignment.center,
+                  child: Wrap(
+                    alignment: WrapAlignment.center,
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    children: pagerChildren,
+                  ),
+                ),
+              ],
+            )
+          : Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                showingText,
+                Row(
+                  children: pagerChildren,
+                ),
+              ],
+            ),
     );
   }
 

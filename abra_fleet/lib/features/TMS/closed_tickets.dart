@@ -13,6 +13,7 @@
 // ============================================================================
 
 import 'package:flutter/material.dart';
+import 'package:abra_fleet/core/widgets/responsive/responsive.dart';
 import 'package:intl/intl.dart';
 import 'package:abra_fleet/core/services/tms_service.dart';
 import 'package:abra_fleet/core/utils/export_helper.dart';
@@ -366,6 +367,7 @@ class _ClosedTicketsScreenState extends State<ClosedTicketsScreen> {
                   _buildStatistics(),
                   _buildSingleRowFilters(),
                   _buildTicketsTable(),
+                  const SizedBox(height: 24),
                 ],
               ),
             ),
@@ -455,7 +457,7 @@ class _ClosedTicketsScreenState extends State<ClosedTicketsScreen> {
         }
 
         return Container(
-          margin: const EdgeInsets.all(16),
+          margin: const EdgeInsets.fromLTRB(16, 12, 16, 8),
           child: content,
         );
       },
@@ -470,45 +472,53 @@ class _ClosedTicketsScreenState extends State<ClosedTicketsScreen> {
     Color bgColor,
   ) {
     return Container(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(12),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withOpacity(0.05),
-            blurRadius: 10,
+            blurRadius: 6,
             offset: const Offset(0, 2),
           ),
         ],
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      child: Row(
         children: [
           Container(
-            padding: const EdgeInsets.all(12),
+            padding: const EdgeInsets.all(8),
             decoration: BoxDecoration(
               color: bgColor,
-              borderRadius: BorderRadius.circular(12),
+              borderRadius: BorderRadius.circular(10),
             ),
-            child: Icon(icon, color: iconColor, size: 28),
+            child: Icon(icon, color: iconColor, size: 20),
           ),
-          const SizedBox(height: 12),
-          Text(
-            count.toString(),
-            style: TextStyle(
-              fontSize: 28,
-              fontWeight: FontWeight.bold,
-              color: iconColor,
-            ),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            label,
-            style: TextStyle(
-              fontSize: 13,
-              fontWeight: FontWeight.w500,
-              color: Colors.grey[600],
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  count.toString(),
+                  style: TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                    color: iconColor,
+                  ),
+                ),
+                Text(
+                  label,
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w500,
+                    color: Colors.grey[600],
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
             ),
           ),
         ],
@@ -562,6 +572,7 @@ class _ClosedTicketsScreenState extends State<ClosedTicketsScreen> {
         final fromDateWidget = GestureDetector(
           onTap: () => _pickDate(true),
           child: Container(
+            constraints: isMobile ? const BoxConstraints(minHeight: 44) : null,
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
             decoration: BoxDecoration(
               color: _dateFrom != null ? const Color(0xFF1E3A8A).withOpacity(0.1) : const Color(0xFFF3F4F6),
@@ -600,6 +611,7 @@ class _ClosedTicketsScreenState extends State<ClosedTicketsScreen> {
         final toDateWidget = GestureDetector(
           onTap: () => _pickDate(false),
           child: Container(
+            constraints: isMobile ? const BoxConstraints(minHeight: 44) : null,
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
             decoration: BoxDecoration(
               color: _dateTo != null ? const Color(0xFF1E3A8A).withOpacity(0.1) : const Color(0xFFF3F4F6),
@@ -851,23 +863,13 @@ class _ClosedTicketsScreenState extends State<ClosedTicketsScreen> {
             ),
           ),
 
-          // Table Content with Horizontal & Vertical Scrolling + Cursor Support
-          Container(
-            constraints: BoxConstraints(
-              maxHeight: MediaQuery.of(context).size.height - 400,
-            ),
-            child: Scrollbar(
-              thumbVisibility: true,
-              trackVisibility: true,
-              child: SingleChildScrollView(
-                scrollDirection: Axis.vertical,
-                child: Scrollbar(
-                  thumbVisibility: true,
-                  trackVisibility: true,
-                  notificationPredicate: (notification) => notification.depth == 1,
-                  child: SingleChildScrollView(
-                    scrollDirection: Axis.horizontal,
-                    child: DataTable(
+          // Phone: one card per ticket (all columns + Reopen); wider: the table.
+          isPhone(context) ? _buildPhoneCards() : Scrollbar(
+            thumbVisibility: true,
+            trackVisibility: true,
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: DataTable(
                       columnSpacing: 32,
                       horizontalMargin: 24,
                       headingRowHeight: 60,
@@ -1227,11 +1229,203 @@ class _ClosedTicketsScreenState extends State<ClosedTicketsScreen> {
                 }).toList(),
                     ), // DataTable
                   ), // SingleChildScrollView (horizontal)
-                ), // Scrollbar (inner)
-              ), // SingleChildScrollView (vertical)
-            ), // Scrollbar (outer)
-          ), // Container
+                ), // Scrollbar
         ],
+      ),
+    );
+  }
+
+  Widget _phoneKv(String label, Widget value) => Padding(
+    padding: const EdgeInsets.only(top: 8),
+    child: Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SizedBox(
+          width: 92,
+          child: Text(
+            label,
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              color: Colors.grey[600],
+            ),
+          ),
+        ),
+        Expanded(child: Align(alignment: Alignment.centerLeft, child: value)),
+      ],
+    ),
+  );
+
+  Widget _phoneDateCell(DateTime? d, {Color? color, String empty = 'N/A'}) {
+    final c = color ?? const Color(0xFF1F2937);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          d != null ? DateFormat('MMM dd, yyyy').format(d) : empty,
+          style: TextStyle(
+            fontSize: 13,
+            fontWeight: FontWeight.w600,
+            color: d != null ? c : Colors.grey[500],
+          ),
+        ),
+        if (d != null)
+          Text(
+            DateFormat('hh:mm a').format(d),
+            style: TextStyle(fontSize: 12, color: color ?? Colors.grey[600]),
+          ),
+      ],
+    );
+  }
+
+  // Phone: card list of the closed tickets (same data as the table columns).
+  Widget _buildPhoneCards() {
+    return Padding(
+      padding: const EdgeInsets.all(12),
+      child: Column(
+        children: _filteredTickets.map((ticket) {
+          final assigned = ticket['assigned_to_name'];
+          return Container(
+            width: double.infinity,
+            margin: const EdgeInsets.only(bottom: 12),
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: const Color(0xFFE5E7EB)),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Flexible(
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 12, vertical: 6),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF1E3A8A),
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: Text(
+                          ticket['ticket_number'] ?? 'N/A',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.white,
+                          ),
+                        ),
+                      ),
+                    ),
+                    const Spacer(),
+                    _buildPriorityBadge(ticket['priority'] ?? 'Medium'),
+                  ],
+                ),
+                const SizedBox(height: 10),
+                Text(
+                  ticket['subject'] ?? 'No Subject',
+                  style: const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                    color: Color(0xFF1F2937),
+                  ),
+                  maxLines: 3,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                _phoneKv(
+                  'Created By',
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        ticket['creator_name'] ?? 'Unknown',
+                        style: const TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: Color(0xFF1F2937),
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      if (ticket['creator_email'] != null)
+                        Text(
+                          ticket['creator_email'],
+                          style: TextStyle(
+                              fontSize: 12, color: Colors.grey[600]),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                    ],
+                  ),
+                ),
+                _phoneKv(
+                  'Assigned To',
+                  Text(
+                    assigned ?? 'Unassigned',
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w500,
+                      color: assigned != null
+                          ? const Color(0xFF1F2937)
+                          : Colors.grey[500],
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                _phoneKv('Timeline', _buildTimelineBadge(ticket['timeline'])),
+                _phoneKv(
+                  'Created At',
+                  _phoneDateCell(ticket['created_at'] != null
+                      ? DateTime.parse(ticket['created_at'])
+                      : null),
+                ),
+                _phoneKv(
+                  'Deadline',
+                  _phoneDateCell(
+                    ticket['deadline'] != null
+                        ? DateTime.parse(ticket['deadline'])
+                        : null,
+                    empty: 'No deadline',
+                  ),
+                ),
+                _phoneKv(
+                  'Closed Date',
+                  _phoneDateCell(_getClosedDate(ticket),
+                      color: const Color(0xFF10B981)),
+                ),
+                const SizedBox(height: 14),
+                SizedBox(
+                  width: double.infinity,
+                  height: 46,
+                  child: ElevatedButton.icon(
+                    onPressed: () => _showReopenConfirmation(
+                      ticket['_id'].toString(),
+                      ticket['ticket_number'] ?? 'N/A',
+                    ),
+                    icon: const Icon(Icons.replay_rounded, size: 18),
+                    label: const Text(
+                      'Reopen',
+                      style:
+                          TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+                    ),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF1E3A8A),
+                      foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          );
+        }).toList(),
       ),
     );
   }

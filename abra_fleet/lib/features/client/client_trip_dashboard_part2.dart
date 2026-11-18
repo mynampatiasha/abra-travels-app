@@ -15,6 +15,7 @@ import 'package:intl/intl.dart';
 import 'package:abra_fleet/features/admin/admin_trip_details.dart';
 import 'client_trip_dashboard_part1.dart';
 import 'client_trip_details.dart'; 
+import 'package:abra_fleet/core/widgets/responsive/responsive.dart';
 
 // ============================================================================
 // ENHANCED TRIP TABLE SECTION
@@ -119,12 +120,8 @@ class _TripTableSectionEnhancedState extends State<TripTableSectionEnhanced> {
         ? 'All Trips'
         : widget.state.selectedStatus[0].toUpperCase() + widget.state.selectedStatus.substring(1);
 
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: [
-        Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Row(
-            children: [
+    final phoneHdr = isCompact(context);
+    final titleChildren = <Widget>[
               Text('$statusLabel Trips',
                   style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFF1A237E))),
               if (widget.state.clientOrgName != null) ...[
@@ -141,11 +138,23 @@ class _TripTableSectionEnhancedState extends State<TripTableSectionEnhanced> {
                   ),
                 ),
               ],
-            ],
-          ),
+    ];
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Flexible(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          if (phoneHdr)
+            Wrap(
+              spacing: 8,
+              runSpacing: 6,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: titleChildren.where((w) => w is! SizedBox).toList(),
+            )
+          else
+            Row(children: titleChildren),
           Text('${widget.state.totalCount} records found',
               style: TextStyle(fontSize: 12, color: Colors.grey.shade500)),
-        ]),
+        ])),
         if (widget.state.totalPages > 1)
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
@@ -244,6 +253,9 @@ class _TripTableSectionEnhancedState extends State<TripTableSectionEnhanced> {
       );
     }
 
+    // Phone / compact: card list instead of the ~2400 px wide DataTable.
+    if (isCompact(context)) return _buildPhoneTripList();
+
     return Container(
       decoration: BoxDecoration(
         color: Colors.white,
@@ -278,6 +290,163 @@ class _TripTableSectionEnhancedState extends State<TripTableSectionEnhanced> {
                   child: _buildDataTable(),
                 ),
               ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  // ─── Phone trip cards (width < 768) ───────────────────────────────────────
+  Widget _buildPhoneTripList() {
+    final sorted = _sortedTrips;
+    return Column(
+      children: sorted.map((trip) => _buildPhoneTripCard(trip)).toList(),
+    );
+  }
+
+  Widget _phoneInfoRow(IconData icon, String text) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 6),
+      child: Row(children: [
+        Icon(icon, size: 16, color: Colors.grey.shade600),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Text(text,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(fontSize: 13, color: Colors.grey.shade800)),
+        ),
+      ]),
+    );
+  }
+
+  Widget _phoneChip(String text, Color color) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      decoration: BoxDecoration(color: color.withOpacity(0.1), borderRadius: BorderRadius.circular(8)),
+      child: Text(text, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: color)),
+    );
+  }
+
+  Widget _buildPhoneTripCard(Map<String, dynamic> trip) {
+    final status = trip['status']?.toString() ?? 'assigned';
+    final progress = (trip['progress'] ?? 0).toDouble();
+    final isDelayed = trip['isDelayed'] == true;
+    Color statusColor = _getStatusColor(status);
+    if (isDelayed) statusColor = const Color(0xFFE53935);
+
+    final vehicleNo = trip['vehicleNumber']?.toString().isNotEmpty == true ? trip['vehicleNumber'].toString() : '—';
+    final vehicleName = trip['vehicleName']?.toString().isNotEmpty == true ? trip['vehicleName'].toString() : '';
+    final driver = trip['driverName']?.toString().isNotEmpty == true ? trip['driverName'].toString() : '—';
+    final phone = trip['driverPhone']?.toString().isNotEmpty == true ? trip['driverPhone'].toString() : '';
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(14),
+        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.07), blurRadius: 8, offset: const Offset(0, 3))],
+      ),
+      child: Material(
+        color: Colors.transparent,
+        borderRadius: BorderRadius.circular(14),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(14),
+          onTap: () {
+            final tripId = _extractTripId(trip['_id']);
+            if (tripId.isNotEmpty) {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => ClientTripDetails(tripId: tripId)),
+              );
+            }
+          },
+          child: Padding(
+            padding: const EdgeInsets.all(14),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(children: [
+                  Expanded(
+                    child: Text(trip['tripNumber']?.toString() ?? 'N/A',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Color(0xFF0D47A1))),
+                  ),
+                  const SizedBox(width: 8),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: statusColor.withOpacity(0.12),
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(color: statusColor.withOpacity(0.4)),
+                    ),
+                    child: Text(_getStatusText(status),
+                        style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: statusColor)),
+                  ),
+                ]),
+                const SizedBox(height: 4),
+                _phoneInfoRow(Icons.directions_car,
+                    vehicleName.isNotEmpty ? '$vehicleNo · $vehicleName' : vehicleNo),
+                _phoneInfoRow(Icons.person, phone.isNotEmpty ? '$driver · $phone' : driver),
+                _phoneInfoRow(Icons.event,
+                    '${_formatDate(trip['scheduledDate']?.toString())}  ·  ${trip['startTime'] ?? '—'} → ${trip['endTime'] ?? '—'}'),
+                const SizedBox(height: 10),
+                Row(children: [
+                  Text('${progress.toInt()}%',
+                      style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: statusColor)),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(4),
+                      child: LinearProgressIndicator(
+                        value: progress / 100,
+                        backgroundColor: Colors.grey.shade200,
+                        valueColor: AlwaysStoppedAnimation<Color>(statusColor),
+                        minHeight: 8,
+                      ),
+                    ),
+                  ),
+                  if (isDelayed) ...[
+                    const SizedBox(width: 8),
+                    const Icon(Icons.warning_amber, size: 16, color: Color(0xFFE53935)),
+                    const SizedBox(width: 2),
+                    const Text('Late', style: TextStyle(fontSize: 12, color: Color(0xFFE53935))),
+                  ],
+                ]),
+                const SizedBox(height: 10),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 6,
+                  children: [
+                    _phoneChip('${trip['customerCount'] ?? 0} customers', const Color(0xFF8E24AA)),
+                    _phoneChip('${trip['completedStops'] ?? 0}/${trip['totalStops'] ?? 0} stops', const Color(0xFF43A047)),
+                    if ((trip['cancelledStops'] ?? 0) > 0)
+                      _phoneChip('${trip['cancelledStops']} cancelled', const Color(0xFFE53935)),
+                    _phoneChip('${(trip['totalDistance'] ?? 0).toStringAsFixed(1)} km', const Color(0xFF1E88E5)),
+                  ],
+                ),
+                const SizedBox(height: 10),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: ElevatedButton(
+                    onPressed: () {
+                      final tripId = widget.state.extractTripId(trip['_id']);
+                      if (tripId.isEmpty) return;
+                      Navigator.push(context, MaterialPageRoute(builder: (_) => AdminTripDetails(tripId: tripId)));
+                    },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF0D47A1),
+                      foregroundColor: Colors.white,
+                      minimumSize: const Size(88, 44),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                      elevation: 0,
+                    ),
+                    child: const Text('View', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+                  ),
+                ),
+              ],
             ),
           ),
         ),
@@ -562,9 +731,8 @@ class _TripTableSectionEnhancedState extends State<TripTableSectionEnhanced> {
 
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 16),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
+      child: _pagerLayout(
+        [
           _pageBtn(Icons.first_page, currentPage > 1, () { s.setState(() => s.currentPage = 1); s.loadTripList(); }),
           const SizedBox(width: 4),
           _pageBtn(Icons.chevron_left, currentPage > 1, () { s.setState(() => s.currentPage--); s.loadTripList(); }),
@@ -600,6 +768,19 @@ class _TripTableSectionEnhancedState extends State<TripTableSectionEnhanced> {
         ],
       ),
     );
+  }
+
+  // Row on desktop (unchanged); wraps onto several lines on phones.
+  Widget _pagerLayout(List<Widget> children) {
+    if (isCompact(context)) {
+      return Wrap(
+        alignment: WrapAlignment.center,
+        crossAxisAlignment: WrapCrossAlignment.center,
+        runSpacing: 8,
+        children: children,
+      );
+    }
+    return Row(mainAxisAlignment: MainAxisAlignment.center, children: children);
   }
 
   Widget _pageBtn(IconData icon, bool enabled, VoidCallback onTap) {

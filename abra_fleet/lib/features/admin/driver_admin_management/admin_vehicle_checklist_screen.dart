@@ -176,7 +176,9 @@ class _AdminVehicleChecklistScreenState extends State<AdminVehicleChecklistScree
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : SingleChildScrollView(
-              padding: const EdgeInsets.all(24),
+              padding: EdgeInsets.all(
+                MediaQuery.of(context).size.width < 600 ? 12.0 : 24.0,
+              ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -200,6 +202,7 @@ class _AdminVehicleChecklistScreenState extends State<AdminVehicleChecklistScree
                   const SizedBox(height: 24),
                   
                   _buildChecklistDirectory(),
+                  const SizedBox(height: 24),
                 ],
               ),
             ),

@@ -24,6 +24,7 @@ import 'package:abra_fleet/core/utils/export_helper.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:universal_html/html.dart' as html;
 import 'client_trip_dashboard_part2.dart';
+import 'package:abra_fleet/core/widgets/responsive/responsive.dart';
 
 // ✅ Import the country/state/city filter widget
 import 'package:abra_fleet/features/admin/widgets/country_state_city_filter.dart';
@@ -385,6 +386,33 @@ class ClientTripDashboardState extends State<ClientTripDashboard> {
 
   // ✅ NEW: Export Buttons Row (PDF, Excel, WhatsApp) - Horizontal Layout
   Widget _buildExportButtonsRow() {
+    // Phone: buttons wrap onto extra lines instead of squeezing into one row.
+    if (isPhone(context)) {
+      return Wrap(
+        spacing: 8,
+        runSpacing: 8,
+        children: [
+          _buildExportButton(
+            icon: Icons.picture_as_pdf,
+            label: 'Generate PDF',
+            color: Colors.red,
+            onPressed: isGeneratingReport ? null : generatePDFReport,
+          ),
+          _buildExportButton(
+            icon: Icons.table_chart,
+            label: 'Generate Excel',
+            color: const Color(0xFF27AE60),
+            onPressed: isGeneratingReport ? null : generateExcelReport,
+          ),
+          _buildExportButton(
+            icon: Icons.chat,
+            label: 'WhatsApp',
+            color: const Color(0xFF25D366),
+            onPressed: _openWhatsAppShare,
+          ),
+        ],
+      );
+    }
     return Row(
       children: [
         // PDF Download Button
@@ -441,6 +469,7 @@ class ClientTripDashboardState extends State<ClientTripDashboard> {
         foregroundColor: Colors.white,
         elevation: 2,
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+        minimumSize: isPhone(context) ? const Size(0, 44) : null,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(8),
         ),
@@ -806,6 +835,34 @@ class ClientTripDashboardState extends State<ClientTripDashboard> {
     );
   }
 
+  // Search field (shared by the phone and desktop layouts).
+  Widget _buildSearchField() {
+    return TextField(
+        controller: searchController,
+        decoration: InputDecoration(
+          hintText: 'Search by vehicle, driver, trip number...',
+          hintStyle: TextStyle(color: Colors.grey.shade400, fontSize: 13),
+          prefixIcon: const Icon(Icons.search, size: 20),
+          suffixIcon: searchController.text.isNotEmpty
+              ? IconButton(
+                  icon: const Icon(Icons.clear, size: 18),
+                  onPressed: () { 
+                    searchController.clear(); 
+                    setState(() => currentPage = 1); 
+                    loadTripList(); 
+                  })
+              : null,
+          filled: true,
+          fillColor: Colors.grey.shade50,
+          contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide(color: Colors.grey.shade300)),
+          enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide(color: Colors.grey.shade300)),
+          focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: Color(0xFF0D47A1), width: 1.5)),
+        ),
+        onSubmitted: (_) { setState(() => currentPage = 1); loadTripList(); },
+    );
+  }
+
   // ✅ FILTER PANEL WITH COUNTRY/STATE/CITY FILTER + EXPORT BUTTONS
   Widget _buildFilterPanel() {
     return AnimatedContainer(
@@ -850,38 +907,21 @@ class ClientTripDashboardState extends State<ClientTripDashboard> {
           const SizedBox(height: 16),
 
           // ✅ ROW 2: Search + Export Buttons
+          // Phone: search on its own full-width line, export buttons below it.
+          if (isPhone(context)) ...[
+            _buildSearchField(),
+            const SizedBox(height: 12),
+            _buildExportButtonsRow(),
+          ] else
           Row(
             children: [
               // Search field
               Expanded(
                 flex: 3,
-                child: TextField(
-                  controller: searchController,
-                  decoration: InputDecoration(
-                    hintText: 'Search by vehicle, driver, trip number...',
-                    hintStyle: TextStyle(color: Colors.grey.shade400, fontSize: 13),
-                    prefixIcon: const Icon(Icons.search, size: 20),
-                    suffixIcon: searchController.text.isNotEmpty
-                        ? IconButton(
-                            icon: const Icon(Icons.clear, size: 18),
-                            onPressed: () { 
-                              searchController.clear(); 
-                              setState(() => currentPage = 1); 
-                              loadTripList(); 
-                            })
-                        : null,
-                    filled: true,
-                    fillColor: Colors.grey.shade50,
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide(color: Colors.grey.shade300)),
-                    enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide(color: Colors.grey.shade300)),
-                    focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: Color(0xFF0D47A1), width: 1.5)),
-                  ),
-                  onSubmitted: (_) { setState(() => currentPage = 1); loadTripList(); },
-                ),
+                child: _buildSearchField(),
               ),
               const SizedBox(width: 12),
-              
+
               // Export buttons (PDF, Excel, WhatsApp)
               Expanded(
                 flex: 4,
@@ -924,11 +964,13 @@ class ClientTripDashboardState extends State<ClientTripDashboard> {
         children: [
           Padding(
             padding: const EdgeInsets.only(bottom: 10),
-            child: Row(
-              children: [
+            child: (isPhone(context)
+                ? (List<Widget> c) => Wrap(spacing: 8, runSpacing: 6, crossAxisAlignment: WrapCrossAlignment.center, children: c)
+                : (List<Widget> c) => Row(children: c))(
+              [
                 const Text('Trip Overview', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFF1A237E))),
                 if (clientOrgName != null) ...[
-                  const SizedBox(width: 10),
+                  if (!isPhone(context)) const SizedBox(width: 10),
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
                     decoration: BoxDecoration(
@@ -945,7 +987,7 @@ class ClientTripDashboardState extends State<ClientTripDashboard> {
             ),
           ),
           LayoutBuilder(builder: (context, constraints) {
-            final crossAxisCount = constraints.maxWidth > 600 ? 5 : 3;
+            final crossAxisCount = isPhone(context) ? 2 : (constraints.maxWidth > 600 ? 5 : 3);
             return GridView.count(
               shrinkWrap: true,
               physics: const NeverScrollableScrollPhysics(),
@@ -997,12 +1039,18 @@ class ClientTripDashboardState extends State<ClientTripDashboard> {
           children: [
             Icon(icon, size: 28, color: isSelected ? Colors.white : color),
             const SizedBox(height: 6),
+            if (isPhone(context))
+              FitText('$count',
+                  alignment: Alignment.center,
+                  style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold,
+                      color: isSelected ? Colors.white : color))
+            else
             Text('$count',
                 style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold,
                     color: isSelected ? Colors.white : color)),
             const SizedBox(height: 2),
             Text(title,
-                style: TextStyle(fontSize: 11,
+                style: TextStyle(fontSize: isPhone(context) ? 12 : 11,
                     fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
                     color: isSelected ? Colors.white.withOpacity(0.9) : color.withOpacity(0.8)),
                 textAlign: TextAlign.center),
@@ -1016,7 +1064,15 @@ class ClientTripDashboardState extends State<ClientTripDashboard> {
   Widget _buildChartsRow() {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16),
-      child: Row(
+      child: isPhone(context)
+          ? Column(
+              children: [
+                _buildPieChartCard(),
+                const SizedBox(height: 12),
+                _buildBarChartCard(),
+              ],
+            )
+          : Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Expanded(flex: 5, child: _buildPieChartCard()),
@@ -1048,7 +1104,9 @@ class ClientTripDashboardState extends State<ClientTripDashboard> {
           const Text('Trip Distribution', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Color(0xFF1A237E))),
           const SizedBox(height: 12),
           SizedBox(
-            height: 160,
+            height: isPhone(context)
+                ? (MediaQuery.of(context).size.width * 0.5).clamp(160.0, 220.0)
+                : 160,
             child: total == 0
                 ? const Center(child: Text('No data', style: TextStyle(color: Colors.grey)))
                 : CustomPaint(
@@ -1088,7 +1146,7 @@ class ClientTripDashboardState extends State<ClientTripDashboard> {
     return Row(mainAxisSize: MainAxisSize.min, children: [
       Container(width: 10, height: 10, decoration: BoxDecoration(color: color, shape: BoxShape.circle)),
       const SizedBox(width: 4),
-      Text('$label ($count)', style: TextStyle(fontSize: 10, color: Colors.grey.shade700)),
+      Text('$label ($count)', style: TextStyle(fontSize: isPhone(context) ? 12 : 10, color: Colors.grey.shade700)),
     ]);
   }
 
@@ -1160,7 +1218,23 @@ class ClientTripDashboardState extends State<ClientTripDashboard> {
     // ... (copy from admin lines 802-850)
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16),
-      child: Row(
+      child: isPhone(context)
+          ? Column(
+              children: [
+                Row(children: [
+                  _buildStatCard(Icons.directions_car, 'Vehicles', summary['totalVehicles'] ?? 0, const Color(0xFF1E88E5)),
+                  const SizedBox(width: 10),
+                  _buildStatCard(Icons.person, 'Drivers', summary['totalDrivers'] ?? 0, const Color(0xFFFF6F00)),
+                ]),
+                const SizedBox(height: 10),
+                Row(children: [
+                  _buildStatCard(Icons.people, 'Customers', summary['totalCustomers'] ?? 0, const Color(0xFF8E24AA)),
+                  const SizedBox(width: 10),
+                  _buildStatCard(Icons.warning, 'Delayed', summary['delayed'] ?? 0, const Color(0xFFE53935)),
+                ]),
+              ],
+            )
+          : Row(
         children: [
           _buildStatCard(Icons.directions_car, 'Vehicles', summary['totalVehicles'] ?? 0, const Color(0xFF1E88E5)),
           const SizedBox(width: 10),
@@ -1189,8 +1263,13 @@ class ClientTripDashboardState extends State<ClientTripDashboard> {
         child: Column(children: [
           Icon(icon, color: color, size: 22),
           const SizedBox(height: 6),
+          if (isPhone(context))
+            FitText('$value',
+                alignment: Alignment.center,
+                style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: color))
+          else
           Text('$value', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: color)),
-          Text(label, style: TextStyle(fontSize: 10, color: color.withOpacity(0.8), fontWeight: FontWeight.w500), textAlign: TextAlign.center),
+          Text(label, style: TextStyle(fontSize: isPhone(context) ? 12 : 10, color: color.withOpacity(0.8), fontWeight: FontWeight.w500), textAlign: TextAlign.center),
         ]),
       ),
     );
@@ -1331,7 +1410,7 @@ class ClientTripDashboardState extends State<ClientTripDashboard> {
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(20), border: Border.all(color: Colors.blue.shade200)),
       child: Row(mainAxisSize: MainAxisSize.min, children: [
-        Text(label, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w500)),
+        Text(label, style: TextStyle(fontSize: isPhone(context) ? 12 : 11, fontWeight: FontWeight.w500)),
         const SizedBox(width: 4),
         GestureDetector(onTap: onRemove, child: Icon(Icons.close, size: 13, color: Colors.red.shade400)),
       ]),

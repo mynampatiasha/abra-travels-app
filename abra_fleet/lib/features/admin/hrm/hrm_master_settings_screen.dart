@@ -2249,48 +2249,48 @@ class _HRMMasterSettingsScreenState extends State<HRMMasterSettingsScreen> with 
           ],
         ),
       ),
-      body: Column(
-        children: [
-          // Search bar moved outside AppBar
-          Container(
-            color: const Color(0xFF334155),
-            padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
-            child: TextField(
-              onChanged: (value) {
-                setState(() {
-                  _searchQuery = value;
-                });
-              },
-              decoration: InputDecoration(
-                hintText: 'Search...',
-                prefixIcon: const Icon(Icons.search, color: Color(0xFF64748B)),
-                filled: true,
-                fillColor: Colors.white,
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(10),
-                  borderSide: BorderSide.none,
+      body: NestedScrollView(
+        headerSliverBuilder: (context, innerBoxIsScrolled) {
+          return [
+            SliverToBoxAdapter(
+              child: Container(
+                color: const Color(0xFF334155),
+                padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+                child: TextField(
+                  onChanged: (value) {
+                    setState(() {
+                      _searchQuery = value;
+                    });
+                  },
+                  decoration: InputDecoration(
+                    hintText: 'Search...',
+                    prefixIcon: const Icon(Icons.search, color: Color(0xFF64748B)),
+                    filled: true,
+                    fillColor: Colors.white,
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(10),
+                      borderSide: BorderSide.none,
+                    ),
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  ),
                 ),
-                contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
               ),
             ),
-          ),
-          // Content
-          Expanded(
-            child: _isLoading
-                ? const Center(child: CircularProgressIndicator(color: Color(0xFF334155)))
-                : TabBarView(
-                    controller: _tabController,
-                    children: [
-                      _buildDepartmentsTab(),
-                      _buildPositionsTab(),
-                      _buildLocationsTab(),
-                      _buildTimingsTab(),
-                      _buildCompaniesTab(),
-                      _buildLeaveHierarchyTab(),
-                    ],
-                  ),
-          ),
-        ],
+          ];
+        },
+        body: _isLoading
+            ? const Center(child: CircularProgressIndicator(color: Color(0xFF334155)))
+            : TabBarView(
+                controller: _tabController,
+                children: [
+                  _buildDepartmentsTab(),
+                  _buildPositionsTab(),
+                  _buildLocationsTab(),
+                  _buildTimingsTab(),
+                  _buildCompaniesTab(),
+                  _buildLeaveHierarchyTab(),
+                ],
+              ),
       ),
       floatingActionButton: _tabController.index != 5
           ? FloatingActionButton.extended(

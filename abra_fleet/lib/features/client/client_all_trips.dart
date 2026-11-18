@@ -10,6 +10,7 @@ import 'package:abra_fleet/core/utils/export_helper.dart';
 import 'package:intl/intl.dart';
 import 'package:country_state_city/country_state_city.dart' as csc;
 import 'start_client_trip.dart';
+import 'package:abra_fleet/core/widgets/responsive/responsive.dart';
 
 class ClientAllTripsPage extends StatefulWidget {
   const ClientAllTripsPage({Key? key}) : super(key: key);
@@ -646,7 +647,7 @@ class _ClientAllTripsPageState extends State<ClientAllTripsPage> {
   }
 
   Widget _buildBody() {
-    return Column(children: [
+    final headerWidgets = <Widget>[
       // ── NEW: Row 1 — Location & Date filters ──────────────────────────────
       _ClientCscFilterRow(
         fromDate: _fromDate,
@@ -671,6 +672,11 @@ class _ClientAllTripsPageState extends State<ClientAllTripsPage> {
       _buildRow2(),
       // ── Existing stats cards ──────────────────────────────────────────────
       _buildStatsCards(),
+    ];
+    // Phone: one scrolling page (filters, summary, then trip cards).
+    if (isPhone(context)) return _buildPhoneBody(headerWidgets);
+    return Column(children: [
+      ...headerWidgets,
       Expanded(
         child: _filteredTrips.isEmpty
             ? _buildEmptyState()
@@ -679,8 +685,382 @@ class _ClientAllTripsPageState extends State<ClientAllTripsPage> {
     ]);
   }
 
+  /// Phone-only page: everything scrolls together, trips are cards.
+  Widget _buildPhoneBody(List<Widget> header) {
+    return ListView(
+      padding: EdgeInsets.zero,
+      children: [
+        ...header,
+        if (_filteredTrips.isEmpty)
+          SizedBox(height: 360, child: _buildEmptyState())
+        else
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 12, 12, 16),
+            child: Column(
+              children: [
+                for (final trip in _filteredTrips) _buildPhoneTripCard(trip),
+              ],
+            ),
+          ),
+      ],
+    );
+  }
+
+  Widget _phoneIconAction({
+    required String tooltip,
+    required IconData icon,
+    required Color iconColor,
+    required Color bg,
+    required Color border,
+    required VoidCallback onTap,
+  }) {
+    return Tooltip(
+      message: tooltip,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(8),
+        child: Container(
+          width: 44,
+          height: 44,
+          decoration: BoxDecoration(
+            color: bg,
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: border),
+          ),
+          child: Icon(icon, size: 24, color: iconColor),
+        ),
+      ),
+    );
+  }
+
+  /// Phone-only: a card per trip (same tap + same row actions as the table).
+  Widget _buildPhoneTripCard(Map<String, dynamic> trip) {
+    final clientLabel = _getClientStatusLabel(trip);
+    final clientColor = _getClientStatusColor(trip);
+    final adminConfirmed = trip['adminConfirmed'] == true;
+    final tripStatus = trip['status']?.toString().toLowerCase() ?? '';
+    final showDriver = adminConfirmed ||
+        tripStatus == 'started' ||
+        tripStatus == 'in_progress' ||
+        tripStatus == 'completed';
+    final hasDriverPhone = (trip['driverPhone']?.toString() ?? '').isNotEmpty;
+    final showShareButton = tripStatus == 'started' ||
+        tripStatus == 'in_progress' ||
+        tripStatus == 'in progress';
+    final driverText = showDriver ? (trip['driverName'] ?? '—').toString() : '—';
+    final vehicleText =
+        showDriver ? (trip['vehicleNumber'] ?? '—').toString() : '—';
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        boxShadow: [
+          BoxShadow(
+              color: Colors.black.withOpacity(0.06),
+              blurRadius: 8,
+              offset: const Offset(0, 2)),
+        ],
+      ),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(12),
+        onTap: () => _showTripDetails(trip),
+        child: Padding(
+          padding: const EdgeInsets.all(12),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: Text(
+                      (trip['tripNumber'] ?? 'N/A').toString(),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w700,
+                          color: Color(0xFF1A237E)),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: clientColor.withOpacity(0.12),
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(
+                          color: clientColor.withOpacity(0.4), width: 1.5),
+                    ),
+                    child: Text(clientLabel,
+                        style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.bold,
+                            color: Color.lerp(clientColor, Colors.black, 0.2)!)),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              Row(children: [
+                Icon(Icons.schedule, size: 16, color: Colors.grey.shade600),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Text(
+                    _formatDateTime(trip['scheduledPickupTime'])
+                        .replaceAll('\n', ', '),
+                    style: const TextStyle(fontSize: 13, color: Color(0xFF212121)),
+                  ),
+                ),
+                if (trip['distance'] != null)
+                  Text(
+                    '${(trip['distance'] as num).toStringAsFixed(1)} km',
+                    style: const TextStyle(
+                        fontSize: 13, fontWeight: FontWeight.w600),
+                  ),
+              ]),
+              const SizedBox(height: 8),
+              Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                const Icon(Icons.trip_origin, size: 16, color: Colors.green),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Text(
+                    (trip['pickupLocation']?['address'] ?? 'N/A').toString(),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontSize: 13, color: Color(0xFF212121)),
+                  ),
+                ),
+              ]),
+              const SizedBox(height: 6),
+              Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                const Icon(Icons.location_on, size: 16, color: Colors.red),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Text(
+                    (trip['dropLocation']?['address'] ?? 'N/A').toString(),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontSize: 13, color: Color(0xFF212121)),
+                  ),
+                ),
+              ]),
+              const SizedBox(height: 8),
+              Row(children: [
+                Icon(Icons.person, size: 16, color: Colors.grey.shade600),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Text(
+                    driverText,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                        fontSize: 13,
+                        color: showDriver && trip['driverName'] != null
+                            ? Colors.green.shade700
+                            : Colors.grey.shade500),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Icon(Icons.directions_car, size: 16, color: Colors.grey.shade600),
+                const SizedBox(width: 6),
+                Flexible(
+                  child: Text(
+                    vehicleText,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                        fontSize: 13,
+                        color: showDriver && trip['vehicleNumber'] != null
+                            ? const Color(0xFF212121)
+                            : Colors.grey.shade500),
+                  ),
+                ),
+              ]),
+              const SizedBox(height: 4),
+              Text(
+                'Created ${_formatDateShort(trip['createdAt'])}',
+                style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+              ),
+              const SizedBox(height: 8),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  _phoneIconAction(
+                    tooltip: 'View Details',
+                    icon: Icons.info_outline,
+                    iconColor: Colors.blue.shade700,
+                    bg: Colors.blue.shade50,
+                    border: Colors.blue.shade200,
+                    onTap: () => _showTripDetails(trip),
+                  ),
+                  const SizedBox(width: 8),
+                  _phoneIconAction(
+                    tooltip: showDriver && hasDriverPhone
+                        ? 'WhatsApp Driver'
+                        : 'Available after confirmation',
+                    icon: Icons.chat,
+                    iconColor: showDriver && hasDriverPhone
+                        ? const Color(0xFF25D366)
+                        : Colors.grey.shade400,
+                    bg: showDriver && hasDriverPhone
+                        ? const Color(0xFF25D366).withOpacity(0.1)
+                        : Colors.grey.shade100,
+                    border: showDriver && hasDriverPhone
+                        ? const Color(0xFF25D366).withOpacity(0.4)
+                        : Colors.grey.shade300,
+                    onTap: () => _openWhatsAppDriver(trip),
+                  ),
+                  if (showShareButton) ...[
+                    const SizedBox(width: 8),
+                    _phoneIconAction(
+                      tooltip: 'Share Live Location',
+                      icon: Icons.share_location,
+                      iconColor: const Color(0xFF25D366),
+                      bg: const Color(0xFF25D366).withOpacity(0.1),
+                      border: const Color(0xFF25D366).withOpacity(0.4),
+                      onTap: () => _shareWhatsAppLiveLocation(trip),
+                    ),
+                  ],
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   // ── NEW: Row 2 ────────────────────────────────────────────────────────────
+  /// Phone-only: actions, then full-width search, then wrapping status chips.
+  Widget _buildPhoneRow2() {
+    return Container(
+      color: Colors.white,
+      padding: const EdgeInsets.fromLTRB(12, 8, 12, 10),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(children: [
+            Expanded(
+              child: ElevatedButton.icon(
+                onPressed: () async {
+                  final result = await Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                        builder: (context) => const StartClientTripPage()),
+                  );
+                  if (result == true) _loadTrips();
+                },
+                icon: const Icon(Icons.add, size: 18),
+                label: const Text('New Trip',
+                    style:
+                        TextStyle(fontSize: 13, fontWeight: FontWeight.w700)),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF1A237E),
+                  foregroundColor: Colors.white,
+                  minimumSize: const Size(0, 44),
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8)),
+                ),
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: ElevatedButton.icon(
+                onPressed: _isLoading ? null : _exportToExcel,
+                icon: const Icon(Icons.file_download, size: 18),
+                label: const Text('Export Excel',
+                    style:
+                        TextStyle(fontSize: 13, fontWeight: FontWeight.w700)),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF27AE60),
+                  foregroundColor: Colors.white,
+                  minimumSize: const Size(0, 44),
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8)),
+                ),
+              ),
+            ),
+          ]),
+          const SizedBox(height: 10),
+          SizedBox(
+            height: 44,
+            child: TextField(
+              controller: _searchController,
+              style: const TextStyle(fontSize: 14),
+              decoration: InputDecoration(
+                hintText: 'Search trips…',
+                hintStyle: TextStyle(fontSize: 14, color: Colors.grey.shade500),
+                prefixIcon: const Icon(Icons.search, size: 20),
+                suffixIcon: _searchQuery.isNotEmpty
+                    ? IconButton(
+                        icon: const Icon(Icons.clear, size: 18),
+                        onPressed: () {
+                          _searchController.clear();
+                          setState(() => _searchQuery = '');
+                          _applyFilter();
+                        })
+                    : null,
+                contentPadding:
+                    const EdgeInsets.symmetric(vertical: 0, horizontal: 12),
+                border:
+                    OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                filled: true,
+                fillColor: Colors.grey.shade50,
+              ),
+              onChanged: (v) {
+                setState(() => _searchQuery = v.toLowerCase());
+                _applyFilter();
+              },
+            ),
+          ),
+          const SizedBox(height: 10),
+          Wrap(
+            spacing: 8,
+            runSpacing: 4,
+            children: [
+              for (final filter in _filterOptions)
+                FilterChip(
+                  label: Text(filter,
+                      style: TextStyle(
+                          fontWeight: FontWeight.w600,
+                          fontSize: 13,
+                          color: _selectedFilter == filter
+                              ? Colors.white
+                              : const Color(0xFF424242))),
+                  selected: _selectedFilter == filter,
+                  onSelected: (selected) {
+                    setState(() {
+                      _selectedFilter = filter;
+                      _applyFilter();
+                    });
+                  },
+                  selectedColor: const Color(0xFF1A237E),
+                  backgroundColor: Colors.grey.shade100,
+                  checkmarkColor: Colors.white,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(20),
+                    side: BorderSide(
+                      color: _selectedFilter == filter
+                          ? const Color(0xFF1A237E)
+                          : Colors.grey.shade300,
+                      width: _selectedFilter == filter ? 2 : 1,
+                    ),
+                  ),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildRow2() {
+    if (isPhone(context)) return _buildPhoneRow2();
     return Container(
       color: Colors.white,
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 10),
@@ -827,41 +1207,70 @@ class _ClientAllTripsPageState extends State<ClientAllTripsPage> {
     return Container(
       color: Colors.white,
       padding: const EdgeInsets.all(16),
-      child: Row(children: [
-        Expanded(
-            child: _statCard('Total', total.toString(),
-                Icons.local_taxi, Colors.blue)),
-        const SizedBox(width: 10),
-        Expanded(
-            child: _statCard('Pending', pending.toString(),
-                Icons.pending_actions, Colors.orange)),
-        const SizedBox(width: 10),
-        Expanded(
-            child: _statCard('Confirmed', confirmed.toString(),
-                Icons.verified, Colors.green)),
-        const SizedBox(width: 10),
-        Expanded(
-            child: _statCard('Completed', completed.toString(),
-                Icons.check_circle, Colors.teal)),
-      ]),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final totalCard = _statCard('Total', total.toString(),
+              Icons.local_taxi, Colors.blue);
+          final pendingCard = _statCard('Pending', pending.toString(),
+              Icons.pending_actions, Colors.orange);
+          final confirmedCard = _statCard('Confirmed', confirmed.toString(),
+              Icons.verified, Colors.green);
+          final completedCard = _statCard('Completed', completed.toString(),
+              Icons.check_circle, Colors.teal);
+
+          if (constraints.maxWidth < 600) {
+            return Column(
+              children: [
+                Row(
+                  children: [
+                    Expanded(child: totalCard),
+                    const SizedBox(width: 10),
+                    Expanded(child: pendingCard),
+                  ],
+                ),
+                const SizedBox(height: 10),
+                Row(
+                  children: [
+                    Expanded(child: confirmedCard),
+                    const SizedBox(width: 10),
+                    Expanded(child: completedCard),
+                  ],
+                ),
+              ],
+            );
+          }
+
+          return Row(
+            children: [
+              Expanded(child: totalCard),
+              const SizedBox(width: 10),
+              Expanded(child: pendingCard),
+              const SizedBox(width: 10),
+              Expanded(child: confirmedCard),
+              const SizedBox(width: 10),
+              Expanded(child: completedCard),
+            ],
+          );
+        },
+      ),
     );
   }
 
   Widget _statCard(
       String label, String value, IconData icon, MaterialColor color) {
     return Container(
-      padding: const EdgeInsets.all(14),
+      padding: EdgeInsets.all(isPhone(context) ? 10 : 14),
       decoration: BoxDecoration(
         color: color.shade50,
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: color.shade200, width: 1.5),
       ),
       child: Column(children: [
-        Icon(icon, color: color.shade700, size: 28),
-        const SizedBox(height: 8),
+        Icon(icon, color: color.shade700, size: isPhone(context) ? 22 : 28),
+        SizedBox(height: isPhone(context) ? 4 : 8),
         Text(value,
             style: TextStyle(
-                fontSize: 26,
+                fontSize: isPhone(context) ? 22 : 26,
                 fontWeight: FontWeight.bold,
                 color: color.shade900)),
         const SizedBox(height: 4),
@@ -1228,6 +1637,9 @@ class _ClientAllTripsPageState extends State<ClientAllTripsPage> {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
+        insetPadding: isPhone(context)
+            ? const EdgeInsets.symmetric(horizontal: 16, vertical: 24)
+            : const EdgeInsets.symmetric(horizontal: 40, vertical: 24),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         title: Row(children: [
           Icon(Icons.local_taxi, color: clientColor, size: 28),
@@ -1360,7 +1772,7 @@ class _ClientAllTripsPageState extends State<ClientAllTripsPage> {
       padding: const EdgeInsets.only(bottom: 8),
       child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
         SizedBox(
-          width: 130,
+          width: isPhone(context) ? 96 : 130,
           child: Text(label,
               style: TextStyle(
                   fontSize: 13,
@@ -1547,10 +1959,8 @@ class _ClientCscFilterRowState extends State<_ClientCscFilterRow> {
   Widget build(BuildContext context) {
     return Container(
       color: Colors.white,
-      padding: const EdgeInsets.fromLTRB(16, 10, 16, 8),
-      child: SingleChildScrollView(
-        scrollDirection: Axis.horizontal,
-        child: Row(crossAxisAlignment: CrossAxisAlignment.center, children: [
+      padding: EdgeInsets.fromLTRB(isPhone(context) ? 12 : 16, 10, isPhone(context) ? 12 : 16, 8),
+      child: _phoneAwareRow([
           const Icon(Icons.filter_alt_outlined,
               size: 16, color: Color(0xFF1A237E)),
           const SizedBox(width: 6),
@@ -1616,7 +2026,7 @@ class _ClientCscFilterRowState extends State<_ClientCscFilterRow> {
           const SizedBox(width: 8),
           SizedBox(
             width: 148,
-            height: 36,
+            height: isPhone(context) ? 44 : 36,
             child: TextField(
               controller: _localCtrl,
               style: const TextStyle(fontSize: 13),
@@ -1641,7 +2051,7 @@ class _ClientCscFilterRowState extends State<_ClientCscFilterRow> {
           ),
           const SizedBox(width: 8),
           SizedBox(
-            height: 36,
+            height: isPhone(context) ? 44 : 36,
             child: ElevatedButton.icon(
               onPressed: _notify,
               icon: const Icon(Icons.search, size: 14),
@@ -1666,6 +2076,7 @@ class _ClientCscFilterRowState extends State<_ClientCscFilterRow> {
               child: Container(
                 padding: const EdgeInsets.symmetric(
                     horizontal: 10, vertical: 4),
+                constraints: isPhone(context) ? const BoxConstraints(minHeight: 44) : null,
                 decoration: BoxDecoration(
                   color: Colors.red.shade50,
                   borderRadius: BorderRadius.circular(10),
@@ -1685,7 +2096,26 @@ class _ClientCscFilterRowState extends State<_ClientCscFilterRow> {
             ),
           ],
         ]),
-      ),
+    );
+  }
+
+  /// Phone: the filters wrap onto several lines (nothing hidden sideways).
+  /// Other widths: the original horizontally scrolling single row.
+  Widget _phoneAwareRow(List<Widget> children) {
+    if (!isPhone(context)) {
+      return SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: Row(
+            crossAxisAlignment: CrossAxisAlignment.center, children: children),
+      );
+    }
+    return Wrap(
+      spacing: 8,
+      runSpacing: 8,
+      crossAxisAlignment: WrapCrossAlignment.center,
+      children: children
+          .where((w) => !(w is SizedBox && w.child == null))
+          .toList(),
     );
   }
 
@@ -1696,7 +2126,7 @@ class _ClientCscFilterRowState extends State<_ClientCscFilterRow> {
       onTap: onTap,
       borderRadius: BorderRadius.circular(8),
       child: Container(
-        height: 36,
+        height: isPhone(context) ? 44 : 36,
         padding: const EdgeInsets.symmetric(horizontal: 10),
         decoration: BoxDecoration(
           color: active
@@ -1754,7 +2184,7 @@ class _ClientCscFilterRowState extends State<_ClientCscFilterRow> {
       onTap: disabled ? null : onTap,
       borderRadius: BorderRadius.circular(8),
       child: Container(
-        height: 36,
+        height: isPhone(context) ? 44 : 36,
         constraints: const BoxConstraints(minWidth: 100, maxWidth: 160),
         padding: const EdgeInsets.symmetric(horizontal: 10),
         decoration: BoxDecoration(
@@ -1848,7 +2278,7 @@ class _ClientCscFilterRowState extends State<_ClientCscFilterRow> {
           shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(14)),
           content: SizedBox(
-            width: 300,
+            width: MediaQuery.of(ctx).size.width * 0.9 < 300 ? MediaQuery.of(ctx).size.width * 0.9 : 300,
             height: 400,
             child: Column(children: [
               Container(

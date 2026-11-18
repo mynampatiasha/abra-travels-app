@@ -10,6 +10,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:abra_fleet/core/widgets/fleet_map_widget.dart';
 import 'package:abra_fleet/app/config/api_config.dart';
 import 'package:abra_fleet/features/admin/vehicle_admin_management/consecutive_trips_admin.dart';
+import 'package:abra_fleet/core/widgets/responsive/responsive.dart';
 
 const Color kPrimaryColor = Color(0xFF0D47A1);
 const Color kTextPrimaryColor = Color(0xFF212121);
@@ -560,7 +561,9 @@ class _EnhancedFleetMapScreenState extends State<EnhancedFleetMapScreen> {
                 : _errorMessage != null
                     ? _buildErrorState()
                     : _showVehicleList
-                        ? Row(
+                        ? isPhone(context)
+                        ? _buildPhoneMapWithSheet()
+                        : Row(
                             children: [
                               // Map View - Takes up most of the space
                               Expanded(
@@ -605,7 +608,7 @@ class _EnhancedFleetMapScreenState extends State<EnhancedFleetMapScreen> {
       color: Colors.white,
       child: Column(
         children: [
-          Row(
+          _PhoneToolbar(
             children: [
               // Search Field
               Expanded(
@@ -688,7 +691,9 @@ class _EnhancedFleetMapScreenState extends State<EnhancedFleetMapScreen> {
           // Filter Options
           if (_showFilters) ...[
             const SizedBox(height: 16),
-            _showAdvancedFilters ? _buildAdvancedFilterOptions() : _buildBasicFilterOptions(),
+            _PhoneFilterBox(
+              child: _showAdvancedFilters ? _buildAdvancedFilterOptions() : _buildBasicFilterOptions(),
+            ),
           ],
         ],
       ),
@@ -696,7 +701,7 @@ class _EnhancedFleetMapScreenState extends State<EnhancedFleetMapScreen> {
   }
 
   Widget _buildBasicFilterOptions() {
-    return Row(
+    return _PhoneStack(
       children: [
         // Vehicle Status Filter
         Expanded(
@@ -825,7 +830,7 @@ class _EnhancedFleetMapScreenState extends State<EnhancedFleetMapScreen> {
     return Column(
       children: [
         // First row - Basic filters
-        Row(
+        _PhoneStack(
           children: [
             // Vehicle Status Filter
             Expanded(
@@ -953,7 +958,7 @@ class _EnhancedFleetMapScreenState extends State<EnhancedFleetMapScreen> {
         const SizedBox(height: 12),
         
         // Second row - Advanced filters
-        Row(
+        _PhoneStack(
           children: [
             // Vehicle Make Filter
             Expanded(
@@ -1114,6 +1119,59 @@ class _EnhancedFleetMapScreenState extends State<EnhancedFleetMapScreen> {
     final withLocationCount = _filteredVehicles.where((v) => v.hasLocation).length;
     final assignedDriversCount = _filteredVehicles.where((v) => v.driverName != null).length;
 
+    if (isPhone(context)) {
+      return Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        color: Colors.grey.shade50,
+        child: Wrap(
+          spacing: 8,
+          runSpacing: 6,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          children: [
+            _buildStatChip('Total', '$filteredCount/$totalVehicles', kPrimaryColor),
+            _buildStatChip('Active', '$activeCount', kSuccessColor),
+            _buildStatChip('Idle', '$idleCount', kWarningColor),
+            _buildStatChip('Offline', '$offlineCount', kDangerColor),
+            _buildStatChip('Ongoing Trips', '$ongoingTripsCount', Colors.blue),
+            _buildStatChip('With GPS', '$withLocationCount', Colors.green),
+            _buildStatChip('Assigned Drivers', '$assignedDriversCount', Colors.purple),
+            if (filteredCount != totalVehicles)
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: kWarningColor.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: kWarningColor.withOpacity(0.3)),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.filter_list, size: 12, color: kWarningColor),
+                    const SizedBox(width: 4),
+                    Text(
+                      'Filtered',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: kWarningColor,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            Text(
+              'Last updated: ${DateTime.now().toString().substring(11, 19)}',
+              style: TextStyle(
+                fontSize: 12,
+                color: Colors.grey.shade600,
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       color: Colors.grey.shade50,
@@ -1194,7 +1252,7 @@ class _EnhancedFleetMapScreenState extends State<EnhancedFleetMapScreen> {
           Text(
             label,
             style: TextStyle(
-              fontSize: 11,
+              fontSize: isPhone(context) ? 12 : 11,
               color: color,
               fontWeight: FontWeight.w500,
             ),
@@ -1203,7 +1261,7 @@ class _EnhancedFleetMapScreenState extends State<EnhancedFleetMapScreen> {
           Text(
             value,
             style: TextStyle(
-              fontSize: 11,
+              fontSize: isPhone(context) ? 12 : 11,
               color: color,
               fontWeight: FontWeight.bold,
             ),
@@ -1267,6 +1325,105 @@ class _EnhancedFleetMapScreenState extends State<EnhancedFleetMapScreen> {
         ),
       );
     }
+  }
+
+  /// Phone only: map fills the screen, the vehicle list is a draggable bottom sheet.
+  Widget _buildPhoneMapWithSheet() {
+    return Stack(
+      children: [
+        SizedBox.expand(child: _buildMapView()),
+        DraggableScrollableSheet(
+          initialChildSize: 0.3,
+          minChildSize: 0.12,
+          maxChildSize: 0.9,
+          snap: true,
+          builder: (context, scrollController) {
+            return Container(
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.2),
+                    blurRadius: 8,
+                  ),
+                ],
+              ),
+              child: CustomScrollView(
+                controller: scrollController,
+                slivers: [
+                  SliverToBoxAdapter(
+                    child: Column(
+                      children: [
+                        const SizedBox(height: 8),
+                        Container(
+                          width: 40,
+                          height: 4,
+                          decoration: BoxDecoration(
+                            color: Colors.grey.shade400,
+                            borderRadius: BorderRadius.circular(2),
+                          ),
+                        ),
+                        Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.all(16),
+                          decoration: BoxDecoration(
+                            border: Border(
+                              bottom: BorderSide(color: Colors.grey.shade300),
+                            ),
+                          ),
+                          child: Row(
+                            children: [
+                              const Icon(Icons.directions_car, size: 20),
+                              const SizedBox(width: 8),
+                              Text(
+                                'Vehicles (${_filteredVehicles.length})',
+                                style: const TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  if (_filteredVehicles.isEmpty)
+                    const SliverFillRemaining(
+                      hasScrollBody: false,
+                      child: Center(
+                        child: Padding(
+                          padding: EdgeInsets.all(24),
+                          child: Text(
+                            'No vehicles match your filters',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              fontSize: 16,
+                              color: Colors.grey,
+                            ),
+                          ),
+                        ),
+                      ),
+                    )
+                  else
+                    SliverPadding(
+                      padding: const EdgeInsets.all(8),
+                      sliver: SliverList(
+                        delegate: SliverChildBuilderDelegate(
+                          (context, index) =>
+                              _buildVehicleListItem(_filteredVehicles[index]),
+                          childCount: _filteredVehicles.length,
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            );
+          },
+        ),
+      ],
+    );
   }
 
   Widget _buildVehicleList() {
@@ -1398,10 +1555,10 @@ class _EnhancedFleetMapScreenState extends State<EnhancedFleetMapScreen> {
                   color: kSuccessColor.withOpacity(0.1),
                   borderRadius: BorderRadius.circular(8),
                 ),
-                child: const Text(
+                child: Text(
                   'TRIP',
                   style: TextStyle(
-                    fontSize: 9,
+                    fontSize: isPhone(context) ? 11 : 9,
                     fontWeight: FontWeight.bold,
                     color: kSuccessColor,
                   ),
@@ -1474,11 +1631,14 @@ class _EnhancedFleetMapScreenState extends State<EnhancedFleetMapScreen> {
       showDialog(
         context: context,
         builder: (context) => Dialog(
+          insetPadding: isPhone(context)
+              ? const EdgeInsets.all(16)
+              : const EdgeInsets.symmetric(horizontal: 40.0, vertical: 24.0),
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
           child: Container(
             constraints: const BoxConstraints(maxWidth: 500, maxHeight: 600),
             padding: const EdgeInsets.all(20),
-            child: Column(
+            child: _PhoneScroll(child: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -1583,7 +1743,7 @@ class _EnhancedFleetMapScreenState extends State<EnhancedFleetMapScreen> {
                 
                 if (nonNullVehicle.hasLocation) ...[
                   const SizedBox(height: 16),
-                  Row(
+                  _PhoneStack(
                     children: [
                       Expanded(
                         child: ElevatedButton.icon(
@@ -1629,7 +1789,7 @@ class _EnhancedFleetMapScreenState extends State<EnhancedFleetMapScreen> {
                   ),
                 ],
               ],
-            ),
+            )),
           ),
         ),
       );
@@ -1677,7 +1837,7 @@ class _EnhancedFleetMapScreenState extends State<EnhancedFleetMapScreen> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           SizedBox(
-            width: 120,
+            width: isPhone(context) ? 100 : 120,
             child: Text(
               '$label:',
               style: TextStyle(
@@ -1725,5 +1885,94 @@ class _EnhancedFleetMapScreenState extends State<EnhancedFleetMapScreen> {
       case TripStatus.noTrips:
         return 'No Trips';
     }
+  }
+}
+
+
+// ============================================================================
+// Phone-only layout helpers (private). At 600 px and wider they render exactly
+// the original Row / child, so desktop and tablet are unchanged.
+// ============================================================================
+
+/// Row on tablet/desktop; Column (full-width children) on phone.
+class _PhoneStack extends StatelessWidget {
+  final List<Widget> children;
+  const _PhoneStack({required this.children});
+
+  @override
+  Widget build(BuildContext context) {
+    if (!isPhone(context)) return Row(children: children);
+    final mapped = <Widget>[];
+    for (final c in children) {
+      if (c is Expanded) {
+        mapped.add(c.child);
+      } else if (c is SizedBox && c.width != null && c.height == null) {
+        mapped.add(SizedBox(height: c.width));
+      } else {
+        mapped.add(c);
+      }
+    }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: mapped,
+    );
+  }
+}
+
+/// Row on tablet/desktop; on phone the first (Expanded) child is full width
+/// and the remaining buttons wrap underneath.
+class _PhoneToolbar extends StatelessWidget {
+  final List<Widget> children;
+  const _PhoneToolbar({required this.children});
+
+  @override
+  Widget build(BuildContext context) {
+    if (!isPhone(context)) return Row(children: children);
+    final first = children.first;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        first is Expanded ? first.child : first,
+        const SizedBox(height: 8),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: children
+              .skip(1)
+              .where((c) => !(c is SizedBox && c.child == null))
+              .toList(),
+        ),
+      ],
+    );
+  }
+}
+
+/// On phone the filter panel scrolls inside 40% of the screen so it never
+/// pushes the map out of view. Unchanged elsewhere.
+class _PhoneFilterBox extends StatelessWidget {
+  final Widget child;
+  const _PhoneFilterBox({required this.child});
+
+  @override
+  Widget build(BuildContext context) {
+    if (!isPhone(context)) return child;
+    return ConstrainedBox(
+      constraints: BoxConstraints(
+        maxHeight: MediaQuery.of(context).size.height * 0.4,
+      ),
+      child: SingleChildScrollView(child: child),
+    );
+  }
+}
+
+/// Scrolls its child vertically on phone only (dialog content on short screens).
+class _PhoneScroll extends StatelessWidget {
+  final Widget child;
+  const _PhoneScroll({required this.child});
+
+  @override
+  Widget build(BuildContext context) {
+    if (!isPhone(context)) return child;
+    return SingleChildScrollView(child: child);
   }
 }

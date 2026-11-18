@@ -168,15 +168,18 @@ class _AddressChangeRequestScreenState extends State<AddressChangeRequestScreen>
         title: const Text('Request Address Change'),
         backgroundColor: const Color(0xFF2196F3),
       ),
-      body: _isLoadingCurrentAddresses
-          ? const Center(child: CircularProgressIndicator())
-          : SingleChildScrollView(
-              padding: const EdgeInsets.all(16),
-              child: Form(
-                key: _formKey,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
+      body: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 900),
+          child: _isLoadingCurrentAddresses
+              ? const Center(child: CircularProgressIndicator())
+              : SingleChildScrollView(
+                  padding: const EdgeInsets.all(16),
+                  child: Form(
+                    key: _formKey,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
                     // Info Card
                     Card(
                       color: Colors.blue.shade50,
@@ -326,6 +329,8 @@ class _AddressChangeRequestScreenState extends State<AddressChangeRequestScreen>
                 ),
               ),
             ),
+        ),
+      ),
     );
   }
 

@@ -109,8 +109,11 @@ class _MyAddressRequestsScreenState extends State<MyAddressRequestsScreen> {
         title: const Text('My Address Requests'),
         backgroundColor: const Color(0xFF2196F3),
       ),
-      body: Column(
-        children: [
+      body: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 900),
+          child: Column(
+            children: [
           // Status Filter
           Container(
             padding: const EdgeInsets.all(16),
@@ -193,6 +196,8 @@ class _MyAddressRequestsScreenState extends State<MyAddressRequestsScreen> {
           ),
         ],
       ),
+        ),
+      ),
     );
   }
 
@@ -228,14 +233,14 @@ class _MyAddressRequestsScreenState extends State<MyAddressRequestsScreen> {
                     children: [
                       Icon(_getStatusIcon(status), size: 16, color: statusColor),
                       const SizedBox(width: 6),
-                      Text(
+                      Flexible(child: Text(
                         _getStatusLabel(status),
                         style: TextStyle(
                           color: statusColor,
                           fontWeight: FontWeight.bold,
                           fontSize: 12,
                         ),
-                      ),
+                      )),
                     ],
                   ),
                 ),
@@ -301,14 +306,14 @@ class _MyAddressRequestsScreenState extends State<MyAddressRequestsScreen> {
                   children: [
                     Icon(Icons.event, size: 16, color: Colors.blue.shade700),
                     const SizedBox(width: 6),
-                    Text(
+                    Flexible(child: Text(
                       '${request['affectedTripsCount']} upcoming trips affected',
                       style: TextStyle(
                         fontSize: 12,
                         color: Colors.blue.shade700,
                         fontWeight: FontWeight.w500,
                       ),
-                    ),
+                    )),
                   ],
                 ),
               ),
@@ -436,14 +441,14 @@ class _MyAddressRequestsScreenState extends State<MyAddressRequestsScreen> {
             children: [
               Icon(Icons.check_circle, size: 18, color: Colors.green.shade700),
               const SizedBox(width: 8),
-              Text(
+              Flexible(child: Text(
                 'Assignment Details',
                 style: TextStyle(
                   fontSize: 13,
                   fontWeight: FontWeight.bold,
                   color: Colors.green.shade700,
                 ),
-              ),
+              )),
             ],
           ),
           const SizedBox(height: 8),

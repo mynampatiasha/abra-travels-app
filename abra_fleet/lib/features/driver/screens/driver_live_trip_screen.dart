@@ -5,6 +5,7 @@
 
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:abra_fleet/core/widgets/responsive/responsive.dart';
 import 'package:geolocator/geolocator.dart';
 import 'dart:async';
 import '../../../../../core/services/backend_location_tracking_service.dart';
@@ -308,6 +309,7 @@ class _DriverLiveTripScreenState extends State<DriverLiveTripScreen> {
     final confirm = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
+        actionsOverflowButtonSpacing: 8,
         title: const Text('Complete Trip?'),
         content: const Text('Have all customers been picked up?'),
         actions: [
@@ -772,7 +774,8 @@ class _DriverLiveTripScreenState extends State<DriverLiveTripScreen> {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Column(
+                      Expanded(
+                        child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
@@ -790,7 +793,9 @@ class _DriverLiveTripScreenState extends State<DriverLiveTripScreen> {
                             ),
                           ),
                         ],
+                        ),
                       ),
+                      const SizedBox(width: 8),
                       if (!_isTripStarted)
                         ElevatedButton.icon(
                           onPressed: _startTrip,
@@ -799,6 +804,7 @@ class _DriverLiveTripScreenState extends State<DriverLiveTripScreen> {
                           style: ElevatedButton.styleFrom(
                             backgroundColor: Colors.green,
                             foregroundColor: Colors.white,
+                            minimumSize: isPhone(context) ? const Size(0, 48) : null,
                           ),
                         ),
                       if (_isTripStarted)
@@ -915,9 +921,12 @@ class _DriverLiveTripScreenState extends State<DriverLiveTripScreen> {
                             children: [
                               Icon(Icons.phone, size: 14, color: Colors.blue.shade700),
                               const SizedBox(width: 4),
-                              Text(
-                                customer.phone,
-                                style: TextStyle(color: Colors.blue.shade700),
+                              Flexible(
+                                child: Text(
+                                  customer.phone,
+                                  style: TextStyle(color: Colors.blue.shade700),
+                                  overflow: TextOverflow.ellipsis,
+                                ),
                               ),
                             ],
                           ),
@@ -934,11 +943,48 @@ class _DriverLiveTripScreenState extends State<DriverLiveTripScreen> {
                               ],
                             ),
                           ],
+                          if (isPhone(context) && !isPickedUp) ...[
+                            const SizedBox(height: 8),
+                            Wrap(
+                              spacing: 8,
+                              runSpacing: 8,
+                              crossAxisAlignment: WrapCrossAlignment.center,
+                              children: [
+                                if (customerLat != null && customerLng != null)
+                                  SizedBox(
+                                    height: 48,
+                                    child: OutlinedButton.icon(
+                                      icon: const Icon(Icons.navigation, color: Colors.blue),
+                                      label: const Text('Navigate'),
+                                      onPressed: () => _navigateToCustomer(
+                                        customerLat.toDouble(),
+                                        customerLng.toDouble(),
+                                      ),
+                                    ),
+                                  ),
+                                SizedBox(
+                                  height: 48,
+                                  child: ElevatedButton(
+                                    onPressed: () => _markCustomerPickedUp(index),
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor: Colors.green,
+                                      foregroundColor: Colors.white,
+                                    ),
+                                    child: const Text('Picked Up'),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
                         ],
                       ),
                       trailing: isPickedUp
                           ? const Icon(Icons.check_circle, color: Colors.green)
-                          : Row(
+                          : isPhone(context)
+                          ? null
+                          : FittedBox(
+                              fit: BoxFit.scaleDown,
+                              child: Row(
                               mainAxisSize: MainAxisSize.min,
                               children: [
                                 if (customerLat != null && customerLng != null)
@@ -959,6 +1005,7 @@ class _DriverLiveTripScreenState extends State<DriverLiveTripScreen> {
                                   child: const Text('Picked Up'),
                                 ),
                               ],
+                            ),
                             ),
                     ),
                   );

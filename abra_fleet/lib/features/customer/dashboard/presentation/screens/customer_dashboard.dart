@@ -1566,43 +1566,77 @@ void _showSOSSentConfirmation(List<Map<String, dynamic>> nearbyStations, {bool i
                     textAlign: TextAlign.center,
                   ),
                   const SizedBox(height: 16),
-                  Row(
-                    children: [
-                      // ── No button ──────────────────────────────────────
-                      Expanded(
-                        child: OutlinedButton(
-                          onPressed: () => Navigator.of(ctx).pop(),
-                          style: OutlinedButton.styleFrom(
-                            padding: const EdgeInsets.symmetric(vertical: 12),
-                            side: const BorderSide(color: Colors.grey),
-                            shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(10)),
+                  LayoutBuilder(
+                    builder: (context, constraints) {
+                      final bool isMobile = constraints.maxWidth < 400;
+                      if (isMobile) {
+                        return Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            ElevatedButton.icon(
+                              onPressed: () {
+                                Navigator.of(ctx).pop();
+                                _showNearbyPoliceStations(nearbyStations, isFallback: isFallback);
+                              },
+                              icon: Icon(isFallback ? Icons.phone_in_talk : Icons.local_police, size: 18),
+                              label: Text(isFallback ? 'Show Emergency Numbers' : 'Yes, Show Stations'),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: Colors.blue,
+                                foregroundColor: Colors.white,
+                                padding: const EdgeInsets.symmetric(vertical: 12),
+                                shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(10)),
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            OutlinedButton(
+                              onPressed: () => Navigator.of(ctx).pop(),
+                              style: OutlinedButton.styleFrom(
+                                padding: const EdgeInsets.symmetric(vertical: 12),
+                                side: const BorderSide(color: Colors.grey),
+                                shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(10)),
+                              ),
+                              child: const Text('No, Thanks',
+                                  style: TextStyle(color: Colors.grey)),
+                            ),
+                          ],
+                        );
+                      }
+                      return Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        alignment: WrapAlignment.center,
+                        children: [
+                          OutlinedButton(
+                            onPressed: () => Navigator.of(ctx).pop(),
+                            style: OutlinedButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+                              side: const BorderSide(color: Colors.grey),
+                              shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(10)),
+                            ),
+                            child: const Text('No, Thanks',
+                                style: TextStyle(color: Colors.grey)),
                           ),
-                          child: const Text('No, Thanks',
-                              style: TextStyle(color: Colors.grey)),
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      // ── Yes button ─────────────────────────────────────
-                      Expanded(
-                        flex: 2,
-                        child: ElevatedButton.icon(
-                          onPressed: () {
-                            Navigator.of(ctx).pop();
-                            _showNearbyPoliceStations(nearbyStations, isFallback: isFallback);
-                          },
-                          icon: Icon(isFallback ? Icons.phone_in_talk : Icons.local_police, size: 18),
-                          label: Text(isFallback ? 'Show Emergency Numbers' : 'Yes, Show Stations'),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.blue,
-                            foregroundColor: Colors.white,
-                            padding: const EdgeInsets.symmetric(vertical: 12),
-                            shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(10)),
+                          ElevatedButton.icon(
+                            onPressed: () {
+                              Navigator.of(ctx).pop();
+                              _showNearbyPoliceStations(nearbyStations, isFallback: isFallback);
+                            },
+                            icon: Icon(isFallback ? Icons.phone_in_talk : Icons.local_police, size: 18),
+                            label: Text(isFallback ? 'Show Emergency Numbers' : 'Yes, Show Stations'),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.blue,
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+                              shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(10)),
+                            ),
                           ),
-                        ),
-                      ),
-                    ],
+                        ],
+                      );
+                    },
                   ),
                 ],
               ),

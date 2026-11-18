@@ -3629,10 +3629,21 @@ void _navigateToTab(String navigationKey) async {
 
       if (shouldLogout != true) return;
 
+      // ✅ Track whether the "logging out" spinner dialog is still open so we
+      // can be certain it gets dismissed. It's shown with the default
+      // (root) navigator; pushAndRemoveUntil below used to rely on
+      // Navigator.of(context) to also clear it, but that can resolve to a
+      // different navigator and leave the spinner stuck on top of the new
+      // screen forever. Popping it explicitly via the root navigator first
+      // removes that ambiguity.
+      bool loadingDialogShown = false;
+
       try {
         if (context.mounted) {
+          loadingDialogShown = true;
           showDialog(
               context: context,
+              useRootNavigator: true,
               builder: (context) =>
                   const Center(child: CircularProgressIndicator()),
               barrierDismissible: false);
@@ -3656,16 +3667,21 @@ void _navigateToTab(String navigationKey) async {
         await authRepository.signOut();
         _resetState();
 
+        if (loadingDialogShown && context.mounted) {
+          Navigator.of(context, rootNavigator: true).pop();
+          loadingDialogShown = false;
+        }
+
         if (context.mounted) {
-          Navigator.of(context).pushAndRemoveUntil(
+          Navigator.of(context, rootNavigator: true).pushAndRemoveUntil(
             MaterialPageRoute(builder: (context) => const WelcomeScreen()),
             (Route<dynamic> route) => false,
           );
         }
       } catch (e) {
         debugPrint('❌ Logout failed: $e');
-        if (context.mounted) {
-          Navigator.of(context).pop();
+        if (loadingDialogShown && context.mounted) {
+          Navigator.of(context, rootNavigator: true).pop();
         }
       }
     }
@@ -5667,7 +5683,7 @@ List<Widget> _buildRoleBasedNavigation(bool isMobile) {
                   children: [
                     if (showSalesDashboard)
                       buildSalesMarketingSubItem(
-                        'AL Sales Dashboard',
+                        'AT Sales Dashboard',
                         'https://abra-travels.com/hrm/sales-admin-dashboard.php',
                         Icons.dashboard,
                         'al_sales_dashboard',
@@ -5676,7 +5692,7 @@ List<Widget> _buildRoleBasedNavigation(bool isMobile) {
                     if (showLeads || showLeadsDatabase)
                       _buildNestedExpansionTile(
                         context: context,
-                        title: 'AL Leads',
+                        title: 'AT Leads',
                         icon: Icons.people_outline,
                         isMobile: isMobile,
                         paddingLeft: 32.0,
@@ -6158,30 +6174,53 @@ onTap: () async {
                 tooltip: 'Menu',
               )
             : null,
-        title: Text(currentMenuItem['title'] ?? 'Dashboard'),
+        titleSpacing: isMobile ? 0 : null,
+        title: Text(
+          currentMenuItem['title'] ?? 'Dashboard',
+          overflow: TextOverflow.ellipsis,
+        ),
         backgroundColor: kPrimaryColor,
         foregroundColor: Colors.white,
+        // ✅ On narrow phones, 6 full-size (48px) action buttons plus the
+        // hamburger menu don't fit the AppBar and squash the title out
+        // entirely. Shrinking just the icon size/tap padding on mobile (same
+        // icons, same onPressed callbacks, same badges) lets everything fit
+        // without removing or hiding any action.
         actions: [
           // 🔄 Refresh Button
           IconButton(
-            icon: const Icon(Icons.refresh, size: 28, color: Colors.white),
+            icon: Icon(Icons.refresh,
+                size: isMobile ? 20 : 28, color: Colors.white),
+            padding: isMobile ? const EdgeInsets.all(6) : const EdgeInsets.all(8),
+            constraints: isMobile
+                ? const BoxConstraints(minWidth: 36, minHeight: 36)
+                : const BoxConstraints(minWidth: 48, minHeight: 48),
             onPressed: () => _handleRefresh(),
             tooltip: 'Refresh',
           ),
-          _buildSOSAlertBadge(),
-          _buildRosterNotificationBadge(),
-          _buildNotificationBadge(),
+          _buildSOSAlertBadge(isMobile),
+          _buildRosterNotificationBadge(isMobile),
+          _buildNotificationBadge(isMobile),
           // 💬 Support Icon
           IconButton(
-            icon: const Icon(Icons.headset_mic_outlined,
-                size: 28, color: Colors.white),
+            icon: Icon(Icons.headset_mic_outlined,
+                size: isMobile ? 20 : 28, color: Colors.white),
+            padding: isMobile ? const EdgeInsets.all(6) : const EdgeInsets.all(8),
+            constraints: isMobile
+                ? const BoxConstraints(minWidth: 36, minHeight: 36)
+                : const BoxConstraints(minWidth: 48, minHeight: 48),
             onPressed: () => _showSupportDialog(context),
             tooltip: 'Support',
           ),
           IconButton(
-              icon:
-                  const Icon(Icons.exit_to_app, size: 28, color: Colors.white),
-              onPressed: () => _handleLogout(context)),
+            icon: Icon(Icons.exit_to_app,
+                size: isMobile ? 20 : 28, color: Colors.white),
+            padding: isMobile ? const EdgeInsets.all(6) : const EdgeInsets.all(8),
+            constraints: isMobile
+                ? const BoxConstraints(minWidth: 36, minHeight: 36)
+                : const BoxConstraints(minWidth: 48, minHeight: 48),
+            onPressed: () => _handleLogout(context),
+          ),
         ],
       );
     }
@@ -6424,15 +6463,19 @@ onTap: () async {
       );
     }
 
-    Widget _buildSOSAlertBadge() {
+    Widget _buildSOSAlertBadge([bool isMobile = false]) {
       return Stack(
         children: [
           IconButton(
             icon: Icon(Icons.sos_rounded,
-                size: 28,
+                size: isMobile ? 20 : 28,
                 color: _activeSOSAlerts.isNotEmpty
                     ? Colors.yellowAccent
                     : Colors.white),
+            padding: isMobile ? const EdgeInsets.all(6) : const EdgeInsets.all(8),
+            constraints: isMobile
+                ? const BoxConstraints(minWidth: 36, minHeight: 36)
+                : const BoxConstraints(minWidth: 48, minHeight: 48),
             onPressed: () => _navigateToTab(NavigationKeys.incompleteAlerts),
           ),
           if (_activeSOSAlerts.isNotEmpty)
@@ -6458,7 +6501,7 @@ onTap: () async {
       );
     }
 
-    Widget _buildRosterNotificationBadge() {
+    Widget _buildRosterNotificationBadge([bool isMobile = false]) {
       final pendingCount = _pendingRosters.length;
       final unacknowledgedCount = _pendingRosters
           .where((r) => !_acknowledgedRosterIds.contains(r.id))
@@ -6469,10 +6512,14 @@ onTap: () async {
           IconButton(
             icon: Icon(
               Icons.calendar_month,
-              size: 28,
+              size: isMobile ? 20 : 28,
               color:
                   unacknowledgedCount > 0 ? Colors.orangeAccent : Colors.white,
             ),
+            padding: isMobile ? const EdgeInsets.all(6) : const EdgeInsets.all(8),
+            constraints: isMobile
+                ? const BoxConstraints(minWidth: 36, minHeight: 36)
+                : const BoxConstraints(minWidth: 48, minHeight: 48),
             onPressed: () => _navigateToTab(NavigationKeys.pendingRosters),
           ),
           if (pendingCount > 0)
@@ -6500,10 +6547,14 @@ onTap: () async {
       );
     }
 
-    Widget _buildNotificationBadge() {
+    Widget _buildNotificationBadge([bool isMobile = false]) {
       // ✅ Simple notification button without count badge
       return IconButton(
-        icon: const Icon(Icons.notifications, size: 28),
+        icon: Icon(Icons.notifications, size: isMobile ? 20 : 28),
+        padding: isMobile ? const EdgeInsets.all(6) : const EdgeInsets.all(8),
+        constraints: isMobile
+            ? const BoxConstraints(minWidth: 36, minHeight: 36)
+            : const BoxConstraints(minWidth: 48, minHeight: 48),
         onPressed: () {
           debugPrint('🔔 ========== NOTIFICATION BELL CLICKED ==========');
           debugPrint('🔔 Navigating to NotificationsScreen...');

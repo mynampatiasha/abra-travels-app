@@ -13,6 +13,7 @@ import 'package:abra_fleet/features/admin/customer_management/presentation/provi
 import 'package:abra_fleet/features/admin/customer_management/customer_form_overlay.dart';
 import 'package:abra_fleet/features/admin/customer_management/bulk_import_overlay.dart';
 import 'package:abra_fleet/features/auth/domain/repositories/auth_repository.dart';
+import 'package:abra_fleet/core/widgets/responsive/responsive.dart';
 
 class ClientEmployeeManagement extends StatefulWidget {
   const ClientEmployeeManagement({Key? key}) : super(key: key);
@@ -199,12 +200,12 @@ Future<void> _fetchOrganizationEmployees() async {
               onRefresh: () => _refreshEmployees(),
               child: SingleChildScrollView(
                 controller: _verticalScrollController,
-                padding: const EdgeInsets.all(24),
+                padding: EdgeInsets.all(isPhone(context) ? 12 : 24),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     _buildStatsGrid(_organizationEmployees.map(_convertToEntity).toList()),
-                    const SizedBox(height: 32),
+                    SizedBox(height: isPhone(context) ? 16 : 32),
                     _buildEmployeeDirectory(_getFilteredEmployees()),
                   ],
                 ),
@@ -233,10 +234,11 @@ Future<void> _fetchOrganizationEmployees() async {
 
     return LayoutBuilder(
       builder: (context, constraints) {
-        final cardWidth = (constraints.maxWidth - 40) / 3;
+        final phone = isPhone(context);
+        final cardWidth = phone ? (constraints.maxWidth - 12) / 2 : (constraints.maxWidth - 40) / 3;
         return Wrap(
-          spacing: 20,
-          runSpacing: 20,
+          spacing: phone ? 12 : 20,
+          runSpacing: phone ? 12 : 20,
           children: [
             _buildStatCard(
               icon: Icons.people,
@@ -278,7 +280,7 @@ Future<void> _fetchOrganizationEmployees() async {
   }) {
     return Container(
       width: width,
-      padding: const EdgeInsets.all(24),
+      padding: EdgeInsets.all(isPhone(context) ? 16 : 24),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(12),
@@ -347,8 +349,10 @@ Future<void> _fetchOrganizationEmployees() async {
         children: [
           // Header
           Padding(
-            padding: const EdgeInsets.all(24),
-            child: Row(
+            padding: EdgeInsets.all(isPhone(context) ? 12 : 24),
+            child: isPhone(context)
+                ? _buildPhoneDirectoryHeader(employees)
+                : Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Column(
@@ -427,7 +431,7 @@ Future<void> _fetchOrganizationEmployees() async {
 
           // Search Bar
           Padding(
-            padding: const EdgeInsets.all(24),
+            padding: EdgeInsets.all(isPhone(context) ? 12 : 24),
             child: TextField(
               controller: _searchController,
               onChanged: (value) {
@@ -471,7 +475,7 @@ Future<void> _fetchOrganizationEmployees() async {
           // Beautiful Table with Blue Gradient Header
           employees.isEmpty
               ? Padding(
-                  padding: const EdgeInsets.all(48.0),
+                  padding: EdgeInsets.all(isPhone(context) ? 24.0 : 48.0),
                   child: Column(
                     children: [
                       const Icon(Icons.people_outline, size: 64, color: Colors.grey),
@@ -486,9 +490,168 @@ Future<void> _fetchOrganizationEmployees() async {
                     ],
                   ),
                 )
-              : _buildBeautifulTable(employees),
-          const SizedBox(height: 24),
+              : (isPhone(context)
+                  ? _buildPhoneEmployeeCards(employees)
+                  : _buildBeautifulTable(employees)),
+          SizedBox(height: isPhone(context) ? 12 : 24),
         ],
+      ),
+    );
+  }
+
+  /// Phone-only header: title first, action buttons wrap below it.
+  Widget _buildPhoneDirectoryHeader(List<CustomerEntity> employees) {
+    return PhoneHeaderRow(
+      title: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Employee Directory (${employees.length})',
+            style: const TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+              color: Color(0xFF1E293B),
+            ),
+          ),
+          if (_clientOrganizationDomain != null)
+            Text(
+              'Organization: $_clientOrganizationDomain',
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                fontSize: 12,
+                color: Color(0xFF64748B),
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+        ],
+      ),
+      actions: [
+        _buildActionButton(
+          icon: Icons.refresh,
+          label: 'Refresh',
+          color: const Color(0xFF8B5CF6),
+          onPressed: () => _refreshEmployees(),
+        ),
+        _buildActionButton(
+          icon: Icons.person_add,
+          label: 'Add Employee',
+          color: const Color(0xFF2563EB),
+          onPressed: () {
+            setState(() {
+              _editingEmployee = null;
+              _showAddEmployeeOverlay = true;
+            });
+          },
+        ),
+        _buildActionButton(
+          icon: Icons.upload_file,
+          label: 'Bulk Upload',
+          color: const Color(0xFF10B981),
+          onPressed: () {
+            setState(() {
+              _showBulkImportOverlay = true;
+            });
+          },
+        ),
+        _buildActionButton(
+          icon: Icons.download,
+          label: 'Export',
+          color: const Color(0xFF64748B),
+          onPressed: () {
+            _exportEmployees(employees);
+          },
+        ),
+      ],
+    );
+  }
+
+  /// Phone-only: one card per employee instead of the wide table.
+  Widget _buildPhoneEmployeeCards(List<CustomerEntity> employees) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 0, 12, 0),
+      child: Column(
+        children: employees.map((employee) {
+          return Container(
+            margin: const EdgeInsets.only(bottom: 12),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: const Color(0xFFE2E8F0)),
+            ),
+            child: InkWell(
+              borderRadius: BorderRadius.circular(10),
+              onTap: () => _showCustomerDetails(employee),
+              child: Padding(
+                padding: const EdgeInsets.all(12),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                employee.name,
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w600,
+                                  color: Color(0xFF2563EB),
+                                ),
+                              ),
+                              const SizedBox(height: 2),
+                              Text(
+                                'ID: ${employee.employeeId ?? 'N/A'}',
+                                style: const TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w600,
+                                  color: Color(0xFF1E293B),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        _buildStatusBadge(employee.status),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      employee.email,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: 13,
+                        color: Color(0xFF64748B),
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Phone: ${employee.phoneNumber ?? 'N/A'}',
+                      style: const TextStyle(fontSize: 13, color: Color(0xFF1E293B)),
+                    ),
+                    Text(
+                      'Dept: ${employee.department ?? 'N/A'}  |  Branch: ${employee.branch ?? 'N/A'}',
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(fontSize: 13, color: Color(0xFF1E293B)),
+                    ),
+                    const SizedBox(height: 8),
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: _buildActionButtons(employee),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          );
+        }).toList(),
       ),
     );
   }
@@ -729,6 +892,7 @@ Future<void> _fetchOrganizationEmployees() async {
         foregroundColor: Colors.white,
         elevation: 0,
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        minimumSize: isPhone(context) ? const Size(0, 44) : null,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(8),
         ),
@@ -786,6 +950,8 @@ Future<void> _fetchOrganizationEmployees() async {
       borderRadius: BorderRadius.circular(6),
       child: Container(
         padding: const EdgeInsets.all(6),
+        constraints: isPhone(context) ? const BoxConstraints(minWidth: 44, minHeight: 44) : null,
+        alignment: isPhone(context) ? Alignment.center : null,
         decoration: BoxDecoration(
           color: color.withOpacity(0.1),
           borderRadius: BorderRadius.circular(6),
@@ -809,7 +975,9 @@ Future<void> _fetchOrganizationEmployees() async {
       color: Colors.black54,
       child: Center(
         child: Container(
-          margin: const EdgeInsets.symmetric(horizontal: 40, vertical: 60),
+          margin: isPhone(context)
+              ? const EdgeInsets.symmetric(horizontal: 12, vertical: 24)
+              : const EdgeInsets.symmetric(horizontal: 40, vertical: 60),
           constraints: const BoxConstraints(maxWidth: 800, maxHeight: 700),
           child: Card(
             elevation: 8,
@@ -821,7 +989,7 @@ Future<void> _fetchOrganizationEmployees() async {
               children: [
                 // Header with Gradient
                 Container(
-                  padding: const EdgeInsets.all(24),
+                  padding: EdgeInsets.all(isPhone(context) ? 16 : 24),
                   decoration: BoxDecoration(
                     gradient: const LinearGradient(
                       colors: [
@@ -840,8 +1008,8 @@ Future<void> _fetchOrganizationEmployees() async {
                     children: [
                       // Avatar
                       Container(
-                        width: 80,
-                        height: 80,
+                        width: isPhone(context) ? 56 : 80,
+                        height: isPhone(context) ? 56 : 80,
                         decoration: BoxDecoration(
                           color: Colors.white,
                           borderRadius: BorderRadius.circular(12),
@@ -858,15 +1026,15 @@ Future<void> _fetchOrganizationEmployees() async {
                             _selectedCustomer!.name.isNotEmpty
                                 ? _selectedCustomer!.name[0].toUpperCase()
                                 : 'U',
-                            style: const TextStyle(
-                              fontSize: 36,
+                            style: TextStyle(
+                              fontSize: isPhone(context) ? 26 : 36,
                               fontWeight: FontWeight.bold,
                               color: Color(0xFF2563EB),
                             ),
                           ),
                         ),
                       ),
-                      const SizedBox(width: 20),
+                      SizedBox(width: isPhone(context) ? 12 : 20),
                       // Name and Status
                       Expanded(
                         child: Column(
@@ -874,17 +1042,21 @@ Future<void> _fetchOrganizationEmployees() async {
                           children: [
                             Text(
                               _selectedCustomer!.name,
-                              style: const TextStyle(
-                                fontSize: 24,
+                              maxLines: isPhone(context) ? 2 : null,
+                              overflow: isPhone(context) ? TextOverflow.ellipsis : null,
+                              style: TextStyle(
+                                fontSize: isPhone(context) ? 18 : 24,
                                 fontWeight: FontWeight.bold,
                                 color: Colors.white,
                               ),
                             ),
                             const SizedBox(height: 8),
-                            Row(
+                            Wrap(
+                              spacing: 12,
+                              runSpacing: 8,
+                              crossAxisAlignment: WrapCrossAlignment.center,
                               children: [
                                 _buildWhiteStatusBadge(_selectedCustomer!.status),
-                                const SizedBox(width: 12),
                                 if (_selectedCustomer!.employeeId != null)
                                   Container(
                                     padding: const EdgeInsets.symmetric(
@@ -938,7 +1110,7 @@ Future<void> _fetchOrganizationEmployees() async {
                 // Body Content - Scrollable
                 Expanded(
                   child: SingleChildScrollView(
-                    padding: const EdgeInsets.all(32),
+                    padding: EdgeInsets.all(isPhone(context) ? 16 : 32),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
@@ -1031,9 +1203,11 @@ Future<void> _fetchOrganizationEmployees() async {
                         const SizedBox(height: 32),
 
                         // Action Buttons
-                        Row(
+                        Flex(
+                          direction: isPhone(context) ? Axis.vertical : Axis.horizontal,
+                          mainAxisSize: isPhone(context) ? MainAxisSize.min : MainAxisSize.max,
                           children: [
-                            Expanded(
+                            _phoneFlex(
                               child: ElevatedButton.icon(
                                 onPressed: () {
                                   setState(() {
@@ -1056,8 +1230,8 @@ Future<void> _fetchOrganizationEmployees() async {
                                 ),
                               ),
                             ),
-                            const SizedBox(width: 12),
-                            Expanded(
+                            isPhone(context) ? const SizedBox(height: 12) : const SizedBox(width: 12),
+                            _phoneFlex(
                               child: OutlinedButton.icon(
                                 onPressed: () {
                                   setState(() {
@@ -1092,6 +1266,11 @@ Future<void> _fetchOrganizationEmployees() async {
         ),
       ),
     );
+  }
+
+  /// Expanded in a row (desktop); plain full-width child in a column (phone).
+  Widget _phoneFlex({required Widget child}) {
+    return isPhone(context) ? SizedBox(width: double.infinity, child: child) : Expanded(child: child);
   }
 
   Widget _buildWhiteStatusBadge(String status) {

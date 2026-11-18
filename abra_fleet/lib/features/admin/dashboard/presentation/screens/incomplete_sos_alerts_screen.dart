@@ -22,6 +22,7 @@ import 'package:abra_fleet/core/services/error_handler_service.dart';
 import 'package:abra_fleet/core/utils/export_helper.dart';
 import 'package:abra_fleet/features/admin/widgets/country_state_city_filter.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:abra_fleet/core/widgets/responsive/responsive.dart';
 
 class IncompleteSosAlertsScreen extends StatefulWidget {
   const IncompleteSosAlertsScreen({Key? key}) : super(key: key);
@@ -370,7 +371,7 @@ class _IncompleteSosAlertsScreenState
                     Expanded(child: _buildDomainFilter()),
                     const SizedBox(width: 12),
                     SizedBox(
-                      height: 38,
+                      height: isPhone(context) ? 44 : 38,
                       child: OutlinedButton.icon(
                         onPressed: _resetFilters,
                         icon: const Icon(Icons.clear, size: 16),
@@ -435,7 +436,7 @@ class _IncompleteSosAlertsScreenState
                 color: Color(0xFF94A3B8))),
         const SizedBox(height: 4),
         SizedBox(
-          height: 38,
+          height: isPhone(context) ? 44 : 38,
           child: TextField(
             controller: _domainController,
             decoration: InputDecoration(
@@ -496,8 +497,12 @@ class _IncompleteSosAlertsScreenState
         border:
             Border(bottom: BorderSide(color: Colors.grey[200]!)),
       ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      width: double.infinity,
+      child: Wrap(
+        alignment: WrapAlignment.spaceBetween,
+        crossAxisAlignment: WrapCrossAlignment.center,
+        spacing: 8,
+        runSpacing: 8,
         children: [
           Text(
             '🚨 Active Alerts (${_filteredAlerts.length})',
@@ -617,7 +622,7 @@ class _IncompleteSosAlertsScreenState
                               const SizedBox(width: 4),
                               Text('Police Notified',
                                   style: TextStyle(
-                                      fontSize: 9,
+                                      fontSize: isPhone(context) ? 12 : 9,
                                       fontWeight: FontWeight.bold,
                                       color: Colors.blue.shade700)),
                             ],
@@ -627,7 +632,7 @@ class _IncompleteSosAlertsScreenState
                       Text(
                         _formatTimeAgo(alert.timestamp),
                         style: TextStyle(
-                            fontSize: 10,
+                            fontSize: isPhone(context) ? 12 : 10,
                             color: Colors.red[600],
                             fontWeight: FontWeight.bold),
                       ),
@@ -670,8 +675,8 @@ class _IncompleteSosAlertsScreenState
                         style: TextStyle(
                             fontSize: 12, color: Colors.blue)),
                     style: OutlinedButton.styleFrom(
-                      padding:
-                          const EdgeInsets.symmetric(vertical: 6),
+                      padding: EdgeInsets.symmetric(
+                          vertical: isPhone(context) ? 12 : 6),
                       side: const BorderSide(color: Colors.blue),
                       shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(8)),
@@ -695,8 +700,8 @@ class _IncompleteSosAlertsScreenState
                       style: ElevatedButton.styleFrom(
                         backgroundColor: Colors.blue[600],
                         foregroundColor: Colors.white,
-                        padding:
-                            const EdgeInsets.symmetric(vertical: 8),
+                        padding: EdgeInsets.symmetric(
+                            vertical: isPhone(context) ? 13 : 8),
                       ),
                     ),
                   ),
@@ -713,8 +718,8 @@ class _IncompleteSosAlertsScreenState
                       style: ElevatedButton.styleFrom(
                         backgroundColor: Colors.green[600],
                         foregroundColor: Colors.white,
-                        padding:
-                            const EdgeInsets.symmetric(vertical: 8),
+                        padding: EdgeInsets.symmetric(
+                            vertical: isPhone(context) ? 13 : 8),
                       ),
                     ),
                   ),
@@ -731,8 +736,8 @@ class _IncompleteSosAlertsScreenState
                       style: ElevatedButton.styleFrom(
                         backgroundColor: Colors.orange[600],
                         foregroundColor: Colors.white,
-                        padding:
-                            const EdgeInsets.symmetric(vertical: 8),
+                        padding: EdgeInsets.symmetric(
+                            vertical: isPhone(context) ? 13 : 8),
                       ),
                     ),
                   ),

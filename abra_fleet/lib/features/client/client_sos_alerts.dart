@@ -16,6 +16,7 @@ import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:abra_fleet/core/services/api_service.dart';
+import 'package:abra_fleet/core/widgets/responsive/responsive.dart';
 
 class ClientSOSAlerts extends StatefulWidget {
   const ClientSOSAlerts({Key? key}) : super(key: key);
@@ -338,6 +339,34 @@ void _setupActiveSOSListener() {
 
   @override
   Widget build(BuildContext context) {
+    // Phone only (< 600 px): tighter side padding, flexible tab content height.
+    final bool phone = isPhone(context);
+    final double sidePad = phone ? 12.0 : 24.0;
+    final double phoneH = MediaQuery.of(context).size.height * 0.7;
+    final double tabContentHeight =
+        phone ? (phoneH < 420.0 ? 420.0 : phoneH) : 500.0;
+    final Widget sosTitle = const Text(
+      'SOS Alerts',
+      style: TextStyle(
+        fontSize: 20,
+        fontWeight: FontWeight.bold,
+        color: Color(0xFF1E293B),
+      ),
+    );
+    final Widget refreshButton = ElevatedButton.icon(
+      onPressed: _refreshAllData,
+      icon: const Icon(Icons.refresh, size: 18),
+      label: const Text('Refresh'),
+      style: ElevatedButton.styleFrom(
+        backgroundColor: const Color(0xFF2563EB),
+        foregroundColor: Colors.white,
+        elevation: 0,
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(8),
+        ),
+      ),
+    );
     return Scaffold(
       backgroundColor: const Color(0xFFF8FAFC),
       body: SingleChildScrollView(
@@ -345,21 +374,21 @@ void _setupActiveSOSListener() {
           children: [
             // Stats Grid
             Padding(
-              padding: const EdgeInsets.all(24),
+              padding: EdgeInsets.all(sidePad),
               child: _buildStatsGrid(),
             ),
-            
+
             // Filter Button
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 24),
+              padding: EdgeInsets.symmetric(horizontal: sidePad),
               child: _buildFilterButton(),
             ),
-            
-            const SizedBox(height: 24),
-            
+
+            SizedBox(height: phone ? 16 : 24),
+
             // Tab Bar with Refresh Button
             Container(
-              margin: const EdgeInsets.symmetric(horizontal: 24),
+              margin: EdgeInsets.symmetric(horizontal: sidePad),
               decoration: BoxDecoration(
                 color: Colors.white,
                 borderRadius: const BorderRadius.only(
@@ -378,34 +407,21 @@ void _setupActiveSOSListener() {
                 children: [
                   // Header with Refresh Button
                   Padding(
-                    padding: const EdgeInsets.fromLTRB(24, 16, 24, 8),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        const Text(
-                          'SOS Alerts',
-                          style: TextStyle(
-                            fontSize: 20,
-                            fontWeight: FontWeight.bold,
-                            color: Color(0xFF1E293B),
+                    padding: phone
+                        ? const EdgeInsets.fromLTRB(16, 16, 16, 8)
+                        : const EdgeInsets.fromLTRB(24, 16, 24, 8),
+                    child: phone
+                        ? PhoneHeaderRow(
+                            title: sosTitle,
+                            actions: [refreshButton],
+                          )
+                        : Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              sosTitle,
+                              refreshButton,
+                            ],
                           ),
-                        ),
-                        ElevatedButton.icon(
-                          onPressed: _refreshAllData,
-                          icon: const Icon(Icons.refresh, size: 18),
-                          label: const Text('Refresh'),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: const Color(0xFF2563EB),
-                            foregroundColor: Colors.white,
-                            elevation: 0,
-                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
                   ),
                   // Tab Bar
                   TabBar(
@@ -453,8 +469,8 @@ void _setupActiveSOSListener() {
             
             // Tab Content
             Container(
-              margin: const EdgeInsets.symmetric(horizontal: 24),
-              height: 500, // Fixed height to prevent overflow
+              margin: EdgeInsets.symmetric(horizontal: sidePad),
+              height: tabContentHeight, // 500 on tablet/desktop; screen-based on phone
               decoration: BoxDecoration(
                 color: Colors.white,
                 borderRadius: const BorderRadius.only(
@@ -478,7 +494,7 @@ void _setupActiveSOSListener() {
               ),
             ),
             
-            const SizedBox(height: 24),
+            SizedBox(height: phone ? 16 : 24),
           ],
         ),
       ),
@@ -496,6 +512,48 @@ void _setupActiveSOSListener() {
         final isSmallScreen = screenWidth < 600;
         final isMediumScreen = screenWidth < 900;
         
+        if (isSmallScreen && isPhone(context)) {
+          // Phone: three compact cards in one row
+          // (no CrossAxisAlignment.stretch here: this sits in a scrolling Column with
+          // unbounded height, where stretch throws an infinite-height layout error)
+          return Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: _buildStatCard(
+                  icon: Icons.warning_amber_rounded,
+                  iconColor: const Color(0xFFEF4444),
+                  iconBgColor: const Color(0xFFEF4444).withOpacity(0.1),
+                  value: activeAlerts.toString(),
+                  label: 'Active Alerts',
+                  width: double.infinity,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: _buildStatCard(
+                  icon: Icons.check_circle,
+                  iconColor: const Color(0xFF10B981),
+                  iconBgColor: const Color(0xFF10B981).withOpacity(0.1),
+                  value: resolvedAlerts.toString(),
+                  label: 'Resolved',
+                  width: double.infinity,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: _buildStatCard(
+                  icon: Icons.shield_outlined,
+                  iconColor: const Color(0xFF2563EB),
+                  iconBgColor: const Color(0xFF2563EB).withOpacity(0.1),
+                  value: (activeAlerts + resolvedAlerts).toString(),
+                  label: 'Total Alerts',
+                  width: double.infinity,
+                ),
+              ),
+            ],
+          );
+        }
         if (isSmallScreen) {
           // Single column for small screens
           return Column(
@@ -613,10 +671,11 @@ void _setupActiveSOSListener() {
     required String label,
     required double width,
   }) {
+    final bool phone = isPhone(context);
     return Container(
       width: width == double.infinity ? null : width,
       constraints: width == double.infinity ? null : BoxConstraints(minWidth: 200),
-      padding: const EdgeInsets.all(24),
+      padding: EdgeInsets.all(phone ? 12 : 24),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(12),
@@ -636,32 +695,52 @@ void _setupActiveSOSListener() {
         mainAxisSize: MainAxisSize.min,
         children: [
           Container(
-            width: 48,
-            height: 48,
+            width: phone ? 40 : 48,
+            height: phone ? 40 : 48,
             decoration: BoxDecoration(
               color: iconBgColor,
               borderRadius: BorderRadius.circular(12),
             ),
             child: Icon(icon, color: iconColor, size: 24),
           ),
-          const SizedBox(height: 16),
-          Text(
-            value,
-            style: const TextStyle(
-              fontSize: 28,
-              fontWeight: FontWeight.bold,
-              color: Color(0xFF1E293B),
+          SizedBox(height: phone ? 12 : 16),
+          if (phone)
+            FitText(
+              value,
+              style: const TextStyle(
+                fontSize: 24,
+                fontWeight: FontWeight.bold,
+                color: Color(0xFF1E293B),
+              ),
+            )
+          else
+            Text(
+              value,
+              style: const TextStyle(
+                fontSize: 28,
+                fontWeight: FontWeight.bold,
+                color: Color(0xFF1E293B),
+              ),
             ),
-          ),
           const SizedBox(height: 4),
-          Text(
-            label,
-            style: const TextStyle(
-              fontSize: 14,
-              color: Color(0xFF64748B),
-              fontWeight: FontWeight.w500,
+          if (phone)
+            FitText(
+              label,
+              style: const TextStyle(
+                fontSize: 12,
+                color: Color(0xFF64748B),
+                fontWeight: FontWeight.w500,
+              ),
+            )
+          else
+            Text(
+              label,
+              style: const TextStyle(
+                fontSize: 14,
+                color: Color(0xFF64748B),
+                fontWeight: FontWeight.w500,
+              ),
             ),
-          ),
         ],
       ),
     );
@@ -1054,7 +1133,7 @@ void _setupActiveSOSListener() {
     return InkWell(
       onTap: () => _showActiveAlertDetails(alert),
       child: Container(
-        padding: const EdgeInsets.all(20),
+        padding: EdgeInsets.all(isPhone(context) ? 12 : 20),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -1100,11 +1179,15 @@ void _setupActiveSOSListener() {
                     children: [
                       const Icon(Icons.email, size: 14, color: Color(0xFF64748B)),
                       const SizedBox(width: 6),
-                      Text(
-                        alert.customerEmail,
-                        style: const TextStyle(
-                          fontSize: 13,
-                          color: Color(0xFF64748B),
+                      Expanded(
+                        child: Text(
+                          alert.customerEmail,
+                          style: const TextStyle(
+                            fontSize: 13,
+                            color: Color(0xFF64748B),
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
                         ),
                       ),
                     ],
@@ -1287,9 +1370,8 @@ void _setupActiveSOSListener() {
                 'Resolved: ${_formatDateTime(alert.resolvedAt ?? alert.timestamp)}',
               ),
               const SizedBox(height: 12),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.end,
-                children: [
+              Builder(builder: (context) {
+                final resolvedActions = <Widget>[
                   if (alert.hasCoordinates)
                     TextButton.icon(
                       onPressed: () => _showResolvedMapDialog(alert),
@@ -1299,7 +1381,8 @@ void _setupActiveSOSListener() {
                         foregroundColor: Colors.green[700],
                       ),
                     ),
-                  if (alert.hasCoordinates) const SizedBox(width: 8),
+                  if (alert.hasCoordinates && !isPhone(context))
+                    const SizedBox(width: 8),
                   TextButton.icon(
                     onPressed: () => _showResolvedAlertDetails(alert),
                     icon: const Icon(Icons.visibility, size: 16),
@@ -1308,8 +1391,21 @@ void _setupActiveSOSListener() {
                       foregroundColor: Colors.blue[700],
                     ),
                   ),
-                ],
-              ),
+                ];
+                // Phone: let the two buttons wrap instead of overflowing.
+                if (isPhone(context)) {
+                  return Wrap(
+                    alignment: WrapAlignment.end,
+                    spacing: 8,
+                    runSpacing: 4,
+                    children: resolvedActions,
+                  );
+                }
+                return Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: resolvedActions,
+                );
+              }),
             ],
           ),
         ),

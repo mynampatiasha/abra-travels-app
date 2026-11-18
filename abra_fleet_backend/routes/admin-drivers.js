@@ -1314,16 +1314,18 @@ router.post('/', async (req, res) => {
       license,
       emergencyContact,
       address,
-      employment,
+      employment: employmentIn,
+      employmentDetails,
       bankDetails,
       password
     } = req.body;
+    const employment = employmentIn || employmentDetails;
     
     // Validation
-    if (!personalInfo?.email || !personalInfo?.phone || !personalInfo?.firstName || !personalInfo?.lastName) {
+    if (!personalInfo?.email || !personalInfo?.phone || !personalInfo?.firstName) {
       return res.status(400).json({
         success: false,
-        message: 'Missing required personal information fields'
+        message: 'Name, email and phone number are required'
       });
     }
     
@@ -1357,11 +1359,11 @@ router.post('/', async (req, res) => {
       // top-level fields) works for drivers created here, not just ones
       // granted a login via POST /:id/login.
       email: personalInfo.email.toLowerCase(),
-      name: `${personalInfo.firstName} ${personalInfo.lastName}`.trim(),
+      name: `${personalInfo.firstName} ${personalInfo.lastName || ""}`.trim(),
       phone: personalInfo.phone,
       personalInfo: {
         firstName: personalInfo.firstName,
-        lastName: personalInfo.lastName,
+        lastName: personalInfo.lastName || "",
         email: personalInfo.email,
         phone: personalInfo.phone,
         dateOfBirth: personalInfo.dateOfBirth ? new Date(personalInfo.dateOfBirth) : null,
@@ -1411,7 +1413,7 @@ router.post('/', async (req, res) => {
     // separately by an admin via the "Create login" action)
     if (personalInfo.email) {
       try {
-        const fullName = `${personalInfo.firstName} ${personalInfo.lastName}`;
+        const fullName = `${personalInfo.firstName} ${personalInfo.lastName || ""}`.trim();
         const emailText = `Welcome to Corporate Travels!\n\nDear ${fullName},\n\nYour driver account has been created.\nDriver ID: ${driverId}\n\nYour administrator will set up your driver app login separately and share your sign-in details with you.`;
         const emailHtml = `<p>Dear ${fullName},</p><p>Your Corporate Travels driver account has been created.</p><p><strong>Driver ID:</strong> ${driverId}</p><p>Your administrator will set up your driver app login separately and share your sign-in details with you.</p>`;
 

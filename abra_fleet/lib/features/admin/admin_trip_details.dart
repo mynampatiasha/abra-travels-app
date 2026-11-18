@@ -21,6 +21,7 @@ import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:abra_fleet/app/config/api_config.dart';
 import 'package:abra_fleet/features/admin/admin_live_location_whole_vehicles.dart';
+import 'package:abra_fleet/core/widgets/responsive/responsive.dart';
 
 // PDF generation imports
 import 'package:pdf/pdf.dart';
@@ -1197,7 +1198,7 @@ pw.Widget _buildStopsTable(List<dynamic> stops) {
           ),
         ],
       ),
-      child: Row(
+      child: _PhoneGrid(
         children: [
           // PDF Button
           Expanded(
@@ -1283,7 +1284,7 @@ pw.Widget _buildStopsTable(List<dynamic> stops) {
       style: ElevatedButton.styleFrom(
         backgroundColor: backgroundColor,
         foregroundColor: Colors.white,
-        padding: const EdgeInsets.symmetric(vertical: 10),
+        padding: EdgeInsets.symmetric(vertical: isPhone(context) ? 12 : 10),
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(8),
         ),
@@ -1305,8 +1306,8 @@ pw.Widget _buildStopsTable(List<dynamic> stops) {
                 const SizedBox(height: 4),
                 Text(
                   label,
-                  style: const TextStyle(
-                    fontSize: 11,
+                  style: TextStyle(
+                    fontSize: isPhone(context) ? 12 : 11,
                     fontWeight: FontWeight.w600,
                   ),
                 ),
@@ -1373,8 +1374,7 @@ pw.Widget _buildStopsTable(List<dynamic> stops) {
           
           const SizedBox(height: 12),
           
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          _PhoneWrapRow(
             children: [
               Text(
                 'Current stop: $currentStopIndex of $totalStops',
@@ -1579,6 +1579,12 @@ pw.Widget _buildStopsTable(List<dynamic> stops) {
     );
   }
 
+  /// Phone only: shrink a short text to fit its card instead of clipping.
+  Widget _phoneFit(Widget child) {
+    if (!isPhone(context)) return child;
+    return FittedBox(fit: BoxFit.scaleDown, child: child);
+  }
+
   Widget _buildMetricCard({
     required IconData icon,
     required String label,
@@ -1597,21 +1603,21 @@ pw.Widget _buildStopsTable(List<dynamic> stops) {
         children: [
           Icon(icon, color: color, size: 24),
           const SizedBox(height: 8),
-          Text(
+          _phoneFit(Text(
             value,
             style: TextStyle(
               fontSize: 20,
               fontWeight: FontWeight.bold,
               color: color,
             ),
-          ),
-          Text(
+          )),
+          _phoneFit(Text(
             subtitle,
             style: TextStyle(
-              fontSize: 11,
+              fontSize: isPhone(context) ? 12 : 11,
               color: color,
             ),
-          ),
+          )),
           const SizedBox(height: 4),
           Text(
             label,
@@ -1741,7 +1747,7 @@ pw.Widget _buildStopsTable(List<dynamic> stops) {
                 child: Text(
                   '${stop['sequence']} - ${type.toUpperCase()}',
                   style: TextStyle(
-                    fontSize: 11,
+                    fontSize: isPhone(context) ? 12 : 11,
                     fontWeight: FontWeight.bold,
                     color: type == 'pickup' ? Colors.blue.shade900 : Colors.orange.shade900,
                   ),
@@ -1757,10 +1763,10 @@ pw.Widget _buildStopsTable(List<dynamic> stops) {
                     color: Colors.blue,
                     borderRadius: BorderRadius.circular(4),
                   ),
-                  child: const Text(
+                  child: Text(
                     'CURRENT',
                     style: TextStyle(
-                      fontSize: 10,
+                      fontSize: isPhone(context) ? 12 : 10,
                       fontWeight: FontWeight.bold,
                       color: Colors.white,
                     ),
@@ -1846,7 +1852,7 @@ pw.Widget _buildStopsTable(List<dynamic> stops) {
                         Text(
                           'Estimated',
                           style: TextStyle(
-                            fontSize: 11,
+                            fontSize: isPhone(context) ? 12 : 11,
                             color: Colors.grey.shade600,
                           ),
                         ),
@@ -1868,7 +1874,7 @@ pw.Widget _buildStopsTable(List<dynamic> stops) {
                           Text(
                             'Actual',
                             style: TextStyle(
-                              fontSize: 11,
+                              fontSize: isPhone(context) ? 12 : 11,
                               color: Colors.grey.shade600,
                             ),
                           ),
@@ -1921,7 +1927,7 @@ pw.Widget _buildStopsTable(List<dynamic> stops) {
                                   ? 'Delayed +${timingStatus['minutes']} min'
                                   : 'Early -${timingStatus['minutes']} min',
                           style: TextStyle(
-                            fontSize: 11,
+                            fontSize: isPhone(context) ? 12 : 11,
                             fontWeight: FontWeight.w600,
                             color: timingStatus['type'] == 'on_time'
                                 ? Colors.green
@@ -2032,7 +2038,7 @@ pw.Widget _buildStopsTable(List<dynamic> stops) {
           Text(
             'Submitted: ${_formatDateTime(feedback['submittedAt'])}',
             style: TextStyle(
-              fontSize: 11,
+              fontSize: isPhone(context) ? 12 : 11,
               color: Colors.grey.shade600,
             ),
           ),
@@ -2061,6 +2067,7 @@ pw.Widget _buildStopsTable(List<dynamic> stops) {
       builder: (context) => StatefulBuilder(
         builder: (context, setState) {
           return AlertDialog(
+            scrollable: isPhone(context),
             title: const Row(
               children: [
                 Icon(Icons.warning, color: Colors.red),
@@ -2236,5 +2243,62 @@ pw.Widget _buildStopsTable(List<dynamic> stops) {
     } catch (e) {
       return 'N/A';
     }
+  }
+}
+
+
+// ============================================================================
+// Phone-only layout helpers (private). At 600 px and wider they render exactly
+// the original Row, so desktop and tablet are unchanged.
+// ============================================================================
+
+/// Row on tablet/desktop; on phone the buttons wrap three per line.
+class _PhoneGrid extends StatelessWidget {
+  final List<Widget> children;
+  const _PhoneGrid({required this.children});
+
+  @override
+  Widget build(BuildContext context) {
+    if (!isPhone(context)) return Row(children: children);
+    final items = <Widget>[];
+    for (final c in children) {
+      if (c is Expanded) items.add(c.child);
+    }
+    return LayoutBuilder(builder: (context, constraints) {
+      const gap = 8.0;
+      final itemWidth = (constraints.maxWidth - gap * 2) / 3;
+      return Wrap(
+        spacing: gap,
+        runSpacing: gap,
+        children: [
+          for (final item in items) SizedBox(width: itemWidth, child: item),
+        ],
+      );
+    });
+  }
+}
+
+/// Row with space-between on tablet/desktop; wraps onto a second line on phone.
+class _PhoneWrapRow extends StatelessWidget {
+  final List<Widget> children;
+  const _PhoneWrapRow({required this.children});
+
+  @override
+  Widget build(BuildContext context) {
+    if (!isPhone(context)) {
+      return Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: children,
+      );
+    }
+    return SizedBox(
+      width: double.infinity,
+      child: Wrap(
+        alignment: WrapAlignment.spaceBetween,
+        spacing: 12,
+        runSpacing: 4,
+        children: children,
+      ),
+    );
   }
 }

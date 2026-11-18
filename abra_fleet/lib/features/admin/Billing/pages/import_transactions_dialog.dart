@@ -14,6 +14,7 @@ import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:intl/intl.dart';
 import 'package:universal_html/html.dart' as html;
+import 'package:abra_fleet/core/widgets/responsive/responsive.dart';
 
 class ImportTransactionsDialog extends StatefulWidget {
   const ImportTransactionsDialog({Key? key}) : super(key: key);
@@ -73,12 +74,18 @@ class _ImportTransactionsDialogState extends State<ImportTransactionsDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final phone = isPhone(context);
     return Dialog(
+      insetPadding: phone
+          ? const EdgeInsets.symmetric(horizontal: 8, vertical: 16)
+          : const EdgeInsets.symmetric(horizontal: 40, vertical: 24),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       child: Container(
-        width: 900,
-        height: 700,
-        padding: const EdgeInsets.all(24),
+        width: phone ? double.infinity : 900,
+        height: phone
+            ? MediaQuery.of(context).size.height - 32
+            : 700,
+        padding: EdgeInsets.all(phone ? 12 : 24),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -449,49 +456,64 @@ class _ImportTransactionsDialogState extends State<ImportTransactionsDialog> {
   }
 
   Widget _buildColumnMappingRow(String label, String field) {
+    final phone = isPhone(context);
+    final labelText = Text(
+      label,
+      style: const TextStyle(
+        fontSize: 13,
+        fontWeight: FontWeight.w600,
+      ),
+    );
+    final dropdown = DropdownButtonFormField<String>(
+      isExpanded: phone,
+      value: _columnMapping[field],
+      decoration: InputDecoration(
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(8),
+        ),
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 12,
+          vertical: 8,
+        ),
+      ),
+      hint: const Text('Select column'),
+      items: [
+        const DropdownMenuItem<String>(
+          value: null,
+          child: Text('-- Not Mapped --'),
+        ),
+        ..._csvHeaders.map((header) {
+          return DropdownMenuItem<String>(
+            value: header,
+            child: Text(header, overflow: phone ? TextOverflow.ellipsis : null),
+          );
+        }).toList(),
+      ],
+      onChanged: (value) {
+        setState(() {
+          _columnMapping[field] = value;
+        });
+      },
+    );
+    if (phone) {
+      // Phone: label above the dropdown so the dropdown gets the full width.
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          labelText,
+          const SizedBox(height: 6),
+          dropdown,
+        ],
+      );
+    }
     return Row(
       children: [
         SizedBox(
           width: 150,
-          child: Text(
-            label,
-            style: const TextStyle(
-              fontSize: 13,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
+          child: labelText,
         ),
         Expanded(
-          child: DropdownButtonFormField<String>(
-            value: _columnMapping[field],
-            decoration: InputDecoration(
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(8),
-              ),
-              contentPadding: const EdgeInsets.symmetric(
-                horizontal: 12,
-                vertical: 8,
-              ),
-            ),
-            hint: const Text('Select column'),
-            items: [
-              const DropdownMenuItem<String>(
-                value: null,
-                child: Text('-- Not Mapped --'),
-              ),
-              ..._csvHeaders.map((header) {
-                return DropdownMenuItem<String>(
-                  value: header,
-                  child: Text(header),
-                );
-              }).toList(),
-            ],
-            onChanged: (value) {
-              setState(() {
-                _columnMapping[field] = value;
-              });
-            },
-          ),
+          child: dropdown,
         ),
       ],
     );

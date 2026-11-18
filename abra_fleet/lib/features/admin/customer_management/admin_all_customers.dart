@@ -246,6 +246,7 @@ class _AdminAllCustomersPageState extends State<AdminAllCustomersPage> {
                       _buildFilterSection(customerProvider),
                       const SizedBox(height: 24),
                       _buildCustomerDirectory(filteredCustomers),
+                      const SizedBox(height: 24),
                     ],
                   ),
                 ),
@@ -1787,7 +1788,6 @@ class _AdminAllCustomersPageState extends State<AdminAllCustomersPage> {
                 ),
               )
             : Container(
-                height: 560,
                 decoration: const BoxDecoration(
                   color: Colors.white,
                   borderRadius: BorderRadius.only(
@@ -1814,25 +1814,11 @@ class _AdminAllCustomersPageState extends State<AdminAllCustomersPage> {
                     trackColor: const Color(0xFFE2E8F0),
                     trackRadius: const Radius.circular(5),
                     scrollbarOrientation: ScrollbarOrientation.bottom,
-                    child: RawScrollbar(
-                      controller: _verticalScrollController,
-                      thumbVisibility: true,
-                      trackVisibility: true,
-                      thickness: 10,
-                      radius: const Radius.circular(5),
-                      thumbColor: const Color(0xFF0F2557),
-                      trackColor: const Color(0xFFE2E8F0),
-                      trackRadius: const Radius.circular(5),
-                      scrollbarOrientation: ScrollbarOrientation.right,
-                      child: SingleChildScrollView(
-                        controller: _horizontalScrollController,
-                        scrollDirection: Axis.horizontal,
-                        physics: const BouncingScrollPhysics(),
-                        child: SingleChildScrollView(
-                          controller: _verticalScrollController,
-                          scrollDirection: Axis.vertical,
-                          physics: const BouncingScrollPhysics(),
-                          child: ConstrainedBox(
+                    child: SingleChildScrollView(
+                      controller: _horizontalScrollController,
+                      scrollDirection: Axis.horizontal,
+                      physics: const BouncingScrollPhysics(),
+                      child: ConstrainedBox(
                             constraints: BoxConstraints(
                               minWidth: MediaQuery.of(context).size.width < 600
                                   ? 900
@@ -2189,12 +2175,10 @@ class _AdminAllCustomersPageState extends State<AdminAllCustomersPage> {
                         ),      // DataTable
                       ),        // MouseRegion
                     ),          // ConstrainedBox
-                  ),              // SingleChildScrollView (vertical)
-                ),                  // SingleChildScrollView (horizontal)
-              ),                      // RawScrollbar (vertical)
-            ),                          // RawScrollbar (horizontal)
-          ),                              // ScrollConfiguration
-        ),                                  // Container
+                  ),                  // SingleChildScrollView (horizontal)
+              ),                          // RawScrollbar (horizontal)
+            ),                              // ScrollConfiguration
+          ),                                  // Container
 
           if (totalItems > 0)
             _buildPaginationBar(

@@ -17,6 +17,7 @@ import 'package:abra_fleet/app/utils/file_download_helper.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:http/http.dart' as http;
+import 'package:abra_fleet/core/widgets/responsive/responsive.dart';
 
 // --- UI Constants ---
 const Color kPrimaryColor = Color(0xFF0D47A1);
@@ -412,21 +413,26 @@ class _ReportsDriverPageState extends State<ReportsDriverPage> {
           _buildLogoutButton(context),
         ],
       ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            _buildFilteredTripsSection(),
-            const SizedBox(height: 16),
-            _buildPerformanceSummaryCard(),
-            const SizedBox(height: 16),
-            _buildDailyAnalyticsCard(),
-            const SizedBox(height: 16),
-            _buildTripReportsCard(),
-            const SizedBox(height: 16),
-            _buildGeneralReportCard(),
-          ],
+      body: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 1000),
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(16.0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                _buildFilteredTripsSection(),
+                const SizedBox(height: 16),
+                _buildPerformanceSummaryCard(),
+                const SizedBox(height: 16),
+                _buildDailyAnalyticsCard(),
+                const SizedBox(height: 16),
+                _buildTripReportsCard(),
+                const SizedBox(height: 16),
+                _buildGeneralReportCard(),
+              ],
+            ),
+          ),
         ),
       ),
     );
@@ -573,12 +579,14 @@ class _ReportsDriverPageState extends State<ReportsDriverPage> {
                         ),
                       ],
                     ),
-                    Text(
-                      '${summary.totalDistance} KM',
-                      style: const TextStyle(
-                          fontSize: 14,
-                          color: kPrimaryColor,
-                          fontWeight: FontWeight.bold),
+                    Flexible(
+                      child: Text(
+                        '${summary.totalDistance} KM',
+                        style: const TextStyle(
+                            fontSize: 14,
+                            color: kPrimaryColor,
+                            fontWeight: FontWeight.bold),
+                      ),
                     ),
                   ],
                 ),
@@ -622,7 +630,7 @@ class _ReportsDriverPageState extends State<ReportsDriverPage> {
                   foregroundColor: Colors.white,
                   padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                  minimumSize: const Size(0, 32),
+                  minimumSize: Size(0, isPhone(context) ? 44 : 32),
                 ),
               ),
             ],
@@ -649,7 +657,7 @@ class _ReportsDriverPageState extends State<ReportsDriverPage> {
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15.0)),
       color: kCardBackgroundColor,
       child: Padding(
-        padding: const EdgeInsets.all(20.0),
+        padding: EdgeInsets.all(isPhone(context) ? 16.0 : 20.0),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -657,10 +665,12 @@ class _ReportsDriverPageState extends State<ReportsDriverPage> {
               children: [
                 if (icon != null) Text(icon, style: const TextStyle(fontSize: 20)),
                 if (icon != null) const SizedBox(width: 8),
-                Text(
-                  title,
-                  style: const TextStyle(
-                      fontSize: 18.0, fontWeight: FontWeight.bold, color: kPrimaryTextColor),
+                Flexible(
+                  child: Text(
+                    title,
+                    style: const TextStyle(
+                        fontSize: 18.0, fontWeight: FontWeight.bold, color: kPrimaryTextColor),
+                  ),
                 ),
               ],
             ),
@@ -697,7 +707,7 @@ class _ReportsDriverPageState extends State<ReportsDriverPage> {
             physics: const NeverScrollableScrollPhysics(),
             crossAxisSpacing: 12,
             mainAxisSpacing: 12,
-            childAspectRatio: 1.4,
+            childAspectRatio: isPhone(context) ? 1.1 : 1.4,
             padding: const EdgeInsets.symmetric(vertical: 8),
             children: [
               _buildStatItem(
@@ -906,12 +916,14 @@ class _ReportsDriverPageState extends State<ReportsDriverPage> {
               Icon(icon, size: 18, color: kPrimaryColor),
               const SizedBox(width: 8),
             ],
-            Text(
-              label,
-              style: const TextStyle(
-                fontWeight: FontWeight.w600,
-                color: kPrimaryTextColor,
-                fontSize: 14,
+            Flexible(
+              child: Text(
+                label,
+                style: const TextStyle(
+                  fontWeight: FontWeight.w600,
+                  color: kPrimaryTextColor,
+                  fontSize: 14,
+                ),
               ),
             ),
           ],
@@ -1089,6 +1101,7 @@ class _TripExpansionTile extends StatelessWidget {
                       child: Text(
                         'Pickup: ${trip.pickupLocation ?? "N/A"}',
                         style: const TextStyle(fontSize: 12),
+                        maxLines: isPhone(context) ? 3 : 1,
                         overflow: TextOverflow.ellipsis,
                       ),
                     ),
@@ -1103,6 +1116,7 @@ class _TripExpansionTile extends StatelessWidget {
                       child: Text(
                         'Drop: ${trip.dropLocation ?? "Office"}',
                         style: const TextStyle(fontSize: 12),
+                        maxLines: isPhone(context) ? 3 : 1,
                         overflow: TextOverflow.ellipsis,
                       ),
                     ),

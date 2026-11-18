@@ -5,6 +5,7 @@ import 'dart:convert';
 import 'package:abra_fleet/app/config/api_config.dart';
 import 'package:http/http.dart' as http;
 import '../admin/vehicle_admin_management/trip_operations/route_selection_page.dart';
+import 'package:abra_fleet/core/widgets/responsive/responsive.dart';
 
 class StartClientTripPage extends StatefulWidget {
   const StartClientTripPage({Key? key}) : super(key: key);
@@ -554,9 +555,12 @@ class _StartClientTripPageState extends State<StartClientTripPage> {
         ),
         centerTitle: true,
       ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(20.0),
-        child: Column(
+      body: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 800),
+          child: SingleChildScrollView(
+            padding: EdgeInsets.all(isPhone(context) ? 14.0 : 20.0),
+            child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             _buildSectionHeader(
@@ -602,6 +606,8 @@ class _StartClientTripPageState extends State<StartClientTripPage> {
             _buildSubmitButton(),
             const SizedBox(height: 20),
           ],
+        ),
+      ),
         ),
       ),
     );
@@ -661,7 +667,7 @@ class _StartClientTripPageState extends State<StartClientTripPage> {
         ],
       ),
       child: Padding(
-        padding: const EdgeInsets.all(20.0),
+        padding: EdgeInsets.all(isPhone(context) ? 16.0 : 20.0),
         child: Column(
           children: [
             _buildTextField(
@@ -767,7 +773,7 @@ class _StartClientTripPageState extends State<StartClientTripPage> {
           ],
         ),
         child: Padding(
-          padding: const EdgeInsets.all(20.0),
+          padding: EdgeInsets.all(isPhone(context) ? 16.0 : 20.0),
           child: Column(
             children: [
               Row(
@@ -956,48 +962,48 @@ class _StartClientTripPageState extends State<StartClientTripPage> {
     VoidCallback onSelect,
     bool isRequired,
   ) {
-    return Row(
-      children: [
-        Container(
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final iconBox = Container(
           padding: const EdgeInsets.all(10),
           decoration: BoxDecoration(
             color: color.shade100,
             borderRadius: BorderRadius.circular(10),
           ),
           child: Icon(icon, color: color.shade700, size: 22),
-        ),
-        const SizedBox(width: 14),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                label,
-                style: const TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w600,
-                  color: Color(0xFF424242),
-                ),
+        );
+
+        final textBox = Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              label,
+              style: const TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+                color: Color(0xFF424242),
               ),
-              const SizedBox(height: 4),
-              Text(
-                selectedTime != null
-                    ? '${selectedTime.day}/${selectedTime.month}/${selectedTime.year} at ${selectedTime.hour.toString().padLeft(2, '0')}:${selectedTime.minute.toString().padLeft(2, '0')}'
-                    : isRequired
-                        ? 'Not selected'
-                        : 'Will be calculated',
-                style: TextStyle(
-                  fontSize: 13,
-                  color: Colors.grey.shade600,
-                ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              selectedTime != null
+                  ? '${selectedTime.day}/${selectedTime.month}/${selectedTime.year} at ${selectedTime.hour.toString().padLeft(2, '0')}:${selectedTime.minute.toString().padLeft(2, '0')}'
+                  : isRequired
+                      ? 'Not selected'
+                      : 'Will be calculated',
+              style: TextStyle(
+                fontSize: 13,
+                color: Colors.grey.shade600,
               ),
-            ],
-          ),
-        ),
-        TextButton(
+            ),
+          ],
+        );
+
+        final btn = TextButton(
           onPressed: onSelect,
           style: TextButton.styleFrom(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            minimumSize: isPhone(context) ? const Size(0, 44) : null,
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(8),
             ),
@@ -1009,8 +1015,34 @@ class _StartClientTripPageState extends State<StartClientTripPage> {
               fontWeight: FontWeight.w600,
             ),
           ),
-        ),
-      ],
+        );
+
+        if (constraints.maxWidth < 360) {
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  iconBox,
+                  const SizedBox(width: 14),
+                  Expanded(child: textBox),
+                ],
+              ),
+              const SizedBox(height: 8),
+              Align(alignment: Alignment.centerRight, child: btn),
+            ],
+          );
+        }
+
+        return Row(
+          children: [
+            iconBox,
+            const SizedBox(width: 14),
+            Expanded(child: textBox),
+            btn,
+          ],
+        );
+      },
     );
   }
 
@@ -1028,7 +1060,7 @@ class _StartClientTripPageState extends State<StartClientTripPage> {
         ],
       ),
       child: Padding(
-        padding: const EdgeInsets.all(20.0),
+        padding: EdgeInsets.all(isPhone(context) ? 16.0 : 20.0),
         child: TextField(
           controller: _notesController,
           maxLines: 4,
@@ -1090,26 +1122,39 @@ class _StartClientTripPageState extends State<StartClientTripPage> {
             ],
           ),
           const SizedBox(height: 18),
-          Row(
-            children: [
-              Expanded(
-                child: _buildSummaryItem(
-                  Icons.straighten,
-                  'Distance',
-                  '${distance.toStringAsFixed(1)} km',
-                  Colors.blue,
-                ),
-              ),
-              const SizedBox(width: 14),
-              Expanded(
-                child: _buildSummaryItem(
-                  Icons.access_time,
-                  'Est. Time',
-                  '$estimatedTime min',
-                  Colors.orange,
-                ),
-              ),
-            ],
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final distCard = _buildSummaryItem(
+                Icons.straighten,
+                'Distance',
+                '${distance.toStringAsFixed(1)} km',
+                Colors.blue,
+              );
+              final timeCard = _buildSummaryItem(
+                Icons.access_time,
+                'Est. Time',
+                '$estimatedTime min',
+                Colors.orange,
+              );
+
+              if (constraints.maxWidth < 400) {
+                return Column(
+                  children: [
+                    distCard,
+                    const SizedBox(height: 10),
+                    timeCard,
+                  ],
+                );
+              }
+
+              return Row(
+                children: [
+                  Expanded(child: distCard),
+                  const SizedBox(width: 14),
+                  Expanded(child: timeCard),
+                ],
+              );
+            },
           ),
         ],
       ),
@@ -1136,7 +1181,7 @@ class _StartClientTripPageState extends State<StartClientTripPage> {
           Text(
             label,
             style: TextStyle(
-              fontSize: 11,
+              fontSize: isPhone(context) ? 12 : 11,
               color: Colors.grey.shade600,
               fontWeight: FontWeight.w600,
             ),

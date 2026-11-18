@@ -20,6 +20,7 @@ import 'package:abra_fleet/features/admin/widgets/country_state_city_filter.dart
 import 'package:abra_fleet/core/utils/export_helper.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:abra_fleet/core/widgets/responsive/responsive.dart';
 
 class ClientReportsAnalyticsEnhanced extends StatefulWidget {
   const ClientReportsAnalyticsEnhanced({Key? key}) : super(key: key);
@@ -689,7 +690,7 @@ class _ClientReportsAnalyticsEnhancedState
                 borderRadius: BorderRadius.circular(16),
                 child: AnimatedContainer(
                   duration: const Duration(milliseconds: 200),
-                  width: 140,
+                  width: isPhone(context) ? 112 : 140,
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
                     color: isSelected ? color : Colors.white,
@@ -759,6 +760,21 @@ class _ClientReportsAnalyticsEnhancedState
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           // ── ACTION BUTTONS ──────────────────────────────────────────────────
+          // Phone: wrapping row of 44 px high buttons (nothing is squeezed/clipped).
+          if (isPhone(context))
+            Wrap(
+              spacing: 10,
+              runSpacing: 10,
+              children: [
+                _phoneActionButton('PDF', Icons.picture_as_pdf,
+                    const Color(0xFFD32F2F), _generatePDF),
+                _phoneActionButton('Excel', Icons.table_chart,
+                    const Color(0xFF2E7D32), _exportToExcel),
+                _phoneActionButton('WhatsApp', Icons.share,
+                    const Color(0xFF25D366), _shareViaWhatsApp),
+              ],
+            )
+          else
           Row(
             children: [
               Expanded(
@@ -915,6 +931,25 @@ class _ClientReportsAnalyticsEnhancedState
     );
   }
 
+  // Phone-only action button (same callbacks / colours as the desktop row).
+  Widget _phoneActionButton(
+      String label, IconData icon, Color color, VoidCallback onPressed) {
+    return ElevatedButton.icon(
+      onPressed: onPressed,
+      icon: Icon(icon, size: 18),
+      label: Text(label,
+          style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
+      style: ElevatedButton.styleFrom(
+        backgroundColor: color,
+        foregroundColor: Colors.white,
+        minimumSize: const Size(96, 44),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+        elevation: 2,
+      ),
+    );
+  }
+
   // =========================================================
   // CHECKBOX FILTER WIDGET
   // =========================================================
@@ -930,8 +965,8 @@ class _ClientReportsAnalyticsEnhancedState
         // ✅ NO _loadAllReportsData() - display filter only
       },
       child: Container(
-        padding:
-            const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        padding: EdgeInsets.symmetric(
+            horizontal: 10, vertical: isPhone(context) ? 12 : 6),
         decoration: BoxDecoration(
           color: _selectedReportTypes[key] == true
               ? const Color(0xFF1565C0).withOpacity(0.1)
@@ -986,12 +1021,14 @@ class _ClientReportsAnalyticsEnhancedState
       children: [
         Icon(icon, color: Colors.blue, size: 28),
         const SizedBox(width: 12),
-        Text(
-          title,
-          style: const TextStyle(
-            fontSize: 22,
-            fontWeight: FontWeight.bold,
-            color: Colors.black87,
+        Flexible(
+          child: Text(
+            title,
+            style: const TextStyle(
+              fontSize: 22,
+              fontWeight: FontWeight.bold,
+              color: Colors.black87,
+            ),
           ),
         ),
       ],
@@ -1053,6 +1090,11 @@ class _ClientReportsAnalyticsEnhancedState
             _buildTripOverview(),
             const SizedBox(height: 16),
             // ✅ ADD: Charts Row (Pie + Bar) - EXACT COPY from client_trip_dashboard_part1.dart
+            if (isPhone(context)) ...[
+              _buildTripStatusPieChart(),
+              const SizedBox(height: 12),
+              _buildFleetStatisticsBarChart(),
+            ] else
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -1109,6 +1151,19 @@ class _ClientReportsAnalyticsEnhancedState
               children: [
                 Icon(icon, color: color, size: 22),
                 const Spacer(),
+                if (isPhone(context))
+                  Flexible(
+                    child: FitText(
+                      value,
+                      alignment: Alignment.centerRight,
+                      style: TextStyle(
+                        fontSize: 22,
+                        fontWeight: FontWeight.bold,
+                        color: color,
+                      ),
+                    ),
+                  )
+                else
                 Text(
                   value,
                   style: TextStyle(
@@ -1130,6 +1185,44 @@ class _ClientReportsAnalyticsEnhancedState
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  // Summary cards: horizontal strip on tablet/desktop (as before),
+  // 2-column grid on phones so every card is visible without sideways scrolling.
+  Widget _overviewCards(List<Widget> cards) {
+    if (isPhone(context)) {
+      final rows = <Widget>[];
+      for (var i = 0; i < cards.length; i += 2) {
+        if (i > 0) rows.add(const SizedBox(height: 8));
+        // each Row needs its own IntrinsicHeight: stretch only works with a bounded height
+        rows.add(IntrinsicHeight(
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Expanded(child: cards[i]),
+              const SizedBox(width: 8),
+              Expanded(
+                  child: i + 1 < cards.length
+                      ? cards[i + 1]
+                      : const SizedBox.shrink()),
+            ],
+          ),
+        ));
+      }
+      return Column(children: rows);
+    }
+    return SizedBox(
+      height: 120,
+      child: ListView(
+        scrollDirection: Axis.horizontal,
+        children: [
+          for (var i = 0; i < cards.length; i++) ...[
+            if (i > 0) const SizedBox(width: 12),
+            SizedBox(width: 160, child: cards[i]),
+          ],
+        ],
       ),
     );
   }
@@ -1164,37 +1257,16 @@ class _ClientReportsAnalyticsEnhancedState
             style:
                 TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
         const SizedBox(height: 16),
-        SizedBox(
-          height: 120,
-          child: ListView(
-            scrollDirection: Axis.horizontal,
-            children: [
-              SizedBox(
-                width: 160,
-                child: _statCard('Total', '${_employees.length}',
+        _overviewCards([
+          _statCard('Total', '${_employees.length}',
                     Icons.people, const Color(0xFF1565C0)),
-              ),
-              const SizedBox(width: 12),
-              SizedBox(
-                width: 160,
-                child: _statCard('Active', '$_activeEmployees',
+          _statCard('Active', '$_activeEmployees',
                     Icons.person, Colors.green),
-              ),
-              const SizedBox(width: 12),
-              SizedBox(
-                width: 160,
-                child: _statCard('Inactive', '$_inactiveEmployees',
+          _statCard('Inactive', '$_inactiveEmployees',
                     Icons.person_off, Colors.orange),
-              ),
-              const SizedBox(width: 12),
-              SizedBox(
-                width: 160,
-                child: _statCard('Departments',
+          _statCard('Departments',
                     '${_getDepartmentCount()}', Icons.business, Colors.purple),
-              ),
-            ],
-          ),
-        ),
+        ]),
       ],
     );
   }
@@ -1211,37 +1283,16 @@ class _ClientReportsAnalyticsEnhancedState
             style:
                 TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
         const SizedBox(height: 16),
-        SizedBox(
-          height: 120,
-          child: ListView(
-            scrollDirection: Axis.horizontal,
-            children: [
-              SizedBox(
-                width: 160,
-                child: _statCard('Pending',
+        _overviewCards([
+          _statCard('Pending',
                     '${_pendingRosters.length}', Icons.pending_actions, Colors.orange),
-              ),
-              const SizedBox(width: 12),
-              SizedBox(
-                width: 160,
-                child: _statCard('Assigned', '${_rosterStats.assigned}',
+          _statCard('Assigned', '${_rosterStats.assigned}',
                     Icons.assignment_turned_in, Colors.cyan),
-              ),
-              const SizedBox(width: 12),
-              SizedBox(
-                width: 160,
-                child: _statCard('In Progress',
+          _statCard('In Progress',
                     '${_rosterStats.inProgress}', Icons.pending, Colors.blue),
-              ),
-              const SizedBox(width: 12),
-              SizedBox(
-                width: 160,
-                child: _statCard('Completed',
+          _statCard('Completed',
                     '${_rosterStats.completed}', Icons.task_alt, Colors.green),
-              ),
-            ],
-          ),
-        ),
+        ]),
         const SizedBox(height: 16),
         _buildRosterStatusPieChart(),
       ],
@@ -1441,37 +1492,16 @@ class _ClientReportsAnalyticsEnhancedState
             style:
                 TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
         const SizedBox(height: 16),
-        SizedBox(
-          height: 120,
-          child: ListView(
-            scrollDirection: Axis.horizontal,
-            children: [
-              SizedBox(
-                width: 160,
-                child: _statCard('Total Raised', '$_totalRaisedSOS',
+        _overviewCards([
+          _statCard('Total Raised', '$_totalRaisedSOS',
                     Icons.emergency, const Color(0xFF1565C0)),
-              ),
-              const SizedBox(width: 12),
-              SizedBox(
-                width: 160,
-                child: _statCard('Active', '${_activeSOS.length}',
+          _statCard('Active', '${_activeSOS.length}',
                     Icons.warning_amber, Colors.red),
-              ),
-              const SizedBox(width: 12),
-              SizedBox(
-                width: 160,
-                child: _statCard('Resolved', '${_resolvedSOS.length}',
+          _statCard('Resolved', '${_resolvedSOS.length}',
                     Icons.check_circle, Colors.green),
-              ),
-              const SizedBox(width: 12),
-              SizedBox(
-                width: 160,
-                child: _statCard('Resolution Rate',
+          _statCard('Resolution Rate',
                     '${_calculateResolutionRate()}%', Icons.trending_up, Colors.teal),
-              ),
-            ],
-          ),
-        ),
+        ]),
       ],
     );
   }
@@ -1568,7 +1598,7 @@ class _ClientReportsAnalyticsEnhancedState
               style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFF1A237E))),
         ),
         LayoutBuilder(builder: (context, constraints) {
-          final crossAxisCount = constraints.maxWidth > 600 ? 5 : 3;
+          final crossAxisCount = isPhone(context) ? 2 : (constraints.maxWidth > 600 ? 5 : 3);
           return GridView.count(
             shrinkWrap: true,
             physics: const NeverScrollableScrollPhysics(),
@@ -1612,11 +1642,16 @@ class _ClientReportsAnalyticsEnhancedState
         children: [
           Icon(icon, size: 28, color: color),
           const SizedBox(height: 6),
+          if (isPhone(context))
+            FitText('$count',
+                alignment: Alignment.center,
+                style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: color))
+          else
           Text('$count',
               style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: color)),
           const SizedBox(height: 2),
           Text(title,
-              style: TextStyle(fontSize: 11, fontWeight: FontWeight.w500,
+              style: TextStyle(fontSize: isPhone(context) ? 12 : 11, fontWeight: FontWeight.w500,
                   color: color.withOpacity(0.8)),
               textAlign: TextAlign.center),
         ],
@@ -1648,7 +1683,9 @@ class _ClientReportsAnalyticsEnhancedState
           const Text('Trip Distribution', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Color(0xFF1A237E))),
           const SizedBox(height: 12),
           SizedBox(
-            height: 160,
+            height: isPhone(context)
+                ? (MediaQuery.of(context).size.width * 0.5).clamp(160.0, 220.0)
+                : 160,
             child: total == 0
                 ? const Center(child: Text('No data', style: TextStyle(color: Colors.grey)))
                 : CustomPaint(
@@ -1688,7 +1725,7 @@ class _ClientReportsAnalyticsEnhancedState
     return Row(mainAxisSize: MainAxisSize.min, children: [
       Container(width: 10, height: 10, decoration: BoxDecoration(color: color, shape: BoxShape.circle)),
       const SizedBox(width: 4),
-      Text('$label ($count)', style: TextStyle(fontSize: 10, color: Colors.grey.shade700)),
+      Text('$label ($count)', style: TextStyle(fontSize: isPhone(context) ? 12 : 10, color: Colors.grey.shade700)),
     ]);
   }
 
@@ -1785,9 +1822,11 @@ class _ClientReportsAnalyticsEnhancedState
                   ),
                 ),
                 const SizedBox(width: 10),
-                Text('$title (${trips.length})',
-                    style: const TextStyle(
-                        fontSize: 18, fontWeight: FontWeight.bold)),
+                Flexible(
+                  child: Text('$title (${trips.length})',
+                      style: const TextStyle(
+                          fontSize: 18, fontWeight: FontWeight.bold)),
+                ),
               ],
             ),
             const SizedBox(height: 12),
@@ -1857,40 +1896,19 @@ class _ClientReportsAnalyticsEnhancedState
             style:
                 TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
         const SizedBox(height: 16),
-        SizedBox(
-          height: 120,
-          child: ListView(
-            scrollDirection: Axis.horizontal,
-            children: [
-              SizedBox(
-                width: 160,
-                child: _statCard('Total', '$_totalFeedbacks',
+        _overviewCards([
+          _statCard('Total', '$_totalFeedbacks',
                     Icons.feedback, const Color(0xFF1565C0)),
-              ),
-              const SizedBox(width: 12),
-              SizedBox(
-                width: 160,
-                child: _statCard('Pending', '$_pendingFeedbacks',
+          _statCard('Pending', '$_pendingFeedbacks',
                     Icons.pending, Colors.orange),
-              ),
-              const SizedBox(width: 12),
-              SizedBox(
-                width: 160,
-                child: _statCard('Resolved', '$_resolvedFeedbacks',
+          _statCard('Resolved', '$_resolvedFeedbacks',
                     Icons.check_circle, Colors.green),
-              ),
-              const SizedBox(width: 12),
-              SizedBox(
-                width: 160,
-                child: _statCard(
+          _statCard(
                     'Response Rate',
                     '${_calculateFeedbackResponseRate()}%',
                     Icons.trending_up,
                     Colors.teal),
-              ),
-            ],
-          ),
-        ),
+        ]),
 
         // ── Top Drivers by Feedback ─────────────────────────────────────────
         if (_topDriversByFeedback.isNotEmpty) ...[
@@ -1909,10 +1927,12 @@ class _ClientReportsAnalyticsEnhancedState
                       const Icon(Icons.emoji_events,
                           color: Color(0xFFF57C00), size: 22),
                       const SizedBox(width: 8),
-                      const Text(
-                        'Top Drivers by Feedback',
-                        style: TextStyle(
-                            fontSize: 16, fontWeight: FontWeight.bold),
+                      const Flexible(
+                        child: Text(
+                          'Top Drivers by Feedback',
+                          style: TextStyle(
+                              fontSize: 16, fontWeight: FontWeight.bold),
+                        ),
                       ),
                       const Spacer(),
                       Text(
@@ -1931,16 +1951,16 @@ class _ClientReportsAnalyticsEnhancedState
                       color: const Color(0xFF1565C0),
                       borderRadius: BorderRadius.circular(8),
                     ),
-                    child: const Row(
+                    child: Row(
                       children: [
-                        SizedBox(
+                        const SizedBox(
                             width: 30,
                             child: Text('#',
                                 style: TextStyle(
                                     color: Colors.white,
                                     fontWeight: FontWeight.bold,
                                     fontSize: 13))),
-                        Expanded(
+                        const Expanded(
                           flex: 3,
                           child: Text('Driver',
                               style: TextStyle(
@@ -1948,7 +1968,7 @@ class _ClientReportsAnalyticsEnhancedState
                                   fontWeight: FontWeight.bold,
                                   fontSize: 13)),
                         ),
-                        Expanded(
+                        const Expanded(
                           flex: 2,
                           child: Text('Vehicle',
                               style: TextStyle(
@@ -1957,8 +1977,8 @@ class _ClientReportsAnalyticsEnhancedState
                                   fontSize: 13)),
                         ),
                         SizedBox(
-                          width: 70,
-                          child: Text('Feedbacks',
+                          width: isPhone(context) ? 78 : 70,
+                          child: const Text('Feedbacks',
                               textAlign: TextAlign.center,
                               style: TextStyle(
                                   color: Colors.white,
@@ -2024,7 +2044,7 @@ class _ClientReportsAnalyticsEnhancedState
                             ),
                           ),
                           SizedBox(
-                            width: 70,
+                            width: isPhone(context) ? 78 : 70,
                             child: Center(
                               child: Container(
                                 padding: const EdgeInsets.symmetric(

@@ -130,8 +130,11 @@ class _MyLeaveRequestsScreenState extends State<MyLeaveRequestsScreen> {
           ),
         ],
       ),
-      body: Column(
-        children: [
+      body: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 900),
+          child: Column(
+            children: [
           // Status Filter
           Container(
             padding: const EdgeInsets.all(16),
@@ -248,6 +251,8 @@ class _MyLeaveRequestsScreenState extends State<MyLeaveRequestsScreen> {
             ),
           ),
         ],
+      ),
+        ),
       ),
     );
   }

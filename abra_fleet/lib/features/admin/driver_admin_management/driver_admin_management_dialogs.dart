@@ -178,17 +178,17 @@ class _AddDriverDialogState extends State<AddDriverDialog> {
 
   }
 
-  Future<void> _selectDate(TextEditingController controller) async {
+  Future<void> _selectDate(TextEditingController controller, {DateTime? initial, DateTime? last}) async {
 
     final DateTime? picked = await showDatePicker(
 
       context: context,
 
-      initialDate: DateTime.now(),
+      initialDate: initial ?? DateTime.now(),
 
       firstDate: DateTime(1950),
 
-      lastDate: DateTime(2100),
+      lastDate: last ?? DateTime(2100),
 
     );
 
@@ -234,7 +234,7 @@ class _AddDriverDialogState extends State<AddDriverDialog> {
 
                     ),
 
-                    validator: (v) => v?.isEmpty ?? true ? 'Required' : null,
+                    validator: (v) => v?.trim().isEmpty ?? true ? 'Required' : null,
 
                   ),
 
@@ -250,13 +250,13 @@ class _AddDriverDialogState extends State<AddDriverDialog> {
 
                     decoration: const InputDecoration(
 
-                      labelText: 'Last Name *',
+                      labelText: 'Last Name (optional)',
 
                       border: OutlineInputBorder(),
 
                     ),
 
-                    validator: (v) => v?.isEmpty ?? true ? 'Required' : null,
+                    validator: null,
 
                   ),
 
@@ -342,21 +342,20 @@ class _AddDriverDialogState extends State<AddDriverDialog> {
 
                     controller: _dateOfBirthController,
 
-                    decoration: const InputDecoration(
+                    decoration: InputDecoration(
 
-                      labelText: 'Date of Birth *',
+                      labelText: 'Date of Birth (optional)',
 
                       border: OutlineInputBorder(),
 
-                      suffixIcon: Icon(Icons.calendar_today),
+                      hintText: 'YYYY-MM-DD',
+ suffixIcon: IconButton(icon: const Icon(Icons.calendar_today), onPressed: () => _selectDate(_dateOfBirthController, initial: DateTime(1990, 1, 1), last: DateTime.now())),
 
                     ),
 
-                    readOnly: true,
-
-                    onTap: () => _selectDate(_dateOfBirthController),
-
-                    validator: (v) => v?.isEmpty ?? true ? 'Required' : null,
+                    keyboardType: TextInputType.datetime,
+ inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[0-9-]'))],
+ validator: (v) { if (v == null || v.isEmpty) return null; final ok = RegExp(r'^\d{4}-\d{2}-\d{2}$').hasMatch(v) && DateTime.tryParse(v) != null; return ok ? null : 'Use YYYY-MM-DD'; },
 
                   ),
 
@@ -372,7 +371,7 @@ class _AddDriverDialogState extends State<AddDriverDialog> {
 
                     decoration: const InputDecoration(
 
-                      labelText: 'Gender *',
+                      labelText: 'Gender (optional)',
 
                       border: OutlineInputBorder(),
 
@@ -442,13 +441,13 @@ class _AddDriverDialogState extends State<AddDriverDialog> {
 
               decoration: const InputDecoration(
 
-                labelText: 'Street Address *',
+                labelText: 'Street Address (optional)',
 
                 border: OutlineInputBorder(),
 
               ),
 
-              validator: (v) => v?.isEmpty ?? true ? 'Required' : null,
+              validator: null,
 
             ),
 
@@ -466,13 +465,13 @@ class _AddDriverDialogState extends State<AddDriverDialog> {
 
                     decoration: const InputDecoration(
 
-                      labelText: 'City *',
+                      labelText: 'City (optional)',
 
                       border: OutlineInputBorder(),
 
                     ),
 
-                    validator: (v) => v?.isEmpty ?? true ? 'Required' : null,
+                    validator: null,
 
                   ),
 
@@ -488,13 +487,13 @@ class _AddDriverDialogState extends State<AddDriverDialog> {
 
                     decoration: const InputDecoration(
 
-                      labelText: 'State *',
+                      labelText: 'State (optional)',
 
                       border: OutlineInputBorder(),
 
                     ),
 
-                    validator: (v) => v?.isEmpty ?? true ? 'Required' : null,
+                    validator: null,
 
                   ),
 
@@ -518,7 +517,7 @@ class _AddDriverDialogState extends State<AddDriverDialog> {
 
                     decoration: const InputDecoration(
 
-                      labelText: 'Postal Code *',
+                      labelText: 'Postal Code (optional)',
 
                       border: OutlineInputBorder(),
 
@@ -528,7 +527,7 @@ class _AddDriverDialogState extends State<AddDriverDialog> {
 
                     inputFormatters: [FilteringTextInputFormatter.digitsOnly],
 
-                    validator: (v) => v?.isEmpty ?? true ? 'Required' : null,
+                    validator: null,
 
                   ),
 
@@ -544,13 +543,13 @@ class _AddDriverDialogState extends State<AddDriverDialog> {
 
                     decoration: const InputDecoration(
 
-                      labelText: 'Country *',
+                      labelText: 'Country (optional)',
 
                       border: OutlineInputBorder(),
 
                     ),
 
-                    validator: (v) => v?.isEmpty ?? true ? 'Required' : null,
+                    validator: null,
 
                   ),
 
@@ -586,13 +585,13 @@ class _AddDriverDialogState extends State<AddDriverDialog> {
 
               decoration: const InputDecoration(
 
-                labelText: 'License Number *',
+                labelText: 'License Number (optional)',
 
                 border: OutlineInputBorder(),
 
               ),
 
-              validator: (v) => v?.isEmpty ?? true ? 'Required' : null,
+              validator: null,
 
             ),
 
@@ -604,7 +603,7 @@ class _AddDriverDialogState extends State<AddDriverDialog> {
 
               decoration: const InputDecoration(
 
-                labelText: 'License Type *',
+                labelText: 'License Type (optional)',
 
                 border: OutlineInputBorder(),
 
@@ -612,7 +611,7 @@ class _AddDriverDialogState extends State<AddDriverDialog> {
 
               ),
 
-              validator: (v) => v?.isEmpty ?? true ? 'Required' : null,
+              validator: null,
 
             ),
 
@@ -630,7 +629,7 @@ class _AddDriverDialogState extends State<AddDriverDialog> {
 
                     decoration: const InputDecoration(
 
-                      labelText: 'Issue Date *',
+                      labelText: 'Issue Date (optional)',
 
                       border: OutlineInputBorder(),
 
@@ -642,7 +641,7 @@ class _AddDriverDialogState extends State<AddDriverDialog> {
 
                     onTap: () => _selectDate(_licenseIssueDateController),
 
-                    validator: (v) => v?.isEmpty ?? true ? 'Required' : null,
+                    validator: null,
 
                   ),
 
@@ -658,7 +657,7 @@ class _AddDriverDialogState extends State<AddDriverDialog> {
 
                     decoration: const InputDecoration(
 
-                      labelText: 'Expiry Date *',
+                      labelText: 'Expiry Date (optional)',
 
                       border: OutlineInputBorder(),
 
@@ -670,7 +669,7 @@ class _AddDriverDialogState extends State<AddDriverDialog> {
 
                     onTap: () => _selectDate(_licenseExpiryDateController),
 
-                    validator: (v) => v?.isEmpty ?? true ? 'Required' : null,
+                    validator: null,
 
                   ),
 
@@ -688,7 +687,7 @@ class _AddDriverDialogState extends State<AddDriverDialog> {
 
               decoration: const InputDecoration(
 
-                labelText: 'Issuing Authority *',
+                labelText: 'Issuing Authority (optional)',
 
                 border: OutlineInputBorder(),
 
@@ -696,7 +695,7 @@ class _AddDriverDialogState extends State<AddDriverDialog> {
 
               ),
 
-              validator: (v) => v?.isEmpty ?? true ? 'Required' : null,
+              validator: null,
 
             ),
 
@@ -726,13 +725,13 @@ class _AddDriverDialogState extends State<AddDriverDialog> {
 
               decoration: const InputDecoration(
 
-                labelText: 'Contact Name *',
+                labelText: 'Contact Name (optional)',
 
                 border: OutlineInputBorder(),
 
               ),
 
-              validator: (v) => v?.isEmpty ?? true ? 'Required' : null,
+              validator: null,
 
             ),
 
@@ -744,7 +743,7 @@ class _AddDriverDialogState extends State<AddDriverDialog> {
 
               decoration: const InputDecoration(
 
-                labelText: 'Contact Phone *',
+                labelText: 'Contact Phone (optional)',
 
                 border: OutlineInputBorder(),
 
@@ -758,7 +757,7 @@ class _AddDriverDialogState extends State<AddDriverDialog> {
 
               validator: (v) {
 
-                if (v?.isEmpty ?? true) return 'Required';
+                if (v == null || v.isEmpty) return null;
 
                 if (v!.length != 10) return 'Must be 10 digits';
 
@@ -776,7 +775,7 @@ class _AddDriverDialogState extends State<AddDriverDialog> {
 
               decoration: const InputDecoration(
 
-                labelText: 'Relationship *',
+                labelText: 'Relationship (optional)',
 
                 border: OutlineInputBorder(),
 
@@ -784,7 +783,7 @@ class _AddDriverDialogState extends State<AddDriverDialog> {
 
               ),
 
-              validator: (v) => v?.isEmpty ?? true ? 'Required' : null,
+              validator: null,
 
             ),
 
@@ -814,13 +813,13 @@ class _AddDriverDialogState extends State<AddDriverDialog> {
 
               decoration: const InputDecoration(
 
-                labelText: 'Employee ID *',
+                labelText: 'Employee ID (optional)',
 
                 border: OutlineInputBorder(),
 
               ),
 
-              validator: (v) => v?.isEmpty ?? true ? 'Required' : null,
+              validator: null,
 
             ),
 
@@ -832,7 +831,7 @@ class _AddDriverDialogState extends State<AddDriverDialog> {
 
               decoration: const InputDecoration(
 
-                labelText: 'Join Date *',
+                labelText: 'Join Date (optional)',
 
                 border: OutlineInputBorder(),
 
@@ -844,7 +843,7 @@ class _AddDriverDialogState extends State<AddDriverDialog> {
 
               onTap: () => _selectDate(_joinDateController),
 
-              validator: (v) => v?.isEmpty ?? true ? 'Required' : null,
+              validator: null,
 
             ),
 
@@ -856,7 +855,7 @@ class _AddDriverDialogState extends State<AddDriverDialog> {
 
               decoration: const InputDecoration(
 
-                labelText: 'Employment Type *',
+                labelText: 'Employment Type (optional)',
 
                 border: OutlineInputBorder(),
 
@@ -884,7 +883,7 @@ class _AddDriverDialogState extends State<AddDriverDialog> {
 
               decoration: const InputDecoration(
 
-                labelText: 'Monthly Salary *',
+                labelText: 'Monthly Salary (optional)',
 
                 border: OutlineInputBorder(),
 
@@ -896,7 +895,7 @@ class _AddDriverDialogState extends State<AddDriverDialog> {
 
               inputFormatters: [FilteringTextInputFormatter.digitsOnly],
 
-              validator: (v) => v?.isEmpty ?? true ? 'Required' : null,
+              validator: null,
 
             ),
 
@@ -908,7 +907,7 @@ class _AddDriverDialogState extends State<AddDriverDialog> {
 
               decoration: const InputDecoration(
 
-                labelText: 'Status *',
+                labelText: 'Status (optional)',
 
                 border: OutlineInputBorder(),
 
@@ -954,13 +953,13 @@ class _AddDriverDialogState extends State<AddDriverDialog> {
 
               decoration: const InputDecoration(
 
-                labelText: 'Bank Name *',
+                labelText: 'Bank Name (optional)',
 
                 border: OutlineInputBorder(),
 
               ),
 
-              validator: (v) => v?.isEmpty ?? true ? 'Required' : null,
+              validator: null,
 
             ),
 
@@ -972,13 +971,13 @@ class _AddDriverDialogState extends State<AddDriverDialog> {
 
               decoration: const InputDecoration(
 
-                labelText: 'Account Holder Name *',
+                labelText: 'Account Holder Name (optional)',
 
                 border: OutlineInputBorder(),
 
               ),
 
-              validator: (v) => v?.isEmpty ?? true ? 'Required' : null,
+              validator: null,
 
             ),
 
@@ -990,7 +989,7 @@ class _AddDriverDialogState extends State<AddDriverDialog> {
 
               decoration: const InputDecoration(
 
-                labelText: 'Account Number *',
+                labelText: 'Account Number (optional)',
 
                 border: OutlineInputBorder(),
 
@@ -1000,7 +999,7 @@ class _AddDriverDialogState extends State<AddDriverDialog> {
 
               inputFormatters: [FilteringTextInputFormatter.digitsOnly],
 
-              validator: (v) => v?.isEmpty ?? true ? 'Required' : null,
+              validator: null,
 
             ),
 
@@ -1012,7 +1011,7 @@ class _AddDriverDialogState extends State<AddDriverDialog> {
 
               decoration: const InputDecoration(
 
-                labelText: 'IFSC Code *',
+                labelText: 'IFSC Code (optional)',
 
                 border: OutlineInputBorder(),
 
@@ -1022,7 +1021,7 @@ class _AddDriverDialogState extends State<AddDriverDialog> {
 
               validator: (v) {
 
-                if (v?.isEmpty ?? true) return 'Required';
+                if (v == null || v.isEmpty) return null;
 
                 if (!RegExp(r'^[A-Z]{4}0[A-Z0-9]{6}$').hasMatch(v!)) {
 

@@ -9,6 +9,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import '../../core/services/billing_api_service.dart';
+import 'package:abra_fleet/core/widgets/responsive/responsive.dart';
 
 // ============================================================================
 // DATA MODELS
@@ -841,22 +842,20 @@ class _BillingInvoicesPageState extends State<BillingInvoicesPage> with SingleTi
 
     return Scaffold(
       backgroundColor: Colors.grey[50],
-      body: Column(
-        children: [
-          _buildHeader(),
-          _buildTabBar(),
-          Expanded(
-            child: TabBarView(
-              controller: _tabController,
-              children: [
-                _buildInvoicesTab(),
-                _buildContractsTab(),
-                _buildPaymentAnalyticsTab(),
-                _buildAuditLogsTab(),
-              ],
-            ),
-          ),
+      body: NestedScrollView(
+        headerSliverBuilder: (context, innerBoxIsScrolled) => [
+          SliverToBoxAdapter(child: _buildHeader()),
+          SliverToBoxAdapter(child: _buildTabBar()),
         ],
+        body: TabBarView(
+          controller: _tabController,
+          children: [
+            _buildInvoicesTab(),
+            _buildContractsTab(),
+            _buildPaymentAnalyticsTab(),
+            _buildAuditLogsTab(),
+          ],
+        ),
       ),
       floatingActionButton: _tabController.index == 0
           ? FloatingActionButton.extended(
@@ -878,99 +877,127 @@ class _BillingInvoicesPageState extends State<BillingInvoicesPage> with SingleTi
 
   Widget _buildHeader() {
     return Container(
-      padding: EdgeInsets.fromLTRB(20, 20, 20, 10),
+      padding: const EdgeInsets.fromLTRB(20, 20, 20, 10),
       decoration: BoxDecoration(
         color: Colors.white,
         boxShadow: [
           BoxShadow(
             color: Colors.grey.withOpacity(0.1),
             blurRadius: 4,
-            offset: Offset(0, 2),
+            offset: const Offset(0, 2),
           ),
         ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              Icon(Icons.receipt_long, size: 32, color: Colors.blue[700]),
-              SizedBox(width: 12),
-              Expanded(
-                child: Column(
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final titleSection = Row(
+                children: [
+                  Icon(Icons.receipt_long, size: 32, color: Colors.blue[700]),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'Admin Billing Portal',
+                          style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.black87),
+                        ),
+                        Text(
+                          'Contract-Based Invoice & Payment Management',
+                          style: TextStyle(fontSize: 14, color: Colors.grey[600]),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              );
+
+              final actionsSection = Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: Colors.green[50],
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(color: Colors.green[200]!),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.verified_user, size: 16, color: Colors.green[700]),
+                        const SizedBox(width: 6),
+                        Text(
+                          'Admin',
+                          style: TextStyle(
+                            color: Colors.green[700],
+                            fontWeight: FontWeight.bold,
+                            fontSize: 12,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Container(
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF8B5CF6).withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: const Color(0xFF8B5CF6).withOpacity(0.2)),
+                    ),
+                    child: IconButton(
+                      icon: _isRefreshing 
+                        ? const SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF8B5CF6)),
+                            ),
+                          )
+                        : const Icon(Icons.refresh, color: Color(0xFF8B5CF6)),
+                      onPressed: _isRefreshing ? null : _refreshAllData,
+                      tooltip: "Refresh Data",
+                    ),
+                  ),
+                  IconButton(
+                    icon: Icon(Icons.download, color: Colors.blue[700]),
+                    onPressed: () => _exportAllData(),
+                    tooltip: 'Export All Data',
+                  ),
+                  IconButton(
+                    icon: Icon(Icons.filter_list, color: Colors.blue[700]),
+                    onPressed: () => _showAdvancedFilters(),
+                    tooltip: 'Advanced Filters',
+                  ),
+                ],
+              );
+
+              if (constraints.maxWidth < 750) {
+                return Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      'Admin Billing Portal',
-                      style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.black87),
-                    ),
-                    Text(
-                      'Contract-Based Invoice & Payment Management',
-                      style: TextStyle(fontSize: 14, color: Colors.grey[600]),
-                    ),
+                    titleSection,
+                    const SizedBox(height: 12),
+                    actionsSection,
                   ],
-                ),
-              ),
-              Container(
-                padding: EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                decoration: BoxDecoration(
-                  color: Colors.green[50],
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(color: Colors.green[200]!),
-                ),
-                child: Row(
-                  children: [
-                    Icon(Icons.verified_user, size: 16, color: Colors.green[700]),
-                    SizedBox(width: 6),
-                    Text(
-                      'Admin',
-                      style: TextStyle(
-                        color: Colors.green[700],
-                        fontWeight: FontWeight.bold,
-                        fontSize: 12,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              SizedBox(width: 12),
-              
-              // ✅ NEW: Refresh Button
-              Container(
-                decoration: BoxDecoration(
-                  color: const Color(0xFF8B5CF6).withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: const Color(0xFF8B5CF6).withOpacity(0.2)),
-                ),
-                child: IconButton(
-                  icon: _isRefreshing 
-                    ? const SizedBox(
-                        width: 20,
-                        height: 20,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF8B5CF6)),
-                        ),
-                      )
-                    : const Icon(Icons.refresh, color: Color(0xFF8B5CF6)),
-                  onPressed: _isRefreshing ? null : _refreshAllData,
-                  tooltip: "Refresh Data",
-                ),
-              ),
-              
-              IconButton(
-                icon: Icon(Icons.download, color: Colors.blue[700]),
-                onPressed: () => _exportAllData(),
-                tooltip: 'Export All Data',
-              ),
-              IconButton(
-                icon: Icon(Icons.filter_list, color: Colors.blue[700]),
-                onPressed: () => _showAdvancedFilters(),
-                tooltip: 'Advanced Filters',
-              ),
-            ],
+                );
+              }
+
+              return Row(
+                children: [
+                  Expanded(child: titleSection),
+                  const SizedBox(width: 12),
+                  actionsSection,
+                ],
+              );
+            },
           ),
-          SizedBox(height: 16),
+          const SizedBox(height: 16),
           TextField(
             decoration: InputDecoration(
               hintText: 'Search by invoice, organization, or contract ID...',
@@ -982,7 +1009,7 @@ class _BillingInvoicesPageState extends State<BillingInvoicesPage> with SingleTi
               ),
               filled: true,
               fillColor: Colors.grey[50],
-              contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
             ),
             onChanged: (value) {
               setState(() {
@@ -990,7 +1017,7 @@ class _BillingInvoicesPageState extends State<BillingInvoicesPage> with SingleTi
               });
             },
           ),
-          SizedBox(height: 10),
+          const SizedBox(height: 10),
         ],
       ),
     );
@@ -1005,6 +1032,9 @@ class _BillingInvoicesPageState extends State<BillingInvoicesPage> with SingleTi
         unselectedLabelColor: Colors.grey[600],
         indicatorColor: Colors.blue[700],
         indicatorWeight: 3,
+        // phone: scrollable tabs so four icon+text labels never clip
+        isScrollable: isPhone(context),
+        tabAlignment: isPhone(context) ? TabAlignment.start : null,
         tabs: [
           Tab(icon: Icon(Icons.receipt), text: 'Invoices'),
           Tab(icon: Icon(Icons.description), text: 'Contracts'),
@@ -1020,12 +1050,15 @@ class _BillingInvoicesPageState extends State<BillingInvoicesPage> with SingleTi
   // ============================================================================
 
   Widget _buildInvoicesTab() {
-    return Column(
-      children: [
-        _buildComprehensiveSummary(),
-        _buildFilterChips(),
-        Expanded(child: _buildInvoicesList()),
-      ],
+    return SingleChildScrollView(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _buildComprehensiveSummary(),
+          _buildFilterChips(),
+          _buildInvoicesList(),
+        ],
+      ),
     );
   }
 
@@ -1037,49 +1070,72 @@ class _BillingInvoicesPageState extends State<BillingInvoicesPage> with SingleTi
     double totalDistance = _invoices.fold(0.0, (sum, inv) => sum + (inv['totalDistance'] as num).toDouble());
 
     return Container(
-      padding: EdgeInsets.all(16),
-      child: Row(
-        children: [
-          Expanded(
-            child: _buildSummaryCard(
-              'Total Revenue',
-              _formatCurrency(totalRevenue),
-              Icons.account_balance_wallet,
-              Colors.blue,
-              'Including GST',
-            ),
-          ),
-          SizedBox(width: 12),
-          Expanded(
-            child: _buildSummaryCard(
-              'Amount Paid',
-              _formatCurrency(totalPaid),
-              Icons.check_circle,
-              Colors.green,
-              '${((totalPaid/totalRevenue)*100).toStringAsFixed(1)}% of total',
-            ),
-          ),
-          SizedBox(width: 12),
-          Expanded(
-            child: _buildSummaryCard(
-              'Pending Amount',
-              _formatCurrency(totalPending),
-              Icons.pending,
-              Colors.orange,
-              'Outstanding dues',
-            ),
-          ),
-          SizedBox(width: 12),
-          Expanded(
-            child: _buildSummaryCard(
-              'Total Distance',
-              '${totalDistance.toStringAsFixed(0)} km',
-              Icons.route,
-              Colors.purple,
-              '$totalTrips trips completed',
-            ),
-          ),
-        ],
+      padding: const EdgeInsets.all(16),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final totalRevCard = _buildSummaryCard(
+            'Total Revenue',
+            _formatCurrency(totalRevenue),
+            Icons.account_balance_wallet,
+            Colors.blue,
+            'Including GST',
+          );
+          final paidCard = _buildSummaryCard(
+            'Amount Paid',
+            _formatCurrency(totalPaid),
+            Icons.check_circle,
+            Colors.green,
+            '${((totalPaid/totalRevenue)*100).toStringAsFixed(1)}% of total',
+          );
+          final pendingCard = _buildSummaryCard(
+            'Pending Amount',
+            _formatCurrency(totalPending),
+            Icons.pending,
+            Colors.orange,
+            'Outstanding dues',
+          );
+          final distCard = _buildSummaryCard(
+            'Total Distance',
+            '${totalDistance.toStringAsFixed(0)} km',
+            Icons.route,
+            Colors.purple,
+            '$totalTrips trips completed',
+          );
+
+          if (constraints.maxWidth < 650) {
+            return Column(
+              children: [
+                Row(
+                  children: [
+                    Expanded(child: totalRevCard),
+                    const SizedBox(width: 12),
+                    Expanded(child: paidCard),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    Expanded(child: pendingCard),
+                    const SizedBox(width: 12),
+                    Expanded(child: distCard),
+                  ],
+                ),
+              ],
+            );
+          }
+
+          return Row(
+            children: [
+              Expanded(child: totalRevCard),
+              const SizedBox(width: 12),
+              Expanded(child: paidCard),
+              const SizedBox(width: 12),
+              Expanded(child: pendingCard),
+              const SizedBox(width: 12),
+              Expanded(child: distCard),
+            ],
+          );
+        },
       ),
     );
   }
@@ -1183,28 +1239,33 @@ class _BillingInvoicesPageState extends State<BillingInvoicesPage> with SingleTi
 
   Widget _buildInvoicesList() {
     if (_filteredInvoices.isEmpty) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.receipt_long_outlined, size: 80, color: Colors.grey[300]),
-            SizedBox(height: 16),
-            Text(
-              'No invoices found',
-              style: TextStyle(fontSize: 18, color: Colors.grey[600], fontWeight: FontWeight.w500),
-            ),
-            SizedBox(height: 8),
-            Text(
-              'Try adjusting your filters',
-              style: TextStyle(fontSize: 14, color: Colors.grey[500]),
-            ),
-          ],
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 48, horizontal: 16),
+        child: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(Icons.receipt_long_outlined, size: 80, color: Colors.grey[300]),
+              const SizedBox(height: 16),
+              Text(
+                'No invoices found',
+                style: TextStyle(fontSize: 18, color: Colors.grey[600], fontWeight: FontWeight.w500),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Try adjusting your filters',
+                style: TextStyle(fontSize: 14, color: Colors.grey[500]),
+              ),
+            ],
+          ),
         ),
       );
     }
 
     return ListView.builder(
-      padding: EdgeInsets.all(16),
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      padding: const EdgeInsets.all(16),
       itemCount: _filteredInvoices.length,
       itemBuilder: (context, index) {
         return _buildInvoiceCard(_filteredInvoices[index]);
@@ -1421,21 +1482,40 @@ class _BillingInvoicesPageState extends State<BillingInvoicesPage> with SingleTi
                       style: TextStyle(fontSize: 11, color: Colors.grey[700], fontWeight: FontWeight.w600),
                     ),
                     SizedBox(height: 8),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: _buildCompactInfo('Trips', '${invoice['trips']}', Icons.local_shipping, Colors.blue),
-                        ),
-                        Expanded(
-                          child: _buildCompactInfo('Distance', '${invoice['totalDistance'].toStringAsFixed(0)} km', Icons.route, Colors.purple),
-                        ),
-                        Expanded(
-                          child: _buildCompactInfo('Fuel', '${invoice['totalFuelConsumed'].toStringAsFixed(0)} L', Icons.local_gas_station, Colors.orange),
-                        ),
-                        Expanded(
-                          child: _buildCompactInfo('Idle', '${invoice['totalIdleTime'].toStringAsFixed(1)} hrs', Icons.timer, Colors.red),
-                        ),
-                      ],
+                    LayoutBuilder(
+                      builder: (context, constraints) {
+                        final tripsInfo = _buildCompactInfo('Trips', '${invoice['trips']}', Icons.local_shipping, Colors.blue);
+                        final distInfo = _buildCompactInfo('Distance', '${invoice['totalDistance'].toStringAsFixed(0)} km', Icons.route, Colors.purple);
+                        final fuelInfo = _buildCompactInfo('Fuel', '${invoice['totalFuelConsumed'].toStringAsFixed(0)}\u0020L', Icons.local_gas_station, Colors.orange);
+                        final idleInfo = _buildCompactInfo('Idle', '${invoice['totalIdleTime'].toStringAsFixed(1)} hrs', Icons.timer, Colors.red);
+                        if (constraints.maxWidth < 550) {
+                          return Column(
+                            children: [
+                              Row(
+                                children: [
+                                  Expanded(child: tripsInfo),
+                                  Expanded(child: distInfo),
+                                ],
+                              ),
+                              const SizedBox(height: 8),
+                              Row(
+                                children: [
+                                  Expanded(child: fuelInfo),
+                                  Expanded(child: idleInfo),
+                                ],
+                              ),
+                            ],
+                          );
+                        }
+                        return Row(
+                          children: [
+                            Expanded(child: tripsInfo),
+                            Expanded(child: distInfo),
+                            Expanded(child: fuelInfo),
+                            Expanded(child: idleInfo),
+                          ],
+                        );
+                      },
                     ),
                   ],
                 ),
@@ -1501,8 +1581,10 @@ class _BillingInvoicesPageState extends State<BillingInvoicesPage> with SingleTi
                 ],
               ),
               SizedBox(height: 12),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.end,
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                alignment: WrapAlignment.end,
                 children: [
                   TextButton.icon(
                     onPressed: () => _viewContract(invoice),
@@ -1510,7 +1592,6 @@ class _BillingInvoicesPageState extends State<BillingInvoicesPage> with SingleTi
                     label: Text('View Contract'),
                     style: TextButton.styleFrom(foregroundColor: Colors.blue[700]),
                   ),
-                  SizedBox(width: 8),
                   ElevatedButton.icon(
                     onPressed: () => _showInvoiceDetails(invoice),
                     icon: Icon(Icons.visibility, size: 18),
@@ -1822,33 +1903,31 @@ class _BillingInvoicesPageState extends State<BillingInvoicesPage> with SingleTi
           SizedBox(height: 20),
           
           // Action Buttons
-          Row(
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            alignment: WrapAlignment.end,
             children: [
-              Expanded(
-                child: OutlinedButton.icon(
-                  onPressed: () => _editContract(contract),
-                  icon: Icon(Icons.edit, size: 18),
-                  label: Text('Edit Contract'),
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: Colors.blue[700],
-                    side: BorderSide(color: Colors.blue[700]!),
-                    padding: EdgeInsets.symmetric(vertical: 14),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                  ),
+              OutlinedButton.icon(
+                onPressed: () => _editContract(contract),
+                icon: Icon(Icons.edit, size: 18),
+                label: Text('Edit Contract'),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: Colors.blue[700],
+                  side: BorderSide(color: Colors.blue[700]!),
+                  padding: EdgeInsets.symmetric(vertical: 14, horizontal: 16),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                 ),
               ),
-              SizedBox(width: 12),
-              Expanded(
-                child: ElevatedButton.icon(
-                  onPressed: () => _downloadContractPDF(contract),
-                  icon: Icon(Icons.picture_as_pdf, size: 18),
-                  label: Text('Download PDF'),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.blue[700],
-                    foregroundColor: Colors.white,
-                    padding: EdgeInsets.symmetric(vertical: 14),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                  ),
+              ElevatedButton.icon(
+                onPressed: () => _downloadContractPDF(contract),
+                icon: Icon(Icons.picture_as_pdf, size: 18),
+                label: Text('Download PDF'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.blue[700],
+                  foregroundColor: Colors.white,
+                  padding: EdgeInsets.symmetric(vertical: 14, horizontal: 16),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                 ),
               ),
             ],
@@ -1978,7 +2057,7 @@ class _BillingInvoicesPageState extends State<BillingInvoicesPage> with SingleTi
         ),
         SizedBox(height: 12),
         GridView.count(
-          crossAxisCount: 4,
+          crossAxisCount: isPhone(context) ? 2 : 4,
           shrinkWrap: true,
           physics: NeverScrollableScrollPhysics(),
           mainAxisSpacing: 12,
@@ -2007,9 +2086,11 @@ class _BillingInvoicesPageState extends State<BillingInvoicesPage> with SingleTi
         children: [
           Icon(icon, color: color, size: 20),
           SizedBox(height: 6),
-          Text(value, style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: color), maxLines: 1, overflow: TextOverflow.ellipsis),
+          isPhone(context)
+              ? FitText(value, style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: color))
+              : Text(value, style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: color), maxLines: 1, overflow: TextOverflow.ellipsis),
           SizedBox(height: 2),
-          Text(title, style: TextStyle(fontSize: 11, color: Colors.grey[600]), maxLines: 2, overflow: TextOverflow.ellipsis),
+          Text(title, style: TextStyle(fontSize: isPhone(context) ? 12 : 11, color: Colors.grey[600]), maxLines: 2, overflow: TextOverflow.ellipsis),
         ],
       ),
     );
@@ -2073,7 +2154,7 @@ class _BillingInvoicesPageState extends State<BillingInvoicesPage> with SingleTi
                     children: [
                       Text('${entry.value['trips']} trips', style: TextStyle(fontSize: 12)),
                       Text('${entry.value['distance'].toStringAsFixed(0)} km', style: TextStyle(fontSize: 12)),
-                      Text(_formatCurrency(entry.value['cost']), style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.blue[700])),
+                      _phoneMoney(_formatCurrency(entry.value['cost']), TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.blue[700])),
                     ],
                   ),
                 ],
@@ -2143,9 +2224,9 @@ class _BillingInvoicesPageState extends State<BillingInvoicesPage> with SingleTi
                           style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
                         ),
                       ),
-                      Text(
+                      _phoneMoney(
                         _formatCurrency(entry.value['totalRevenue']),
-                        style: TextStyle(fontWeight: FontWeight.bold, color: Colors.blue[700]),
+                        TextStyle(fontWeight: FontWeight.bold, color: Colors.blue[700]),
                       ),
                     ],
                   ),
@@ -2153,8 +2234,8 @@ class _BillingInvoicesPageState extends State<BillingInvoicesPage> with SingleTi
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Text('Contract: ${entry.value['contractId']}', style: TextStyle(fontSize: 11, color: Colors.grey[600])),
-                      Text('${entry.value['invoiceCount']} invoices', style: TextStyle(fontSize: 11, color: Colors.grey[600])),
+                      _phoneFlexText('Contract: ${entry.value['contractId']}', TextStyle(fontSize: isPhone(context) ? 12 : 11, color: Colors.grey[600])),
+                      Text('${entry.value['invoiceCount']} invoices', style: TextStyle(fontSize: isPhone(context) ? 12 : 11, color: Colors.grey[600])),
                     ],
                   ),
                   SizedBox(height: 8),
@@ -2377,6 +2458,7 @@ class _BillingInvoicesPageState extends State<BillingInvoicesPage> with SingleTi
               : null;
 
           return AlertDialog(
+            insetPadding: EdgeInsets.symmetric(horizontal: isPhone(context) ? 16 : 40, vertical: 24),
             title: Text('Generate New Invoice'),
             content: SingleChildScrollView(
               child: Column(
@@ -2392,6 +2474,7 @@ class _BillingInvoicesPageState extends State<BillingInvoicesPage> with SingleTi
                       contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                     ),
                     hint: Text('Choose contract'),
+                    isExpanded: isPhone(context),
                     value: selectedContractId,
                     items: _activeContracts.map((contract) {
                       return DropdownMenuItem<String>(
@@ -2399,6 +2482,7 @@ class _BillingInvoicesPageState extends State<BillingInvoicesPage> with SingleTi
                         child: Text(
                           '${contract['contractId']} - ${contract['organizationName']}',
                           style: TextStyle(fontSize: 13),
+                          overflow: isPhone(context) ? TextOverflow.ellipsis : null,
                         ),
                       );
                     }).toList(),
@@ -2435,7 +2519,7 @@ class _BillingInvoicesPageState extends State<BillingInvoicesPage> with SingleTi
                     SizedBox(height: 16),
                     Text('Billing Period', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
                     SizedBox(height: 8),
-                    Row(
+                    _AdaptiveRow(
                       children: [
                         Expanded(
                           child: TextField(
@@ -2555,6 +2639,7 @@ class _BillingInvoicesPageState extends State<BillingInvoicesPage> with SingleTi
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
+        insetPadding: EdgeInsets.symmetric(horizontal: isPhone(context) ? 16 : 40, vertical: 24),
         title: Text('Create New Contract'),
         content: SingleChildScrollView(
           child: Column(
@@ -2703,7 +2788,7 @@ class _BillingInvoicesPageState extends State<BillingInvoicesPage> with SingleTi
             color: Colors.white,
             borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
           ),
-          padding: EdgeInsets.all(24),
+          padding: EdgeInsets.all(isPhone(context) ? 16 : 24),
           child: ListView(
             controller: controller,
             children: [
@@ -2788,9 +2873,9 @@ class _BillingInvoicesPageState extends State<BillingInvoicesPage> with SingleTi
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Text('Total Amount', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
-                  Text(
+                  _phoneMoney(
                     _formatCurrency(invoice['totalAmount']),
-                    style: TextStyle(fontSize: 26, fontWeight: FontWeight.bold, color: Colors.blue[700]),
+                    TextStyle(fontSize: 26, fontWeight: FontWeight.bold, color: Colors.blue[700]),
                   ),
                 ],
               ),
@@ -2852,6 +2937,17 @@ class _BillingInvoicesPageState extends State<BillingInvoicesPage> with SingleTi
     );
   }
 
+  /// Phone only: money text shrinks to fit its Row instead of clipping.
+  /// At 600 px and wider it is the same plain Text as before.
+  Widget _phoneMoney(String text, TextStyle style) => isPhone(context)
+      ? Flexible(child: FitText(text, style: style, alignment: Alignment.centerRight))
+      : Text(text, style: style);
+
+  /// Phone only: long text in a spaceBetween Row ellipsizes instead of overflowing.
+  Widget _phoneFlexText(String text, TextStyle style) => isPhone(context)
+      ? Flexible(child: Text(text, style: style, maxLines: 1, overflow: TextOverflow.ellipsis))
+      : Text(text, style: style);
+
   Widget _buildDetailRow(String label, String value) {
     return Padding(
       padding: EdgeInsets.symmetric(vertical: 6),
@@ -2887,9 +2983,9 @@ class _BillingInvoicesPageState extends State<BillingInvoicesPage> with SingleTi
               fontWeight: bold ? FontWeight.bold : FontWeight.normal,
             ),
           ),
-          Text(
+          _phoneMoney(
             _formatCurrency(amount),
-            style: TextStyle(
+            TextStyle(
               fontSize: 14,
               fontWeight: bold ? FontWeight.bold : FontWeight.w600,
               color: color ?? Colors.grey[800],
@@ -3115,6 +3211,7 @@ class _BillingInvoicesPageState extends State<BillingInvoicesPage> with SingleTi
             SizedBox(height: 8),
             Wrap(
               spacing: 8,
+              runSpacing: 8,
               children: ['All', 'Truck', 'Van', 'Car', 'Bike', 'Heavy Truck', 'Trailer'].map((type) {
                 return ChoiceChip(
                   label: Text(type),
@@ -3216,6 +3313,26 @@ class _BillingInvoicesPageState extends State<BillingInvoicesPage> with SingleTi
           ],
         ),
       ),
+    );
+  }
+}
+
+/// Two fields side by side (Expanded, gap, Expanded). On phones (< 600 px) they
+/// stack vertically so each field gets the full dialog width; otherwise it is
+/// exactly the original Row.
+class _AdaptiveRow extends StatelessWidget {
+  final List<Widget> children;
+  const _AdaptiveRow({required this.children});
+
+  @override
+  Widget build(BuildContext context) {
+    if (!isPhone(context)) return Row(children: children);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        for (final c in children)
+          if (c is Expanded) c.child else const SizedBox(height: 12),
+      ],
     );
   }
 }
